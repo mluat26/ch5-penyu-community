@@ -34,7 +34,6 @@
 			children = (
 				C5CB68E5302956C10077B52E /* community-challenge */,
 				C5CB68E4302956C10077B52E /* Products */,
-				C5CB68F330295EE70077B52E /* New Group */,
 			);
 			sourceTree = "<group>";
 		};
@@ -44,13 +43,6 @@
 				C5CB68E3302956C10077B52E /* community-challenge.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		C5CB68F330295EE70077B52E /* New Group */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = "New Group";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
