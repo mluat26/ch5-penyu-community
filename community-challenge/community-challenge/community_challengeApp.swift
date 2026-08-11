@@ -11,7 +11,7 @@ import SwiftUI
 struct community_challengeApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            OnboardingFlowController()
         }
     }
 }
