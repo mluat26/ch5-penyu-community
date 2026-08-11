@@ -45,7 +45,7 @@ struct CreateHatcheryShape: View {
                     
                     Text("Create Hatchery")
                         .font(.headline)
-                        .foregroundStyle(Color.appTextPrimary)
+                        
                     
                     Spacer()
                     
@@ -60,11 +60,10 @@ struct CreateHatcheryShape: View {
                 VStack(spacing: 8) {
                     Text("Choose hatchery shape")
                         .font(.headline)
-                        .foregroundStyle(Color.appTextPrimary)
+                       
                     
                     Text("Select the shape that best\nmatches your hatchery.")
                         .font(.subheadline)
-                        .foregroundStyle(Color.appTextSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 28)
@@ -127,11 +126,11 @@ struct CreateHatcheryShape: View {
                         .frame(height: 60)
                         .background(
                             Capsule()
-                                .fill(Color.green)
+                                .fill(Color.appGreenPrimary)
                         )
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+                .padding(.bottom, 52)
             }
         }
         .preferredColorScheme(.light)
@@ -161,15 +160,15 @@ private struct ShapeSelectionCard: View {
             .frame(maxWidth: .infinity)
             .frame(height: 158)
             .background(
-                RoundedRectangle(cornerRadius: 24)
+                RoundedRectangle(cornerRadius: 26)
                     .fill(
                         isSelected
-                        ? Color.green.opacity(0.10)
-                        : Color.white.opacity(0.82)
+                        ? Color.appGreenPrimary.opacity((0.1))
+                        : Color.appCardBackground
                     )
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 24)
+                RoundedRectangle(cornerRadius: 26)
                     .stroke(
                         isSelected
                         ? Color.green
@@ -203,7 +202,7 @@ private struct ShapePreview: View {
                             lineWidth: 1
                         )
                 }
-                .frame(width: 52, height: 52)
+                .frame(width: 50, height: 50)
         
         case .rectangle:
             Rectangle()
