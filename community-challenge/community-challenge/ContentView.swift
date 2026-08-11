@@ -8,14 +8,32 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var addNestPath: [AddNestRoute] = []
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        NavigationStack(path: $addNestPath) {
+            HomeView {
+                addNestPath.append(.scan)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: AddNestRoute.self) { route in
+                switch route {
+                case .scan:
+                    AddNestScanView(
+                        onScanned: { addNestPath.append(.nestInfo) },
+                        onManualEntry: { addNestPath.append(.nestInfo) }
+                    )
+                case .nestInfo:
+                    NewNestView {
+                        addNestPath.append(.review)
+                    }
+                case .review:
+                    ReviewNewNestView {
+                        addNestPath.removeAll()
+                    }
+                }
+            }
         }
-        .padding()
     }
 }
 
