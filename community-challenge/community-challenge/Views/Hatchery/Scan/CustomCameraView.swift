@@ -1,260 +1,163 @@
-import SwiftUI
 import PhotosUI
+import SwiftUI
 
-/// Phases 1–3 — the custom hatchery scanning camera.
+/// Captures or selects the hatchery photo, then advances immediately.
 ///
-/// - Live mode: full-screen preview with a Close / shutter / Select bar.
-/// - Review mode (after capture or photo selection): the still image is shown
-///   with the draggable hatchery quadrilateral and a Retake / Confirm / Select
-///   bar. The instruction banner updates to match the mode.
+/// The green quadrilateral is only a read-only framing suggestion here. The
+/// same image-relative boundary is passed to `HatcheryBoundaryAdjustmentView`,
+/// where the user can edit it.
 struct CustomCameraView: View {
-
-    var onClose: () -> Void = {}
-    /// Called when the user confirms the framed hatchery area.
-    /// Normalization into a `HatcheryBoundary` happens in Phase 4.
-    var onConfirm: (UIImage, QuadPoints) -> Void = { _, _ in }
+    let onClose: () -> Void
+    let onCapture: (UIImage, HatcheryBoundary) -> Void
 
     @StateObject private var camera = CameraManager()
-
-    /// The hatchery quadrilateral drawn over the preview / image (Phase 2).
-    /// `nil` until the overlay seeds it on first layout.
-    @State private var quad: QuadPoints?
-
-    /// Selected item from the photo library (Phase 3).
     @State private var pickerItem: PhotosPickerItem?
-
-    /// True once a still image (captured or selected) is being reviewed.
-    private var isReviewing: Bool { camera.capturedImage != nil }
-
-    /// Whether the quad overlay should be shown (any state that isn't an error).
-    private var isPreviewing: Bool {
-        switch camera.status {
-        case .unauthorized, .failed: return false
-        default: return true
-        }
-    }
+    @State private var previewSize: CGSize = .zero
+    @State private var pendingImage: UIImage?
+    @State private var isDeliveringImage = false
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
 
-            // MARK: - Live camera / captured image / states
+                cameraContent
 
-            switch camera.status {
-            case .unauthorized:
-                unauthorizedView
-            case .failed(let message):
-                messageView(message)
-            default:
-                if let image = camera.capturedImage {
-                    // Bound the image to the screen and clip overflow, otherwise
-                    // `.scaledToFill()` expands the ZStack and pushes the banner
-                    // and control bar off-screen.
-                    Color.clear
-                        .overlay(
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                        )
-                        .clipped()
-                        .ignoresSafeArea()
-                } else {
-                    CameraPreview(session: camera.session)
-                        .ignoresSafeArea()
+                HatcheryScanGradients(bottomHeight: 246)
+
+                if showsSuggestedBoundary {
+                    let suggestion = QuadPoints.defaultShape(in: geometry.size)
+                    HatcheryOverlay(
+                        quad: .constant(suggestion),
+                        isEditable: false
+                    )
+                }
+
+                VStack(spacing: 0) {
+                    HatcheryScanInstructionBanner(
+                        systemName: "camera.viewfinder",
+                        text: "Get ready to check out the whole turtle hatching area"
+                    )
+                    .padding(.top, 68)
+
+                    Spacer(minLength: 0)
+
+                    captureControls
+                        .padding(.bottom, 59)
                 }
             }
-
-            // MARK: - Hatchery quadrilateral overlay (Phase 2)
-
-            if isPreviewing {
-                HatcheryOverlay(quad: $quad)
-                    .ignoresSafeArea()
+            .onAppear {
+                previewSize = geometry.size
+                isDeliveringImage = false
+                if camera.capturedImage != nil {
+                    camera.resumeLivePreview()
+                }
+                camera.start()
             }
-
-            // MARK: - Overlays
-
-            VStack {
-                instructionBanner
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-
-            VStack {
-                Spacer()
-                controlBar
+            .onChange(of: geometry.size) { _, newSize in
+                previewSize = newSize
+                if let pendingImage {
+                    deliver(pendingImage)
+                }
             }
         }
-        .statusBarHidden(true)
-        .onAppear { camera.start() }
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
         .onDisappear { camera.stop() }
+        .onChange(of: camera.capturedImage) { _, image in
+            guard let image else { return }
+            deliver(image)
+        }
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }
             Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    camera.present(selectedImage: image)
+                guard
+                    let data = try? await newItem.loadTransferable(type: Data.self),
+                    let image = UIImage(data: data)
+                else {
+                    pickerItem = nil
+                    return
                 }
+
+                pickerItem = nil
+                camera.present(selectedImage: image)
             }
         }
     }
 
-    // MARK: - Instruction Banner
-
-    private var instructionBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: isReviewing ? "hand.point.up.left.fill" : "camera.viewfinder")
-                .font(.title)
-                .foregroundStyle(Color.appOffWhite)
-
-            Text(isReviewing
-                 ? "Adjust the area to fit into your\nhatchery area"
-                 : "Get ready to check out the whole\nturtle hatching area")
-                .font(.body)
-                .foregroundStyle(Color.appOffWhite)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
+    private var showsSuggestedBoundary: Bool {
+        switch camera.status {
+        case .unauthorized, .failed:
+            return false
+        default:
+            return camera.capturedImage == nil
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .glassEffect(
-            .regular,
-            in: RoundedRectangle(cornerRadius: 26)
-        )
     }
 
-    // MARK: - Bottom Control Bar
-
-    private var controlBar: some View {
-        HStack {
-            if isReviewing {
-                // Retake
-                controlButton(
-                    systemName: "chevron.backward",
-                    label: "Retake"
-                ) { camera.resumeLivePreview() }
-
-                Spacer()
-
-                // Confirm
-                confirmButton
-
-                Spacer()
-
-                // Select another photo
-                selectPhotosButton
-            } else {
-                // Close
-                controlButton(
-                    systemName: "xmark",
-                    label: "Close",
-                    action: onClose
-                )
-
-                Spacer()
-
-                // Shutter
-                shutterButton
-
-                Spacer()
-
-                // Select from Photos
-                selectPhotosButton
-            }
+    @ViewBuilder
+    private var cameraContent: some View {
+        switch camera.status {
+        case .unauthorized:
+            unauthorizedView
+        case .failed(let message):
+            messageView(message)
+        default:
+            CameraPreview(session: camera.session)
         }
-        .padding(.horizontal, 32)
-        .padding(.top, 48)
-        .padding(.bottom, 24)
-        .frame(maxWidth: .infinity)
-        .background(
-            // Dark gradient behind the controls that extends past the safe
-            // area, so the feed never shows through the bottom strip.
-            LinearGradient(
-                colors: [Color.black.opacity(0.0), Color.black.opacity(0.85)],
-                startPoint: .top,
-                endPoint: .bottom
+    }
+
+    private var captureControls: some View {
+        HStack(alignment: .center, spacing: 38) {
+            HatcheryScanSideControl(
+                systemName: "xmark",
+                label: "Close",
+                action: onClose
             )
-            .ignoresSafeArea(edges: .bottom)
-            .allowsHitTesting(false)
+
+            HatcheryScanPrimaryControl {
+                camera.capturePhoto()
+            }
+            .disabled(camera.status != .ready)
+            .opacity(camera.status == .ready ? 1 : 0.5)
+
+            PhotosPicker(
+                selection: $pickerItem,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                HatcheryScanSideLabel(
+                    systemName: "photo.on.rectangle",
+                    label: "Select"
+                )
+            }
+            .buttonStyle(.plain)
+            .frame(width: 72, height: 78)
+        }
+        .frame(height: 107)
+    }
+
+    private func deliver(_ sourceImage: UIImage) {
+        guard !isDeliveringImage else { return }
+        guard previewSize.width > 0, previewSize.height > 0 else {
+            pendingImage = sourceImage
+            return
+        }
+
+        isDeliveringImage = true
+        pendingImage = nil
+
+        let image = HatcheryImageProcessor.preparedImage(sourceImage)
+        let mapper = AspectFillImageMapper(
+            imageSize: image.size,
+            containerSize: previewSize
         )
+        let suggestion = mapper.boundary(
+            for: QuadPoints.defaultShape(in: previewSize)
+        )
+
+        camera.stop()
+        onCapture(image, suggestion)
     }
-
-    private var shutterButton: some View {
-        Button {
-            camera.capturePhoto()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 107, height: 107)
-                    .glassEffect()
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 87, height: 87)
-            }
-        }
-        .disabled(camera.status != .ready)
-        .opacity(camera.status == .ready ? 1.0 : 0.5)
-    }
-
-    private var confirmButton: some View {
-        Button {
-            if let image = camera.capturedImage, let quad {
-                onConfirm(image, quad)
-            }
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 107, height: 107)
-                    .glassEffect()
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 87, height: 87)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(Color.appGreenPrimary)
-            }
-        }
-    }
-
-    private var selectPhotosButton: some View {
-        PhotosPicker(
-            selection: $pickerItem,
-            matching: .images,
-            photoLibrary: .shared()
-        ) {
-            controlLabel(systemName: "photo.on.rectangle", label: "Select")
-        }
-    }
-
-    private func controlButton(
-        systemName: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            controlLabel(systemName: systemName, label: label)
-        }
-    }
-
-    private func controlLabel(systemName: String, label: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: systemName)
-                .frame(width: 52, height: 52)
-                .glassEffect()
-                .font(.title3)
-                .foregroundStyle(Color.appOffWhite)
-
-            Text(label)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(Color.appOffWhite.opacity(0.9))
-        }
-    }
-
-    // MARK: - Permission / Error states
 
     private var unauthorizedView: some View {
         VStack(spacing: 16) {
@@ -266,15 +169,14 @@ struct CustomCameraView: View {
                 .font(.headline)
                 .foregroundStyle(Color.appOffWhite)
 
-            Text("Enable camera access in Settings to scan your hatchery area.")
+            Text("Enable camera access in Settings, or select a hatchery photo below.")
                 .font(.subheadline)
                 .foregroundStyle(Color.appOffWhite.opacity(0.8))
                 .multilineTextAlignment(.center)
 
             Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
             }
             .font(.headline)
             .foregroundStyle(Color.appGreenPrimary)
@@ -288,6 +190,7 @@ struct CustomCameraView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.largeTitle)
                 .foregroundStyle(Color.appYellow)
+
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(Color.appOffWhite)
@@ -297,6 +200,6 @@ struct CustomCameraView: View {
     }
 }
 
-#Preview {
-    CustomCameraView()
+#Preview("Capture Hatchery", traits: .fixedLayout(width: 402, height: 874)) {
+    CustomCameraView(onClose: {}, onCapture: { _, _ in })
 }

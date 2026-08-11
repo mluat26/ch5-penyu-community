@@ -8,13 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+    let hatchery: SavedHatchery
+
     @State private var addNestPath: [AddNestRoute] = []
 
     var body: some View {
         NavigationStack(path: $addNestPath) {
-            HomeView {
-                addNestPath.append(.scan)
-            }
+            HomeView(
+                hatchery: hatchery,
+                onAddNest: { addNestPath.append(.scan) }
+            )
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AddNestRoute.self) { route in
                 switch route {
@@ -38,5 +41,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(hatchery: .previewSample)
 }
