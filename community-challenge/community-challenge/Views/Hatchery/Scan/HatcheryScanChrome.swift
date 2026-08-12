@@ -9,16 +9,16 @@ struct HatcheryScanInstructionBanner: View {
             Image(systemName: systemName)
                 .font(.system(size: 34, weight: .regular))
                 .foregroundStyle(.white)
-                .frame(width: 40)
+                
 
             Text(text)
                 .font(.body)
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
+               
         }
         .padding(16)
         .frame(width: 366, height: 76)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
+        .glassEffect(in: RoundedRectangle(cornerRadius: 26))
     }
 }
 
@@ -30,6 +30,7 @@ struct HatcheryScanSideControl: View {
     var body: some View {
         Button(action: action) {
             HatcheryScanSideLabel(systemName: systemName, label: label)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: 72, height: 78)
@@ -83,6 +84,7 @@ struct HatcheryScanPrimaryControl: View {
                         .foregroundStyle(Color.appGreenPrimary)
                 }
             }
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .frame(width: 107, height: 107)

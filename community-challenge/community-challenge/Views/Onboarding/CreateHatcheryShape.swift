@@ -5,7 +5,7 @@ struct CreateFirstHatchView: View {
     @State private var hatchName: String = ""
     @FocusState private var isNameFocused: Bool
 
-    let onCreate: (String) -> Void
+    var onCreate: (String) -> Void = { _ in }
 
     private var canContinue: Bool {
         !hatchName
@@ -14,83 +14,123 @@ struct CreateFirstHatchView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let xOffset = (geometry.size.width - 402) / 2
+        ZStack {
 
-            ZStack(alignment: .topLeading) {
-                Color.white
+            // MARK: - Background
 
-                Image("Onboarding1")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 402, height: 874)
-                    .clipped()
-                    .offset(x: xOffset)
-                    .allowsHitTesting(false)
+            Image("Onboarding1") // TODO: Change this later for using real gradient and image
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+            // MARK: - Content
+
+            VStack(spacing: 0) {
+
+                Spacer(minLength: 0)
+
+                // MARK: - Header
 
                 VStack(spacing: 12) {
-                    Text("Create your first\nhatch")
-                        .font(.system(size: 34, weight: .bold))
+                    Text("Create your first hatch")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
                         .foregroundStyle(Color.appGreenPrimary)
-                        .frame(height: 82)
 
-                    Text("Name your first turtle egg incubator\nhatch")
-                        .font(.system(size: 17))
-                        .tracking(0)
+                    Text("Name your first turtle egg incubator hatch")
+                        .font(.body)
                         .foregroundStyle(Color.appNeutralGray1)
-                        .frame(height: 44)
                 }
                 .multilineTextAlignment(.center)
-                .frame(width: 287, height: 138)
-                .offset(x: xOffset + 58, y: 423)
+                .padding(.horizontal, 32)
+                .padding(.top, 360)
 
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .fill(Color(hex: "#E6E6E6"))
-                        .frame(width: 271, height: 1)
+                Spacer()
 
-                    TextField("Naming your hatch", text: $hatchName)
-                        .font(.system(size: 17))
-                        .tracking(0)
+                // MARK: - Hatch Name Input
+
+                VStack(spacing: 8) {
+
+                    ZStack {
+
+                        // Large typed text
+                        TextField(
+                            "",
+                            text: $hatchName
+                        )
+                        .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(Color.appNeutralBlack)
                         .multilineTextAlignment(.center)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
                         .focused($isNameFocused)
-                        .onSubmit { isNameFocused = false }
-                        .frame(width: 303, height: 42)
-                        .offset(y: 7)
+                        .onSubmit {
+                            isNameFocused = false
+                        }
+                        .frame(height: 50)
+
+                        // Small placeholder
+                        if hatchName.isEmpty {
+                            Text("Naming your hatch")
+                                .foregroundStyle(Color.appNeutralGray1)
+                                .allowsHitTesting(false)
+                                .font(.body)
+            
+                        }
+                    }
+
+                    Rectangle()
+                        .fill(Color.appNeutralGray3)
+                        .frame(height: 1)
                 }
-                .frame(width: 303, height: 52)
-                .offset(x: xOffset + 50, y: 631)
+                .padding(.horizontal, 32)
+
+                Spacer()
+                Spacer()
+
+                // MARK: - Create Button
 
                 Button {
-                    guard canContinue else {
-                        isNameFocused = true
-                        return
-                    }
-                    onCreate(hatchName.trimmingCharacters(in: .whitespacesAndNewlines))
+                    let trimmedName = hatchName
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    onCreate(trimmedName)
                 } label: {
                     Text("Create a hatch")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color(hex: "#FAF8F4"))
-                        .frame(width: 370, height: 55)
+                        .font(.headline)
+                        .foregroundStyle(Color.appOffWhite)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 60)
                         .background(
-                            Color.appGreenPrimary,
-                            in: RoundedRectangle(cornerRadius: 26)
+                            Capsule()
+                                .fill(Color.appGreenPrimary)
+                                .opacity(canContinue ? 1.0 : 0.5)
                         )
                 }
-                .buttonStyle(.plain)
-                .offset(x: xOffset + 16, y: 742)
+                .disabled(!canContinue)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 48)
             }
         }
-        .ignoresSafeArea()
-        .toolbar(.hidden, for: .navigationBar)
-        .preferredColorScheme(.light)
+
+        // MARK: - Keyboard Toolbar
+
+        // Uncomment if you want a Done button above the keyboard.
+        //
+        // .toolbar {
+        //     ToolbarItemGroup(placement: .keyboard) {
+        //         Spacer()
+        //
+        //         Button("Done") {
+        //             isNameFocused = false
+        //         }
+        //     }
+        // }
     }
 }
 
 #Preview {
-    CreateFirstHatchView(onCreate: { _ in })
+    CreateFirstHatchView()
 }

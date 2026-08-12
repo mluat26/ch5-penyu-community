@@ -4,6 +4,7 @@ import UIKit
 struct HatcheryDimensionView: View {
     let hatchName: String
     let image: UIImage
+    let boundary: HatcheryBoundary
     let usesMockImage: Bool
     let onNext: (HatcheryDimension) -> Void
     let onRescan: () -> Void
@@ -20,6 +21,7 @@ struct HatcheryDimensionView: View {
     init(
         hatchName: String,
         image: UIImage,
+        boundary: HatcheryBoundary,
         usesMockImage: Bool,
         initialDimension: HatcheryDimension,
         onNext: @escaping (HatcheryDimension) -> Void,
@@ -27,11 +29,12 @@ struct HatcheryDimensionView: View {
     ) {
         self.hatchName = hatchName
         self.image = image
+        self.boundary = boundary
         self.usesMockImage = usesMockImage
         self.onNext = onNext
         self.onRescan = onRescan
         _widthText = State(initialValue: Self.inputText(for: initialDimension.widthM))
-        _heightText = State(initialValue: String(format: "%.1f", initialDimension.heightM))
+        _heightText = State(initialValue: Self.inputText(for: initialDimension.heightM))
     }
 
     var body: some View {
@@ -45,7 +48,7 @@ struct HatcheryDimensionView: View {
                     Spacer().frame(height: 102)
 
                     HatcherySetupHeader(
-                        eyebrow: "Demension setting",
+                        eyebrow: "Dimension setting",
                         hatchName: hatchName
                     )
 
@@ -68,26 +71,36 @@ struct HatcheryDimensionView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            // The layout deliberately ignores the keyboard region, so the
+            // decimal pad sits on top of Next. It has no return key, hence the
+            // explicit ways out below.
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = nil }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
     }
 
     private var photo: some View {
-        GeometryReader { geometry in
-            ZStack {
-                HatcherySetupImage(
-                    image: image,
-                    usesMockCrop: usesMockImage
-                )
+        ZStack {
+            HatcherySetupImage(
+                image: image,
+                usesMockCrop: usesMockImage
+            )
 
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(HatcherySetupPalette.gridOverlay.opacity(0.34))
-                    .padding(8)
-            }
+            HatcheryBoundaryOverlay(
+                imageSize: image.size,
+                boundary: boundary
+            )
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .accessibilityLabel("Captured hatchery area")
+        .accessibilityLabel("Captured hatchery area")
     }
 
     private var dimensionForm: some View {
@@ -98,9 +111,13 @@ struct HatcheryDimensionView: View {
                     .foregroundStyle(.black)
                     .frame(height: 25)
 
-                Text("Input your hatching demesion")
+                // Doubles as the validation slot so an unusable value explains
+                // itself in place, without disturbing the fixed layout.
+                Text(validationMessage ?? "Input your hatching dimension")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color.appNeutralGray1)
+                    .foregroundStyle(validationMessage == nil ? Color.appNeutralGray1 : .red)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .frame(height: 22)
             }
             .multilineTextAlignment(.center)
@@ -206,6 +223,17 @@ struct HatcheryDimensionView: View {
         return dimension.isValid ? dimension : nil
     }
 
+    private var validationMessage: String? {
+        guard
+            let width = Self.number(from: widthText),
+            let height = Self.number(from: heightText)
+        else {
+            return "Enter a width and a height in metres."
+        }
+
+        return HatcheryDimension(widthM: width, heightM: height).validationMessage
+    }
+
     private static func number(from text: String) -> Double? {
         Double(text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: "."))
@@ -270,6 +298,44 @@ struct HatcherySetupImage: View {
     }
 }
 
+/// Draws a confirmed boundary over an aspect-filled photo, read-only.
+///
+/// Mirrors `HatcheryOverlay`'s fill and stroke so the area the user adjusted
+/// during scanning is recognisable on the screens that follow. Assumes the
+/// photo is rendered with `scaledToFill`, matching `HatcherySetupImage`'s
+/// non-mock path.
+struct HatcheryBoundaryOverlay: View {
+    let imageSize: CGSize
+    let boundary: HatcheryBoundary
+    var color: Color = .appGreenPrimary
+
+    var body: some View {
+        GeometryReader { geometry in
+            let mapper = AspectFillImageMapper(
+                imageSize: imageSize,
+                containerSize: geometry.size
+            )
+            let quad = mapper.viewQuad(for: boundary)
+
+            ZStack {
+                path(for: quad).fill(color.opacity(0.30))
+                path(for: quad).stroke(color, lineWidth: 2)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func path(for quad: QuadPoints) -> Path {
+        var path = Path()
+        path.move(to: quad.topLeft)
+        path.addLine(to: quad.topRight)
+        path.addLine(to: quad.bottomRight)
+        path.addLine(to: quad.bottomLeft)
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct HatcherySetupHeader: View {
     let eyebrow: String
     let hatchName: String
@@ -298,24 +364,35 @@ struct HatcherySetupButton: View {
     let isPrimary: Bool
     let action: () -> Void
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+    }
+
     var body: some View {
         Button(action: action) {
+            // The pill has to be drawn *inside* the label, and the content
+            // shape stated explicitly. With `.plain`, a bare Text only accepts
+            // taps on its glyphs, and a background applied outside the Button
+            // is decoration the hit test never sees — which left most of this
+            // 370 pt-wide button dead.
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(isPrimary ? HatcherySetupPalette.buttonForeground : .black)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(isPrimary ? Color.appGreenPrimary : Color(uiColor: .systemGray6))
+                .clipShape(shape)
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .frame(height: 55)
-        .background(isPrimary ? Color.appGreenPrimary : Color(uiColor: .systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 }
 
 #Preview {
     HatcheryDimensionView(
         hatchName: "Hatch_01",
-        image: UIImage(systemName: "photo")!,
+        image: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
+        boundary: .defaultSuggestion,
         usesMockImage: false,
         initialDimension: HatcheryDimension(widthM: 15, heightM: 7),
         onNext: { _ in },

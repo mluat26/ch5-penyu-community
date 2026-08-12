@@ -31,6 +31,16 @@ struct HatcheryBoundary: Codable, Hashable {
         bottomLeft: NormalizedPoint(x: 0, y: 1)
     )
 
+    /// The framing trapezoid used before the user adjusts anything. Mirrors
+    /// `QuadPoints.defaultShape(in:)` so a capture always starts out valid,
+    /// even if the container size is unknown at the moment of delivery.
+    static let defaultSuggestion = HatcheryBoundary(
+        topLeft: NormalizedPoint(x: 0.2788, y: 0.2997),
+        topRight: NormalizedPoint(x: 0.7062, y: 0.2997),
+        bottomRight: NormalizedPoint(x: 0.8370, y: 0.6740),
+        bottomLeft: NormalizedPoint(x: 0.1704, y: 0.6740)
+    )
+
     var ordered: [NormalizedPoint] {
         [topLeft, topRight, bottomRight, bottomLeft]
     }
@@ -63,6 +73,14 @@ struct HatcheryBoundary: Codable, Hashable {
     }
 
     /// Prevents folded or collapsed projections before grid generation.
+    ///
+    /// The thresholds must stay *looser* than `QuadPoints.isValid()`, which is
+    /// what actually gates dragging. That check works in screen points, so its
+    /// limits shrink by the rendered area (roughly 6e5 px²) once normalized:
+    /// its 0.5 pt turn becomes ~9e-7 and its 24 pt corner spacing becomes an
+    /// area of ~1e-3. Anything stricter here would silently reject a boundary
+    /// the user was allowed to draw, disabling Confirm and Next with no
+    /// explanation.
     var isValid: Bool {
         let points = ordered.map(\.cgPoint)
         let signedTurns = points.indices.map { index -> CGFloat in
@@ -72,7 +90,7 @@ struct HatcheryBoundary: Codable, Hashable {
             return Self.cross(a, b, c)
         }
 
-        let epsilon: CGFloat = 0.0005
+        let epsilon: CGFloat = 1e-7
         guard signedTurns.allSatisfy({ abs($0) > epsilon }) else { return false }
         let allClockwise = signedTurns.allSatisfy { $0 < 0 }
         let allCounterClockwise = signedTurns.allSatisfy { $0 > 0 }
@@ -84,7 +102,7 @@ struct HatcheryBoundary: Codable, Hashable {
                 + points[index].x * points[nextIndex].y
                 - points[nextIndex].x * points[index].y
         }
-        return abs(doubledArea) * 0.5 > 0.01
+        return abs(doubledArea) * 0.5 > 1e-4
     }
 
     private static func interpolate(
@@ -167,14 +185,33 @@ struct HatcheryDimension: Hashable {
     var widthM: Double
     var heightM: Double
 
-    var isValid: Bool {
-        guard widthM >= 2, heightM >= 2, widthM.isFinite, heightM.isFinite else {
-            return false
+    /// Why this dimension cannot be gridded, or `nil` when it is usable. The
+    /// screen shows this instead of just greying out Next, so the minimum-side
+    /// rule is never a silent dead end.
+    var validationMessage: String? {
+        guard
+            widthM.isFinite, heightM.isFinite,
+            widthM > 0, heightM > 0
+        else {
+            return "Enter a width and a height in metres."
         }
 
-        let columns = floor(widthM / HatcheryGridGenerator.targetSectionSizeM)
-        let rows = floor(heightM / HatcheryGridGenerator.targetSectionSizeM)
-        return columns <= 100 && rows <= 100 && columns * rows <= 2_500
+        let sectionSize = HatcheryGridGenerator.targetSectionSizeM
+        guard widthM >= sectionSize, heightM >= sectionSize else {
+            return "Each side needs at least \(HatcheryGridGenerator.sectionSizeText) m so one section fits."
+        }
+
+        let columns = floor(widthM / sectionSize)
+        let rows = floor(heightM / sectionSize)
+        guard columns <= 100, rows <= 100, columns * rows <= 2_500 else {
+            return "That area is too large to divide into sections."
+        }
+
+        return nil
+    }
+
+    var isValid: Bool {
+        validationMessage == nil
     }
 
     var areaM2: Double {
@@ -219,6 +256,12 @@ struct HatcheryGrid: Hashable {
 enum HatcheryGridGenerator {
     static let targetSectionSizeM = 2.0
 
+    static var sectionSizeText: String {
+        targetSectionSizeM.rounded() == targetSectionSizeM
+            ? String(Int(targetSectionSizeM))
+            : String(format: "%.1f", targetSectionSizeM)
+    }
+
     static func generate(
         dimension: HatcheryDimension,
         boundary: HatcheryBoundary
@@ -256,16 +299,6 @@ enum HatcheryGridGenerator {
 
         return HatcheryGrid(rows: rows, columns: columns, sections: sections)
     }
-}
-
-struct HatcherySetupDraft {
-    var name = ""
-    var image: UIImage?
-    var rectifiedImage: UIImage?
-    var usesMockImage = false
-    var boundary: HatcheryBoundary?
-    var dimension = HatcheryDimension(widthM: 15, heightM: 7)
-    var grid: HatcheryGrid?
 }
 
 /// UI-only companion for the database-facing `Hatchery` model.

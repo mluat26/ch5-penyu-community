@@ -12,8 +12,6 @@ struct CustomCameraView: View {
 
     @StateObject private var camera = CameraManager()
     @State private var pickerItem: PhotosPickerItem?
-    @State private var previewSize: CGSize = .zero
-    @State private var pendingImage: UIImage?
     @State private var isDeliveringImage = false
 
     var body: some View {
@@ -47,27 +45,23 @@ struct CustomCameraView: View {
                 }
             }
             .onAppear {
-                previewSize = geometry.size
                 isDeliveringImage = false
                 if camera.capturedImage != nil {
                     camera.resumeLivePreview()
                 }
                 camera.start()
             }
-            .onChange(of: geometry.size) { _, newSize in
-                previewSize = newSize
-                if let pendingImage {
-                    deliver(pendingImage)
-                }
+            // Reading the size straight from the proxy — rather than caching it
+            // in @State on appear — is what stops a photo from being stranded
+            // when it arrives before the cached size is populated.
+            .onChange(of: camera.capturedImage) { _, image in
+                guard let image else { return }
+                deliver(image, in: geometry.size)
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .onDisappear { camera.stop() }
-        .onChange(of: camera.capturedImage) { _, image in
-            guard let image else { return }
-            deliver(image)
-        }
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }
             Task {
@@ -136,24 +130,27 @@ struct CustomCameraView: View {
         .frame(height: 107)
     }
 
-    private func deliver(_ sourceImage: UIImage) {
+    /// Hands the photo to the flow. This always advances: a degenerate
+    /// container size falls back to the normalized default framing rather than
+    /// dropping the capture, which previously forced the user to retake.
+    private func deliver(_ sourceImage: UIImage, in containerSize: CGSize) {
         guard !isDeliveringImage else { return }
-        guard previewSize.width > 0, previewSize.height > 0 else {
-            pendingImage = sourceImage
-            return
-        }
-
         isDeliveringImage = true
-        pendingImage = nil
 
         let image = HatcheryImageProcessor.preparedImage(sourceImage)
-        let mapper = AspectFillImageMapper(
-            imageSize: image.size,
-            containerSize: previewSize
-        )
-        let suggestion = mapper.boundary(
-            for: QuadPoints.defaultShape(in: previewSize)
-        )
+        let suggestion: HatcheryBoundary
+
+        if containerSize.width > 0, containerSize.height > 0 {
+            let mapper = AspectFillImageMapper(
+                imageSize: image.size,
+                containerSize: containerSize
+            )
+            suggestion = mapper.boundary(
+                for: QuadPoints.defaultShape(in: containerSize)
+            )
+        } else {
+            suggestion = .defaultSuggestion
+        }
 
         camera.stop()
         onCapture(image, suggestion)
