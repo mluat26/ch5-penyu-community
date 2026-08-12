@@ -2,16 +2,16 @@
 //  NestDetailView.swift
 //  community-challenge
 //
-//  Created by Nguyen Minh Luat on 10/8/26.
-//
 
 import SwiftUI
 
 struct NestDetailView: View {
-    let nest: NestSample
+    let item: NestDashboardItem
+    let ordinal: Int
+    let sectionID: String
 
     var body: some View {
-        SheetChrome(title: nest.name) { sheetWidth in
+        SheetChrome(title: "Nest #\(String(format: "%03d", ordinal))") { sheetWidth in
             Image("NestImage")
                 .resizable()
                 .scaledToFill()
@@ -28,23 +28,23 @@ struct NestDetailView: View {
         HStack(alignment: .top, spacing: 12) {
             sheetSummaryValue(
                 title: "Average temperature",
-                value: nest.temperature.celsiusText,
+                value: temperatureText(item.latestTemperatureC),
                 unit: "°C",
                 valueColor: Color.appGreenPrimary,
                 alignment: .leading
             )
             .frame(width: 151, height: 85, alignment: .topLeading)
 
-            sheetSummaryValue(title: "Eggs", value: nest.eggs.formatted())
-                
-            sheetSummaryValue(title: "Sections", value: nest.sectionID)
-                
+            sheetSummaryValue(title: "Eggs", value: item.nest.numberOfEggs.formatted())
+
+            sheetSummaryValue(title: "Section", value: sectionID)
         }
         .frame(width: 370, height: 85, alignment: .top)
         .background(.white, in: RoundedRectangle(cornerRadius: 26))
     }
-}
 
-#Preview("Nest Detail", traits: .fixedLayout(width: 402, height: 874)) {
-    NestDetailView(nest: .preview)
+    private func temperatureText(_ temperature: Double?) -> String {
+        guard let temperature else { return "—" }
+        return temperature.formatted(.number.precision(.fractionLength(1)))
+    }
 }
