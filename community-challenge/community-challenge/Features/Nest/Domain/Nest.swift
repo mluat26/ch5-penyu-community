@@ -7,7 +7,7 @@ struct Nest: Identifiable, Hashable, Sendable {
     var numberOfEggs: Int
     var dateEggsLaid: Date?
     var datePredictedHatch: Date?
-    var placeEggsLaid: String?
+    var placeEggsLaid: Date?
     var successEggsHatch: Int?
     var failEggsHatch: Int?
     var placementRow: Int?
@@ -39,7 +39,7 @@ struct CreateNestInput: Hashable, Sendable {
     var numberOfEggs: Int
     var dateEggsLaid: Date?
     var datePredictedHatch: Date?
-    var placeEggsLaid: String?
+    var placeEggsLaid: Date?
     var placementRow: Int?
     var placementColumn: Int?
 }

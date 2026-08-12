@@ -1,78 +1,82 @@
 import Foundation
 
-/// Exact wire representation for the future `nests` Supabase table.
+/// Wire representation of the current `public.nest` table.
+///
+/// The current schema has no `date_predicted_hatch` or `fail_eggs_hatch`
+/// columns. Those richer domain fields remain presentation/product work until a
+/// reviewed migration adds their persistence contract.
 struct NestDTO: Codable, Sendable {
     let id: UUID
-    let hatcheryID: UUID
-    let founderID: UUID?
     let numberOfEggs: Int
     let dateEggsLaid: Date?
-    let datePredictedHatch: Date?
-    let placeEggsLaid: String?
+    let placeEggsLaid: Date?
     let successEggsHatch: Int?
-    let failEggsHatch: Int?
+    let hatcheryID: UUID?
     let placementRow: Int?
     let placementColumn: Int?
+    let founderID: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
-        case hatcheryID = "hatchery_id"
-        case founderID = "founder_id"
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
-        case datePredictedHatch = "date_predicted_hatch"
         case placeEggsLaid = "place_eggs_laid"
         case successEggsHatch = "success_eggs_hatch"
-        case failEggsHatch = "fail_eggs_hatch"
+        case hatcheryID = "hatchery_id"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
+        case founderID = "founder_id"
     }
 }
 
+/// Insert payload for the columns currently present in `public.nest`.
 struct NestInsertDTO: Encodable, Sendable {
-    let hatcheryID: UUID
-    let founderID: UUID?
     let numberOfEggs: Int
     let dateEggsLaid: Date?
-    let datePredictedHatch: Date?
-    let placeEggsLaid: String?
+    let placeEggsLaid: Date?
+    let hatcheryID: UUID
     let placementRow: Int?
     let placementColumn: Int?
+    let founderID: UUID?
 
     enum CodingKeys: String, CodingKey {
-        case hatcheryID = "hatchery_id"
-        case founderID = "founder_id"
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
-        case datePredictedHatch = "date_predicted_hatch"
         case placeEggsLaid = "place_eggs_laid"
+        case hatcheryID = "hatchery_id"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
+        case founderID = "founder_id"
     }
 }
 
+/// Update payload supported by the current `public.nest` table.
 struct HatchResultUpdateDTO: Encodable, Sendable {
     let successEggsHatch: Int
-    let failEggsHatch: Int
 
     enum CodingKeys: String, CodingKey {
         case successEggsHatch = "success_eggs_hatch"
-        case failEggsHatch = "fail_eggs_hatch"
     }
 }
 
 extension NestDTO {
-    func toEntity() -> Nest {
-        Nest(
+    func toEntity() throws -> Nest {
+        guard let hatcheryID else {
+            throw DataMappingError.missingRequiredValue(field: "nest.hatchery_id")
+        }
+
+        return Nest(
             id: id,
             hatcheryID: hatcheryID,
             founderID: founderID,
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
-            datePredictedHatch: datePredictedHatch,
+            // Not represented by the current remote schema.
+            datePredictedHatch: nil,
             placeEggsLaid: placeEggsLaid,
             successEggsHatch: successEggsHatch,
-            failEggsHatch: failEggsHatch,
+            // Not represented by the current remote schema.
+            failEggsHatch: nil,
             placementRow: placementRow,
             placementColumn: placementColumn
         )
@@ -80,25 +84,35 @@ extension NestDTO {
 }
 
 extension CreateNestInput {
-    func toDTO() -> NestInsertDTO {
-        NestInsertDTO(
-            hatcheryID: hatcheryID,
-            founderID: founderID,
+    func toDTO() throws -> NestInsertDTO {
+        guard datePredictedHatch == nil else {
+            throw DataMappingError.schemaColumnUnavailable(
+                table: "nest",
+                column: "date_predicted_hatch"
+            )
+        }
+
+        return NestInsertDTO(
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
-            datePredictedHatch: datePredictedHatch,
             placeEggsLaid: placeEggsLaid,
+            hatcheryID: hatcheryID,
             placementRow: placementRow,
-            placementColumn: placementColumn
+            placementColumn: placementColumn,
+            founderID: founderID
         )
     }
 }
 
 extension RecordHatchResultInput {
-    func toDTO() -> HatchResultUpdateDTO {
-        HatchResultUpdateDTO(
-            successEggsHatch: successEggsHatch,
-            failEggsHatch: failEggsHatch
-        )
+    func toDTO() throws -> HatchResultUpdateDTO {
+        guard failEggsHatch == 0 else {
+            throw DataMappingError.schemaColumnUnavailable(
+                table: "nest",
+                column: "fail_eggs_hatch"
+            )
+        }
+
+        return HatchResultUpdateDTO(successEggsHatch: successEggsHatch)
     }
 }
