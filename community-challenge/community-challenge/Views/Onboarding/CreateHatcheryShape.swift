@@ -114,20 +114,6 @@ struct CreateFirstHatchView: View {
                 .padding(.bottom, 48)
             }
         }
-
-        // MARK: - Keyboard Toolbar
-
-        // Uncomment if you want a Done button above the keyboard.
-        //
-        // .toolbar {
-        //     ToolbarItemGroup(placement: .keyboard) {
-        //         Spacer()
-        //
-        //         Button("Done") {
-        //             isNameFocused = false
-        //         }
-        //     }
-        // }
     }
 }
 

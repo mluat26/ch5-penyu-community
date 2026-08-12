@@ -129,7 +129,7 @@ struct OnboardingFlowController: View {
                 usesMockImage: layout.shot.usesMockImage,
                 dimension: layout.dimension,
                 grid: layout.grid,
-                shape: .rectangle,
+               
                 onDone: { saveHatchery(layout) },
                 onBack: pop
             )
@@ -199,9 +199,7 @@ struct OnboardingFlowController: View {
         onSave(
             SavedHatchery(
                 hatchery: hatchery,
-                photo: layout.shot.image,
                 rectifiedPhoto: layout.rectifiedImage,
-                boundary: layout.shot.boundary,
                 grid: layout.grid
             )
         )

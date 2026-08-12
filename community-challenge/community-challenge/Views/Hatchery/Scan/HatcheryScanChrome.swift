@@ -97,23 +97,22 @@ struct HatcheryScanPrimaryControl: View {
 }
 
 struct HatcheryScanGradients: View {
-    /// The top scrim is deliberately short and semi-transparent: it sits behind
-    /// the instruction banner, and liquid glass needs varied content to refract.
-    /// Over a full-black field the material has nothing to lens and flattens
-    /// into a plain frosted rectangle.
-    var topHeight: CGFloat = 260
-    var topOpacity: Double = 0.55
     let bottomHeight: CGFloat
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .top) {
+                // The top scrim is deliberately short and semi-transparent: it
+                // sits behind the instruction banner, and liquid glass needs
+                // varied content to refract. Over a full-black field the
+                // material has nothing to lens and flattens into a plain
+                // frosted rectangle.
                 LinearGradient(
-                    colors: [.black.opacity(topOpacity), .black.opacity(0)],
+                    colors: [.black.opacity(0.55), .black.opacity(0)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: topHeight)
+                .frame(height: 260)
 
                 LinearGradient(
                     colors: [.black.opacity(0), .black],

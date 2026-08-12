@@ -7,7 +7,6 @@ struct HatcheryGridPreviewView: View {
     let usesMockImage: Bool
     let dimension: HatcheryDimension
     let grid: HatcheryGrid
-    let shape: HatcheryShape
     let onDone: () -> Void
     let onBack: () -> Void
 
@@ -62,8 +61,8 @@ struct HatcheryGridPreviewView: View {
     private var summaryCards: some View {
         HStack(spacing: 10) {
             
-            summaryCard(title: "Area", value: "\(Self.measurementText(dimension.areaM2)) m²")
-            summaryCard(title: "Sections", value: "\(grid.sections.count)")
+            summaryCard(title: "Area", value: "\(dimension.areaM2.formatted(.number.precision(.fractionLength(0...1)))) m²")
+            summaryCard(title: "Sections", value: "\(grid.sectionCount)")
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -101,10 +100,6 @@ struct HatcheryGridPreviewView: View {
             HatcherySetupButton(title: "Done", isPrimary: true, action: onDone)
             HatcherySetupButton(title: "Back", isPrimary: false, action: onBack)
         }
-    }
-
-    private static func measurementText(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
     }
 }
 
@@ -228,7 +223,7 @@ private struct HatcheryGridPhoto: View {
         usesMockImage: true,
         dimension: dimension,
         grid: grid,
-        shape: .rectangle,
+      
         onDone: {},
         onBack: {}
     )

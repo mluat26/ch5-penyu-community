@@ -198,7 +198,7 @@ struct HatcheryDimension: Hashable {
 
         let sectionSize = HatcheryGridGenerator.targetSectionSizeM
         guard widthM >= sectionSize, heightM >= sectionSize else {
-            return "Each side needs at least \(HatcheryGridGenerator.sectionSizeText) m so one section fits."
+            return "Each side needs at least 2 m so one section fits."
         }
 
         let columns = floor(widthM / sectionSize)
@@ -219,19 +219,11 @@ struct HatcheryDimension: Hashable {
     }
 }
 
-struct HatcherySection: Identifiable, Hashable {
-    let id: String
-    let row: Int
-    let column: Int
-    let widthM: Double
-    let heightM: Double
-    let boundary: HatcheryBoundary
-}
-
 struct HatcheryGrid: Hashable {
     let rows: Int
     let columns: Int
-    let sections: [HatcherySection]
+
+    var sectionCount: Int { rows * columns }
 
     var columnLabels: [String] {
         (0..<columns).map(Self.columnLabel)
@@ -254,13 +246,8 @@ struct HatcheryGrid: Hashable {
 }
 
 enum HatcheryGridGenerator {
+    /// `HatcheryDimension.validationMessage` spells this out as "2 m" — change both together.
     static let targetSectionSizeM = 2.0
-
-    static var sectionSizeText: String {
-        targetSectionSizeM.rounded() == targetSectionSizeM
-            ? String(Int(targetSectionSizeM))
-            : String(format: "%.1f", targetSectionSizeM)
-    }
 
     static func generate(
         dimension: HatcheryDimension,
@@ -272,41 +259,14 @@ enum HatcheryGridGenerator {
         let rows = Int(floor(dimension.heightM / targetSectionSizeM))
         guard columns > 0, rows > 0 else { return nil }
 
-        let cellWidth = targetSectionSizeM
-        let cellHeight = targetSectionSizeM
-        var sections: [HatcherySection] = []
-        sections.reserveCapacity(rows * columns)
-
-        for row in 0..<rows {
-            for column in 0..<columns {
-                sections.append(
-                    HatcherySection(
-                        id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
-                        row: row,
-                        column: column,
-                        widthM: cellWidth,
-                        heightM: cellHeight,
-                        boundary: boundary.sectionBoundary(
-                            row: row,
-                            column: column,
-                            rowCount: rows,
-                            columnCount: columns
-                        )
-                    )
-                )
-            }
-        }
-
-        return HatcheryGrid(rows: rows, columns: columns, sections: sections)
+        return HatcheryGrid(rows: rows, columns: columns)
     }
 }
 
 /// UI-only companion for the database-facing `Hatchery` model.
 struct SavedHatchery: Identifiable {
     let hatchery: Hatchery
-    let photo: UIImage
     let rectifiedPhoto: UIImage
-    let boundary: HatcheryBoundary
     let grid: HatcheryGrid
 
     var id: UUID { hatchery.id }

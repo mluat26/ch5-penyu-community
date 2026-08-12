@@ -230,11 +230,11 @@ struct HomeView: View {
             .frame(height: 44)
 
             VStack(spacing: 12) {
-                temperatureCard(value: selectedSection?.averageTemperature ?? "29.0")
+                temperatureCard(value: (selectedSection?.averageTemperature ?? 29).celsiusText)
 
                 HStack(spacing: 12) {
-                    statCard(title: "Nests", value: selectedSection?.nests ?? "312")
-                    statCard(title: "Eggs", value: selectedSection?.eggs ?? "4812")
+                    statCard(title: "Nests", value: (selectedSection?.nests ?? 312).formatted())
+                    statCard(title: "Eggs", value: (selectedSection?.eggs ?? 4812).formatted())
                 }
                 .frame(height: 85)
             }
@@ -341,37 +341,49 @@ struct HomeView: View {
 
 private struct HatcherySectionSample {
     let id: String
-    let averageTemperature: String
-    let nests: String
-    let eggs: String
+    let averageTemperature: Double
+    let nests: Int
+    let eggs: Int
     let nestReadings: [NestSample]
 
     static func sample(for id: String) -> HatcherySectionSample {
         HatcherySectionSample(
             id: id,
-            averageTemperature: id == "B2" ? "30.0" : "29.0",
-            nests: id == "B2" ? "5" : "12",
-            eggs: id == "B2" ? "233" : "1,204",
+            averageTemperature: id == "B2" ? 30 : 29,
+            nests: id == "B2" ? 5 : 12,
+            eggs: id == "B2" ? 233 : 1204,
             nestReadings: [
-                NestSample(id: "\(id)-one", temperature: "29.0°C", systemName: "checkmark.circle", tint: Color(hex: "#34C759"), chipWidth: 85),
-                NestSample(id: "\(id)-two", temperature: "33.5°C", systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85),
-                NestSample(id: "\(id)-three", temperature: "26.5°C", systemName: "snowflake", tint: Color(hex: "#00C3D0"), chipWidth: 83),
-                NestSample(id: "\(id)-four", temperature: "33.5°C", systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85)
+                NestSample(id: "\(id)-one", name: "Nest-01", eggs: 490, sectionID: id, temperature: 29, systemName: "checkmark.circle", tint: Color(hex: "#34C759"), chipWidth: 85),
+                NestSample(id: "\(id)-two", name: "Nest-02", eggs: 100, sectionID: id, temperature: 33.5, systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85),
+                NestSample(id: "\(id)-three", name: "Nest-03", eggs: 212, sectionID: id, temperature: 26.5, systemName: "snowflake", tint: Color(hex: "#00C3D0"), chipWidth: 83),
+                NestSample(id: "\(id)-four", name: "Nest-04", eggs: 100, sectionID: id, temperature: 33.5, systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85)
             ]
         )
     }
 }
 
-private struct NestSample {
+struct NestSample: Identifiable {
     let id: String
-    let temperature: String
+    let name: String
+    let eggs: Int
+    let sectionID: String
+    let temperature: Double
     let systemName: String
     let tint: Color
     let chipWidth: CGFloat
+
+    static let preview = HatcherySectionSample.sample(for: "B1").nestReadings[0]
 }
 
-private struct SectionOverviewSheet: View {
-    let section: HatcherySectionSample
+extension Double {
+    /// Temperatures always render with one decimal: 29 → "29.0".
+    var celsiusText: String { formatted(.number.precision(.fractionLength(1))) }
+}
+
+/// Header chrome plus the Figma-literal sizing shared by the section and nest sheets.
+struct SheetChrome<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: (CGFloat) -> Content
 
     @Environment(\.dismiss) private var dismiss
 
@@ -389,12 +401,7 @@ private struct SectionOverviewSheet: View {
                     .frame(height: 54)
                     .offset(y: 11)
 
-                summary
-                    .frame(width: 370, height: 85, alignment: .top)
-                    .offset(x: (sheetWidth - 370) / 2, y: 71)
-
-                nestList
-                    .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
+                content(sheetWidth)
             }
             .frame(width: sheetWidth, height: geometry.size.height, alignment: .topLeading)
             .scaleEffect(contentScale, anchor: .topLeading)
@@ -418,9 +425,9 @@ private struct SectionOverviewSheet: View {
             .frame(width: 44, height: 44)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, horizontalInset)
-            .accessibilityLabel("Close section overview")
+            .accessibilityLabel("Close \(title)")
 
-            Text("Section \(section.id)")
+            Text(title)
                 .font(.system(size: 17, weight: .semibold))
                 .offset(y: 2)
 
@@ -431,78 +438,109 @@ private struct SectionOverviewSheet: View {
                 .background(.blue, in: Circle())
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, horizontalInset)
-                .accessibilityLabel("Edit section \(section.id)")
+                .accessibilityLabel("Edit \(title)")
         }
         .frame(width: width, height: 44, alignment: .top)
+    }
+}
+
+/// One column of a sheet summary row: caption on top, value (optionally with a unit) below.
+func sheetSummaryValue(
+    title: String,
+    value: String,
+    unit: String = "",
+    valueColor: Color = .black,
+    alignment: HorizontalAlignment = .center
+) -> some View {
+    let isTemperature = !unit.isEmpty
+
+    return VStack(alignment: alignment, spacing: 4) {
+        Text(title)
+            .font(.system(size: 12, weight: .regular))
+            .foregroundStyle(Color(hex: "#8E8E93").opacity(0.75))
+            .lineLimit(1)
+            .padding(.leading, alignment == .leading ? 16 : 0)
+
+        HStack(alignment: .top, spacing: 0) {
+            Text(value)
+                .font(.system(size: isTemperature ? 28 : 20, weight: isTemperature ? .bold : .semibold))
+                .tracking(isTemperature ? 0.38 : 0)
+
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.system(size: 12, weight: .bold))
+                    .padding(.top, 1)
+            }
+        }
+        .foregroundStyle(valueColor)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .offset(y: isTemperature ? 0 : 10)
+    }
+    .padding(.top, 16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment == .leading ? .topLeading : .top)
+}
+
+private struct SectionOverviewSheet: View {
+    let section: HatcherySectionSample
+
+    @State private var selectedNest: NestSample?
+
+    var body: some View {
+        SheetChrome(title: "Section \(section.id)") { sheetWidth in
+            summary
+                .frame(width: 370, height: 85, alignment: .top)
+                .offset(x: (sheetWidth - 370) / 2, y: 71)
+
+            nestList
+                .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
+        }
+        .sheet(item: $selectedNest) { nest in
+            NestDetailView(nest: nest)
+                .presentationDetents([.height(707)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+        }
     }
 
     private var summary: some View {
         HStack(alignment: .top, spacing: 12) {
-            summaryValue(
+            sheetSummaryValue(
                 title: "Average temperature",
-                value: section.averageTemperature,
+                value: section.averageTemperature.celsiusText,
                 unit: "°C",
                 valueColor: Color(hex: "#0C7C4D"),
                 alignment: .leading
             )
             .frame(width: 151, height: 85, alignment: .topLeading)
 
-            summaryValue(title: "Nests", value: section.nests)
+            sheetSummaryValue(title: "Nests", value: section.nests.formatted())
                 .frame(width: 97.5, height: 85, alignment: .top)
 
-            summaryValue(title: "Eggs", value: section.eggs)
+            sheetSummaryValue(title: "Eggs", value: section.eggs.formatted())
                 .frame(width: 97.5, height: 85, alignment: .top)
         }
         .frame(width: 370, height: 85, alignment: .top)
     }
 
-    private func summaryValue(
-        title: String,
-        value: String,
-        unit: String = "",
-        valueColor: Color = .black,
-        alignment: HorizontalAlignment = .center
-    ) -> some View {
-        let isTemperature = !unit.isEmpty
-
-        return VStack(alignment: alignment, spacing: 4) {
-            Text(title)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.75))
-                .lineLimit(1)
-                .padding(.leading, alignment == .leading ? 16 : 0)
-
-            HStack(alignment: .top, spacing: 0) {
-                Text(value)
-                    .font(.system(size: isTemperature ? 28 : 20, weight: isTemperature ? .bold : .semibold))
-                    .tracking(isTemperature ? 0.38 : 0)
-
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: 12, weight: .bold))
-                        .padding(.top, 1)
-                }
-            }
-            .foregroundStyle(valueColor)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .offset(y: isTemperature ? 0 : 10)
-        }
-        .padding(.top, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment == .leading ? .topLeading : .top)
-    }
-
     private var nestList: some View {
         VStack(spacing: 0) {
             ForEach(Array(section.nestReadings.enumerated()), id: \.element.id) { index, nest in
-                nestRow(nest)
-                    .frame(height: 116)
-                    .overlay(alignment: .bottom) {
-                        if index < section.nestReadings.count - 1 {
-                            Rectangle()
-                                .fill(Color(hex: "#EEEEEE"))
-                                .frame(height: 1)
-                        }
+                Button {
+                    selectedNest = nest
+                } label: {
+                    nestRow(nest)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .frame(height: 116)
+                .overlay(alignment: .bottom) {
+                    if index < section.nestReadings.count - 1 {
+                        Rectangle()
+                            .fill(Color(hex: "#EEEEEE"))
+                            .frame(height: 1)
                     }
+                }
             }
         }
         .frame(width: 371, height: 464)
@@ -513,11 +551,11 @@ private struct SectionOverviewSheet: View {
     private func nestRow(_ nest: NestSample) -> some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 4) {
-                Text("Nest #023")
+                Text(nest.name)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "#2B2B2B"))
 
-                Text("· 100 eggs")
+                Text("· \(nest.eggs.formatted()) eggs")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Color(hex: "#4A4A4A"))
 
@@ -539,7 +577,7 @@ private struct SectionOverviewSheet: View {
                     Image(systemName: nest.systemName)
                         .font(.system(size: 12, weight: .regular))
 
-                    Text(nest.temperature)
+                    Text("\(nest.temperature.celsiusText)°C")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundStyle(.white)
@@ -573,8 +611,6 @@ extension SavedHatchery {
             dimension: dimension,
             boundary: boundary
         )!
-        let photo = UIImage(named: "HatcherySamplePhoto") ?? UIImage()
-
         return SavedHatchery(
             hatchery: Hatchery(
                 id: UUID(),
@@ -586,9 +622,7 @@ extension SavedHatchery {
                 widthM: dimension.widthM,
                 organizationId: nil
             ),
-            photo: photo,
-            rectifiedPhoto: photo,
-            boundary: boundary,
+            rectifiedPhoto: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
             grid: grid
         )
     }()

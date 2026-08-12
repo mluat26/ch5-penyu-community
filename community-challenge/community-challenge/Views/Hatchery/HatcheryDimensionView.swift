@@ -33,8 +33,13 @@ struct HatcheryDimensionView: View {
         self.usesMockImage = usesMockImage
         self.onNext = onNext
         self.onRescan = onRescan
-        _widthText = State(initialValue: Self.inputText(for: initialDimension.widthM))
-        _heightText = State(initialValue: Self.inputText(for: initialDimension.heightM))
+        // `.grouping(.never)`: this seeds a text field that `number(from:)` reads
+        // back, and it cannot parse a thousands separator.
+        let style = FloatingPointFormatStyle<Double>.number
+            .precision(.fractionLength(0...1))
+            .grouping(.never)
+        _widthText = State(initialValue: initialDimension.widthM.formatted(style))
+        _heightText = State(initialValue: initialDimension.heightM.formatted(style))
     }
 
     var body: some View {
@@ -238,10 +243,6 @@ struct HatcheryDimensionView: View {
     private static func number(from text: String) -> Double? {
         Double(text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: "."))
-    }
-
-    private static func inputText(for value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
     }
 }
 
