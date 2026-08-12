@@ -61,7 +61,7 @@ struct HatcheryGridPreviewView: View {
 
     private var summaryCards: some View {
         HStack(spacing: 10) {
-            summaryCard(title: "Shape", value: shape.rawValue.capitalized)
+            
             summaryCard(title: "Area", value: "\(Self.measurementText(dimension.areaM2)) m²")
             summaryCard(title: "Sections", value: "\(grid.sections.count)")
         }
@@ -72,12 +72,13 @@ struct HatcheryGridPreviewView: View {
     private func summaryCard(title: String, value: String) -> some View {
         VStack(spacing: 10) {
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: "#2A2A2A"))
+                .font(.subheadline)
+                .fontWeight(.semibold)
                 .frame(height: 20)
 
             Text(value)
-                .font(.system(size: 17, weight: .regular))
+                .font(.body)
+                .fontWeight(.regular)
                 .foregroundStyle(Color.appNeutralGray1)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -87,13 +88,14 @@ struct HatcheryGridPreviewView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 86, alignment: .top)
         .background(HatcherySetupPalette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(HatcherySetupPalette.border, lineWidth: 1)
         }
     }
-
     private var actionButtons: some View {
         VStack(spacing: 12) {
             HatcherySetupButton(title: "Done", isPrimary: true, action: onDone)

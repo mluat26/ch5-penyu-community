@@ -110,7 +110,7 @@ struct HatcheryBoundaryAdjustmentView: View {
             ) {
                 HatcheryScanSideLabel(
                     systemName: "photo.on.rectangle",
-                    label: "Select"
+                    label: "Replace"
                 )
             }
             .buttonStyle(.plain)
