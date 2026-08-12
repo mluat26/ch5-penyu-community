@@ -6,7 +6,7 @@ import CoreGraphics
 /// quadrilateral whose corners can be dragged independently. Points are stored
 /// in the coordinate space of whatever view is drawing them (e.g. the camera
 /// preview). Normalization for persistence is handled separately by
-/// `HatcheryBoundary` (Phase 4).
+/// `HatcheryBoundary` before the result leaves the scan flow.
 struct QuadPoints: Equatable {
 
     var topLeft: CGPoint
@@ -56,10 +56,10 @@ struct QuadPoints: Equatable {
         let w = size.width
         let h = size.height
         return QuadPoints(
-            topLeft:     CGPoint(x: w * 0.28, y: h * 0.30),
-            topRight:    CGPoint(x: w * 0.72, y: h * 0.30),
-            bottomRight: CGPoint(x: w * 0.82, y: h * 0.72),
-            bottomLeft:  CGPoint(x: w * 0.18, y: h * 0.72)
+            topLeft:     CGPoint(x: w * 0.2788, y: h * 0.2997),
+            topRight:    CGPoint(x: w * 0.7062, y: h * 0.2997),
+            bottomRight: CGPoint(x: w * 0.8370, y: h * 0.6740),
+            bottomLeft:  CGPoint(x: w * 0.1704, y: h * 0.6740)
         )
     }
 
@@ -76,26 +76,28 @@ struct QuadPoints: Equatable {
 
     // MARK: - Validity
 
-    /// A quad is "simple" when non-adjacent edges do not cross — i.e. it is not
-    /// a self-intersecting bow-tie. Adjacent corners must also keep a minimum
-    /// separation so the shape can't collapse to a degenerate sliver.
+    /// A valid editing boundary is convex and has four separated corners.
     func isValid(minCornerSpacing: CGFloat = 24) -> Bool {
-        // Edges: e0 = TL→TR, e1 = TR→BR, e2 = BR→BL, e3 = BL→TL.
-        // Only non-adjacent pairs can create a self-intersection.
-        if Self.segmentsIntersect(topLeft, topRight, bottomRight, bottomLeft) { return false }
-        if Self.segmentsIntersect(topRight, bottomRight, bottomLeft, topLeft) { return false }
+        let points = ordered
+        for index in points.indices {
+            let next = points[(index + 1) % points.count]
+            if Self.distance(points[index], next) < minCornerSpacing {
+                return false
+            }
+        }
 
-        // No two neighbouring corners collapsed onto each other.
-        let edges = [
-            (topLeft, topRight),
-            (topRight, bottomRight),
-            (bottomRight, bottomLeft),
-            (bottomLeft, topLeft)
-        ]
-        for (a, b) in edges where Self.distance(a, b) < minCornerSpacing {
+        let turns = points.indices.map { index in
+            Self.orientation(
+                points[index],
+                points[(index + 1) % points.count],
+                points[(index + 2) % points.count]
+            )
+        }
+        let epsilon: CGFloat = 0.5
+        if turns.contains(where: { abs($0) <= epsilon }) {
             return false
         }
-        return true
+        return turns.allSatisfy { $0 > 0 } || turns.allSatisfy { $0 < 0 }
     }
 
     // MARK: - Geometry helpers
@@ -104,23 +106,6 @@ struct QuadPoints: Equatable {
         let dx = a.x - b.x
         let dy = a.y - b.y
         return (dx * dx + dy * dy).squareRoot()
-    }
-
-    /// Do segments `p1p2` and `p3p4` intersect?
-    private static func segmentsIntersect(
-        _ p1: CGPoint, _ p2: CGPoint,
-        _ p3: CGPoint, _ p4: CGPoint
-    ) -> Bool {
-        let d1 = orientation(p3, p4, p1)
-        let d2 = orientation(p3, p4, p2)
-        let d3 = orientation(p1, p2, p3)
-        let d4 = orientation(p1, p2, p4)
-
-        if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-           ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)) {
-            return true
-        }
-        return false
     }
 
     /// Cross product sign of (b-a) × (c-a): >0 CCW, <0 CW, 0 collinear.

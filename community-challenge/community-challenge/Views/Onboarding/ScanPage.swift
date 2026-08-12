@@ -2,83 +2,71 @@ import SwiftUI
 
 struct ScanView: View {
 
-    var onScan: () -> Void = {}
-    var onSkip: () -> Void = {}
+    let onScan: () -> Void
+    let onSkip: () -> Void
 
     var body: some View {
-        ZStack {
+        GeometryReader { geometry in
+            let xOffset = (geometry.size.width - 402) / 2
 
-            // MARK: - Background
+            ZStack(alignment: .topLeading) {
+                Color.white
 
-            Image("Onboarding2") // TODO : Change this later for using real gradient and image
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-
-            // MARK: - Content
-
-            VStack(spacing: 0) {
-
-                Spacer(minLength: 0)
-
-                // MARK: - Header
+                Image("Onboarding2")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 402, height: 874)
+                    .clipped()
+                    .offset(x: xOffset)
+                    .allowsHitTesting(false)
 
                 VStack(spacing: 12) {
                     Text("Scan your\nhatchery area")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                        .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(Color.appGreenPrimary)
+                        .frame(height: 82)
 
-                    Text("This step makes it easier for you to find\nthe turtle nest.")
-                        .font(.body)
+                    Text("This step makes it easier for you to find the turtle nest.")
+                        .font(.system(size: 17))
                         .foregroundStyle(Color.appNeutralGray1)
+                        .frame(height: 44)
                 }
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 320 )
+                .frame(width: 321, height: 138)
+                .offset(x: xOffset + 41, y: 158)
 
-                Spacer()
-
-                // MARK: - Actions
-
-                VStack(spacing: 8) {
-
-                    // MARK: Scan Button
-
-                    Button {
-                        onScan()
-                    } label: {
+                VStack(spacing: 16) {
+                    Button(action: onScan) {
                         Text("Scan now")
-                            .font(.headline)
-                            .foregroundStyle(Color.appOffWhite)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 60)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#FAF8F4"))
+                            .frame(width: 370, height: 55)
                             .background(
-                                Capsule()
-                                    .fill(Color.appGreenPrimary)
+                                Color.appGreenPrimary,
+                                in: RoundedRectangle(cornerRadius: 26)
                             )
                     }
-                    .padding(.horizontal, 24)
+                    .buttonStyle(.plain)
 
-                    // MARK: Skip Button
-
-                    Button {
-                        onSkip()
-                    } label: {
+                    Button(action: onSkip) {
                         Text("Skip for now")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.appNeutralGray1)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
+                            .font(.system(size: 13))
+                            .tracking(-0.08)
+                            .foregroundStyle(Color.appNeutralGray1.opacity(0.5))
+                            .frame(width: 370, height: 18)
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.bottom, 56)
+                .frame(width: 370, height: 89, alignment: .top)
+                .offset(x: xOffset + 16, y: 742)
             }
         }
+        .ignoresSafeArea()
+        .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(.light)
     }
 }
 
 #Preview {
-    ScanView()
+    ScanView(onScan: {}, onSkip: {})
 }

@@ -18,7 +18,7 @@ struct CreateFirstHatchView: View {
 
             // MARK: - Background
 
-            Image("Onboarding1") // TODO : Change this later for using real gradient and image
+            Image("Onboarding1") // TODO: Change this later for using real gradient and image
                 .resizable()
                 .scaledToFill()
                 .ignoresSafeArea()
@@ -52,22 +52,34 @@ struct CreateFirstHatchView: View {
 
                 VStack(spacing: 8) {
 
-                    TextField(
-                        "Naming your hatch",
-                        text: $hatchName
-                    )
-                    .font(.body)
-                    .foregroundStyle(Color.appNeutralBlack)
-                    .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .focused($isNameFocused)
-                    .onSubmit {
-                        isNameFocused = false
+                    ZStack {
+
+                        // Large typed text
+                        TextField(
+                            "",
+                            text: $hatchName
+                        )
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .multilineTextAlignment(.center)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .focused($isNameFocused)
+                        .onSubmit {
+                            isNameFocused = false
+                        }
+                        .frame(height: 50)
+
+                        // Small placeholder
+                        if hatchName.isEmpty {
+                            Text("Naming your hatch")
+                                .foregroundStyle(Color.appNeutralGray1)
+                                .allowsHitTesting(false)
+                                .font(.body)
+            
+                        }
                     }
-                    .frame(height: 50)
-                    .contentShape(Rectangle())
 
                     Rectangle()
                         .fill(Color.appNeutralGray3)
@@ -102,22 +114,9 @@ struct CreateFirstHatchView: View {
                 .padding(.bottom, 48)
             }
         }
-
-        // MARK: - Keyboard Toolbar
-
-//        .toolbar {
-//            ToolbarItemGroup(placement: .keyboard) {
-//                Spacer()
-//
-//                Button("Done") {
-//                    isNameFocused = false
-//                }
-//            }
-//        }
     }
 }
 
 #Preview {
     CreateFirstHatchView()
 }
-

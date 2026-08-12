@@ -7,3 +7,7 @@ project.xcworkspace/xcuserdata/
 
 # OS X
 .DS_Store
+
+# Local design references; app-bundled assets belong in the target asset catalog.
+community-challenge/Docs/
+community-challenge/Assets/

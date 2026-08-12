@@ -1,27 +1,17 @@
 import SwiftUI
 
-/// Phase 2 — the draggable hatchery quadrilateral overlay.
-///
-/// Renders a green semi-transparent quad with four independently draggable
-/// corner handles on top of the camera preview (or, later, the captured
-/// image). Corners are kept inside the container and prevented from forming a
-/// self-intersecting shape.
+/// A hatchery quadrilateral with compact handles and 44 pt drag targets.
 struct HatcheryOverlay: View {
 
-    /// The quad in the overlay's local coordinate space. `nil` until the first
-    /// layout pass, at which point it is seeded with a default perspective
-    /// trapezoid sized to the container.
+    /// The quad in the overlay's local coordinate space.
     @Binding var quad: QuadPoints?
 
     var color: Color = .appGreenPrimary
     var isEditable: Bool = true
 
-    /// Visual radius of a handle; the touch target is larger (see `hitSize`).
-    private let handleRadius: CGFloat = 11
+    private let handleRadius: CGFloat = 4.52
     private let hitSize: CGFloat = 44
 
-    /// Stable coordinate space for drags, so handle positions don't feed back
-    /// into the reported drag location (which caused corners to fly around).
     private let space = "hatcheryOverlay"
 
     var body: some View {
@@ -30,18 +20,15 @@ struct HatcheryOverlay: View {
             let current = quad ?? .defaultShape(in: size)
 
             ZStack {
-                // Fill + outline
                 quadShape(current)
-                    .fill(color.opacity(0.25))
+                    .fill(color.opacity(0.30))
                 quadShape(current)
                     .stroke(color, lineWidth: 2)
 
-                // Draggable corner handles
-                if isEditable {
-                    ForEach(QuadPoints.Corner.allCases, id: \.self) { corner in
-                        handle(for: corner, in: size)
-                            .position(current[corner])
-                    }
+                ForEach(QuadPoints.Corner.allCases, id: \.self) { corner in
+                    handle(for: corner, in: size)
+                        .position(current[corner])
+                        .allowsHitTesting(isEditable)
                 }
             }
             .coordinateSpace(.named(space))
@@ -50,8 +37,6 @@ struct HatcheryOverlay: View {
             }
         }
     }
-
-    // MARK: - Shape
 
     private func quadShape(_ q: QuadPoints) -> Path {
         var path = Path()
@@ -63,15 +48,10 @@ struct HatcheryOverlay: View {
         return path
     }
 
-    // MARK: - Handle
-
     private func handle(for corner: QuadPoints.Corner, in size: CGSize) -> some View {
         ZStack {
             Circle()
                 .fill(color)
-                .frame(width: handleRadius * 2, height: handleRadius * 2)
-            Circle()
-                .stroke(Color.white, lineWidth: 3)
                 .frame(width: handleRadius * 2, height: handleRadius * 2)
         }
         .frame(width: hitSize, height: hitSize)   // enlarged touch target
