@@ -60,9 +60,11 @@ struct HatcheryGridPreviewView: View {
 
     private var summaryCards: some View {
         HStack(spacing: 10) {
-            
-            summaryCard(title: "Area", value: "\(dimension.areaM2.formatted(.number.precision(.fractionLength(0...1)))) m²")
-            summaryCard(title: "Sections", value: "\(grid.sectionCount)")
+            summaryCard(
+                title: "Area",
+                value: "\(dimension.areaM2.formatted(.number.precision(.fractionLength(0...1)))) m²"
+            )
+            summaryCard(title: "Sections", value: "\(grid.activeSectionCount)")
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -95,12 +97,14 @@ struct HatcheryGridPreviewView: View {
                 .stroke(HatcherySetupPalette.border, lineWidth: 1)
         }
     }
+
     private var actionButtons: some View {
         VStack(spacing: 12) {
             HatcherySetupButton(title: "Done", isPrimary: true, action: onDone)
             HatcherySetupButton(title: "Back", isPrimary: false, action: onBack)
         }
     }
+
 }
 
 private struct HatcheryGridDiagram: View {
@@ -125,8 +129,7 @@ private struct HatcheryGridDiagram: View {
                 HatcheryGridPhoto(
                     image: image,
                     usesMockImage: usesMockImage,
-                    rows: rowCount,
-                    columns: columnCount
+                    grid: grid
                 )
                 .frame(width: imageWidth, height: 279)
                 .offset(x: 21, y: 26)
@@ -171,8 +174,10 @@ private struct HatcheryGridDiagram: View {
 private struct HatcheryGridPhoto: View {
     let image: UIImage
     let usesMockImage: Bool
-    let rows: Int
-    let columns: Int
+    let grid: HatcheryGrid
+
+    private var rows: Int { max(grid.rows, 1) }
+    private var columns: Int { max(grid.columns, 1) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -190,18 +195,23 @@ private struct HatcheryGridPhoto: View {
                 let cellHeight = max(0, (innerHeight - verticalGaps) / CGFloat(rows))
 
                 VStack(spacing: 2) {
-                    ForEach(0..<rows, id: \.self) { _ in
+                    ForEach(0..<rows, id: \.self) { row in
                         HStack(spacing: 2) {
-                            ForEach(0..<columns, id: \.self) { _ in
+                            ForEach(0..<columns, id: \.self) { column in
+                                let isActive = grid.isSectionActive(row: row, column: column)
+
                                 Rectangle()
-                                    .fill(HatcherySetupPalette.gridOverlay)
+                                    .fill(
+                                        isActive
+                                            ? HatcherySetupPalette.gridOverlay.opacity(0.34)
+                                            : Color.black.opacity(0.14)
+                                    )
                                     .frame(width: cellWidth, height: cellHeight)
                             }
                         }
                     }
                 }
                 .frame(width: innerWidth, height: innerHeight)
-                .opacity(0.34)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(8)
             }
@@ -223,7 +233,6 @@ private struct HatcheryGridPhoto: View {
         usesMockImage: true,
         dimension: dimension,
         grid: grid,
-      
         onDone: {},
         onBack: {}
     )

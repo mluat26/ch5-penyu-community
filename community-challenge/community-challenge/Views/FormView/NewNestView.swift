@@ -5,32 +5,6 @@
 
 import SwiftUI
 
-enum AddNestRoute: Hashable {
-    case scan
-    case nestInfo
-    case review
-}
-
-private struct NestDraft {
-    let bucketID: String
-    let nestNumber: String
-    let section: String
-    let numberOfEggs: String
-    let collectionDate: String
-    let inspectionDate: String
-    let hatchDate: String
-
-    static let sample = NestDraft(
-        bucketID: "00000000",
-        nestNumber: "055",
-        section: "Section B",
-        numberOfEggs: "100",
-        collectionDate: "01.01.2026",
-        inspectionDate: "01.02.2026",
-        hatchDate: "01.03.2026"
-    )
-}
-
 struct AddNestScanView: View {
     let onScanned: () -> Void
     let onManualEntry: () -> Void
@@ -111,9 +85,8 @@ struct AddNestScanView: View {
 }
 
 struct NewNestView: View {
+    let controller: NestController
     let onReview: () -> Void
-
-    private let draft = NestDraft.sample
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -132,21 +105,21 @@ struct NewNestView: View {
                     VStack(spacing: 10) {
                         fieldGroup(
                             label: "QR / Bucket ID",
-                            value: draft.bucketID,
+                            value: controller.draft.bucketID,
                             fieldHeight: 42,
                             subdued: true
                         )
 
                         fieldGroup(
                             label: "Nest Number",
-                            value: draft.nestNumber,
+                            value: controller.draft.nestNumber,
                             fieldHeight: 42,
                             subdued: true
                         )
 
                         fieldGroup(
                             label: "Section",
-                            value: draft.section,
+                            value: controller.draft.section,
                             fieldHeight: 44,
                             trailingSymbol: "chevron.down"
                         )
@@ -156,27 +129,27 @@ struct NewNestView: View {
                     VStack(spacing: 10) {
                         fieldGroup(
                             label: "Number of eggs",
-                            value: draft.numberOfEggs,
+                            value: controller.draft.numberOfEggs,
                             fieldHeight: 44
                         )
 
                         fieldGroup(
                             label: "Egg collection date",
-                            value: draft.collectionDate,
+                            value: controller.draft.collectionDate,
                             fieldHeight: 50,
                             trailingSymbol: "calendar"
                         )
 
                         fieldGroup(
                             label: "Egg inspection date",
-                            value: draft.inspectionDate,
+                            value: controller.draft.inspectionDate,
                             fieldHeight: 50,
                             trailingSymbol: "calendar"
                         )
 
                         fieldGroup(
                             label: "Estimated hatch date",
-                            value: draft.hatchDate,
+                            value: controller.draft.hatchDate,
                             fieldHeight: 50,
                             trailingSymbol: "calendar"
                         )
@@ -258,9 +231,8 @@ struct NewNestView: View {
 }
 
 struct ReviewNewNestView: View {
+    let controller: NestController
     let onSave: () -> Void
-
-    private let draft = NestDraft.sample
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -286,6 +258,7 @@ struct ReviewNewNestView: View {
                 }
                 .buttonStyle(.plain)
                 .background(Color(hex: "#2E7D5B"), in: RoundedRectangle(cornerRadius: 26))
+                .disabled(controller.isSaving)
                 .padding(.bottom, 65)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -307,13 +280,13 @@ struct ReviewNewNestView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Nest #\(draft.nestNumber)")
+                    Text("Nest #\(controller.draft.nestNumber)")
                         .font(.headline)
                         .fontWeight(.semibold)
                         .tracking(-0.43)
                         .foregroundStyle(Color(hex: "#2B2B2B"))
 
-                    Text(draft.section)
+                    Text(controller.draft.section)
                         .font(.body)
                         .tracking(-0.43)
                         .foregroundStyle(Color(hex: "#4A4A4A"))
@@ -327,7 +300,7 @@ struct ReviewNewNestView: View {
             .frame(width: 350, height: 127, alignment: .topLeading)
 
             VStack(spacing: 0) {
-                reviewRow(label: "Number of eggs", value: draft.numberOfEggs, height: 75, drawsDivider: true)
+                reviewRow(label: "Number of eggs", value: controller.draft.numberOfEggs, height: 75, drawsDivider: true)
                 reviewRow(label: "Egg collection date", value: "Jan 01, 2026", height: 62, drawsDivider: true)
                 reviewRow(label: "Egg inspection date", value: "Feb 01,2026", height: 62, drawsDivider: true)
                 reviewRow(label: "Estimated hatch date", value: "Mar 01,2026", height: 77, drawsDivider: false)
@@ -406,12 +379,22 @@ private struct AddNestNavigationHeader: View {
 
 #Preview("Nest info", traits: .fixedLayout(width: 402, height: 874)) {
     NavigationStack {
-        NewNestView(onReview: { })
+        NewNestView(controller: PreviewNestController.make(), onReview: { })
     }
 }
 
 #Preview("Review nest", traits: .fixedLayout(width: 402, height: 874)) {
     NavigationStack {
-        ReviewNewNestView(onSave: { })
+        ReviewNewNestView(controller: PreviewNestController.make(), onSave: { })
+    }
+}
+
+@MainActor
+private enum PreviewNestController {
+    static func make() -> NestController {
+        NestController(
+            hatcheryID: UUID(),
+            nestService: NestService(repository: InMemoryNestRepository())
+        )
     }
 }

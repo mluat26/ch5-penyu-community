@@ -1,16 +1,18 @@
-import SwiftUI
 import AVFoundation
+import SwiftUI
 
 /// A SwiftUI wrapper around `AVCaptureVideoPreviewLayer` that renders the
 /// live feed from a running `AVCaptureSession`.
 struct CameraPreview: UIViewRepresentable {
 
     let session: AVCaptureSession
+    let interfaceOrientation: UIInterfaceOrientation
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.videoPreviewLayer.session = session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        updateOrientation(of: view.videoPreviewLayer)
         return view
     }
 
@@ -18,6 +20,18 @@ struct CameraPreview: UIViewRepresentable {
         if uiView.videoPreviewLayer.session !== session {
             uiView.videoPreviewLayer.session = session
         }
+        updateOrientation(of: uiView.videoPreviewLayer)
+    }
+
+    private func updateOrientation(of previewLayer: AVCaptureVideoPreviewLayer) {
+        let angle = HatcheryCameraOrientation
+            .backCamera(for: interfaceOrientation)
+            .videoRotationAngle
+
+        guard let connection = previewLayer.connection,
+              connection.isVideoRotationAngleSupported(angle)
+        else { return }
+        connection.videoRotationAngle = angle
     }
 
     /// A `UIView` backed by an `AVCaptureVideoPreviewLayer`, so the preview

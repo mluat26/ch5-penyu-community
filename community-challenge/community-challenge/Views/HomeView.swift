@@ -8,12 +8,10 @@
 import SwiftUI
 
 struct HomeView: View {
-    @State private var selectedSectionID: String?
-    @State private var showsSectionSheet = false
-
-    let hatchery: SavedHatchery
+    @Bindable var controller: HatcheryController
     let onAddNest: () -> Void
 
+    private var hatchery: HatcherySessionData { controller.sessionData }
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
 
@@ -67,7 +65,7 @@ struct HomeView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .sheet(isPresented: $showsSectionSheet) {
+        .sheet(isPresented: $controller.showsSectionSheet) {
             if let selectedSection {
                 SectionOverviewSheet(section: selectedSection)
                     .presentationDetents([.height(707)])
@@ -75,6 +73,11 @@ struct HomeView: View {
                     .presentationCornerRadius(34)
                     .presentationSizing(.page)
             }
+        }
+        .task { await controller.load() }
+        .onAppear(perform: clearInactiveSelection)
+        .onChange(of: hatchery.grid) { _, _ in
+            clearInactiveSelection()
         }
     }
 
@@ -95,26 +98,26 @@ struct HomeView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 4) {
-                toolbarIcon(systemName: "bell"
-                            , label: "Notifications")
+                toolbarIcon(systemName: "bell", label: "Notifications")
                 toolbarIcon(systemName: "person", label: "Profile")
             }
             .frame(width: 148, height: 48)
         }
         .frame(width: max(screenWidth - 16, 0), height: 48)
         .padding(.leading, 16)
-    
     }
 
-    private func toolbarIcon(
-        systemName: String,
-        label: String
-    ) -> some View {
+    private func toolbarIcon(systemName: String, label: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 24, weight: .regular))
+            .font(.body)
             .foregroundStyle(.black)
-            .frame(width: 48, height: 48)
-            .glassEffect(.regular, in: .circle)
+            .frame(width: 44, height: 44)
+            .background(.white, in: Circle())
+            .overlay {
+                Circle()
+                    .stroke(.black.opacity(0.06), lineWidth: 1)
+            }
+            .frame(width: 72, height: 48)
             .accessibilityLabel(label)
     }
 
@@ -165,21 +168,33 @@ struct HomeView: View {
                             HStack(spacing: 2) {
                                 ForEach(columns.indices, id: \.self) { column in
                                     let sectionID = "\(columns[column])\(rows[row])"
+                                    let section = gridSection(row: row, column: column)
 
-                                    Button {
-                                        selectedSectionID = sectionID
-                                    } label: {
-                                        Color(hex: "#003C22")
-                                            .opacity(selectedSectionID == sectionID ? 0.70 : 0.30)
-                                            .overlay {
-                                                if selectedSectionID == sectionID {
-                                                    sectionBadge(sectionID)
+                                    if section?.isActive == true {
+                                        Button {
+                                            controller.selectSection(id: sectionID)
+                                        } label: {
+                                            Color(hex: "#003C22")
+                                                .opacity(controller.selectedSectionID == sectionID ? 0.70 : 0.30)
+                                                .overlay {
+                                                    if controller.selectedSectionID == sectionID {
+                                                        sectionBadge(sectionID)
+                                                    }
                                                 }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .contentShape(Rectangle())
+                                        .accessibilityLabel("Section \(sectionID)")
+                                    } else {
+                                        Color.black
+                                            .opacity(0.14)
+                                            .overlay {
+                                                Rectangle()
+                                                    .stroke(.white.opacity(0.18), lineWidth: 1)
                                             }
+                                            .accessibilityElement(children: .ignore)
+                                            .accessibilityLabel("Section \(sectionID), outside the marked sand area")
                                     }
-                                    .buttonStyle(.plain)
-                                    .contentShape(Rectangle())
-                                    .accessibilityLabel("Section \(sectionID)")
                                 }
                             }
                         }
@@ -215,7 +230,7 @@ struct HomeView: View {
                 Spacer(minLength: 0)
 
                 Button {
-                    showsSectionSheet = selectedSection != nil
+                    controller.showSelectedSection()
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.body)
@@ -230,11 +245,24 @@ struct HomeView: View {
             .frame(height: 44)
 
             VStack(spacing: 12) {
-                temperatureCard(value: (selectedSection?.averageTemperature ?? 29).celsiusText)
+                temperatureCard(value: temperatureText(
+                    selectedSection?.averageTemperatureC
+                        ?? controller.overview?.averageTemperatureC
+                ))
 
                 HStack(spacing: 12) {
-                    statCard(title: "Nests", value: (selectedSection?.nests ?? 312).formatted())
-                    statCard(title: "Eggs", value: (selectedSection?.eggs ?? 4812).formatted())
+                    statCard(
+                        title: "Nests",
+                        value: (selectedSection?.nestCount
+                            ?? controller.overview?.nestCount)
+                            .map(String.init) ?? "—"
+                    )
+                    statCard(
+                        title: "Eggs",
+                        value: (selectedSection?.totalEggs
+                            ?? controller.overview?.totalEggs)
+                            .map(groupedNumber) ?? "—"
+                    )
                 }
                 .frame(height: 85)
             }
@@ -307,9 +335,14 @@ struct HomeView: View {
             .shadow(color: .black.opacity(0.05), radius: 10)
     }
 
-    private var selectedSection: HatcherySectionSample? {
-        guard let selectedSectionID else { return nil }
-        return HatcherySectionSample.sample(for: selectedSectionID)
+    private var selectedSection: HatcherySectionDashboard? { controller.selectedSection }
+
+    private func gridSection(row: Int, column: Int) -> HatcherySection? {
+        hatchery.grid.sections.first { $0.row == row && $0.column == column }
+    }
+
+    private func clearInactiveSelection() {
+        controller.clearInactiveSelection()
     }
 
     private var overviewKicker: Text {
@@ -337,153 +370,21 @@ struct HomeView: View {
             .background(.white.opacity(0.24), in: Capsule())
             .accessibilityHidden(true)
     }
-}
 
-private struct HatcherySectionSample {
-    let id: String
-    let averageTemperature: Double
-    let nests: Int
-    let eggs: Int
-    let nestReadings: [NestSample]
-
-    static func sample(for id: String) -> HatcherySectionSample {
-        HatcherySectionSample(
-            id: id,
-            averageTemperature: id == "B2" ? 30 : 29,
-            nests: id == "B2" ? 5 : 12,
-            eggs: id == "B2" ? 233 : 1204,
-            nestReadings: [
-                NestSample(id: "\(id)-one", name: "Nest-01", eggs: 490, sectionID: id, temperature: 29, systemName: "checkmark.circle", tint: Color(hex: "#34C759"), chipWidth: 85),
-                NestSample(id: "\(id)-two", name: "Nest-02", eggs: 100, sectionID: id, temperature: 33.5, systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85),
-                NestSample(id: "\(id)-three", name: "Nest-03", eggs: 212, sectionID: id, temperature: 26.5, systemName: "snowflake", tint: Color(hex: "#00C3D0"), chipWidth: 83),
-                NestSample(id: "\(id)-four", name: "Nest-04", eggs: 100, sectionID: id, temperature: 33.5, systemName: "heat.waves", tint: Color(hex: "#FF383C"), chipWidth: 85)
-            ]
-        )
-    }
-}
-
-struct NestSample: Identifiable {
-    let id: String
-    let name: String
-    let eggs: Int
-    let sectionID: String
-    let temperature: Double
-    let systemName: String
-    let tint: Color
-    let chipWidth: CGFloat
-
-    static let preview = HatcherySectionSample.sample(for: "B1").nestReadings[0]
-}
-
-extension Double {
-    /// Temperatures always render with one decimal: 29 → "29.0".
-    var celsiusText: String { formatted(.number.precision(.fractionLength(1))) }
-}
-
-/// Header chrome plus the Figma-literal sizing shared by the section and nest sheets.
-struct SheetChrome<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: (CGFloat) -> Content
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        GeometryReader { geometry in
-            // iOS 26 fits a 402-point page sheet inside its system side margins.
-            // Cancel that fit only for the Figma reference width so point sizes stay literal.
-            let isReferenceWidth = abs(geometry.size.width - 402) < 0.5
-            let pageInset = isReferenceWidth ? geometry.frame(in: .global).minX : 0
-            let sheetWidth = geometry.size.width - (pageInset * 2)
-            let contentScale = geometry.size.width / sheetWidth
-
-            ZStack(alignment: .topLeading) {
-                header(width: sheetWidth)
-                    .frame(height: 54)
-                    .offset(y: 11)
-
-                content(sheetWidth)
-            }
-            .frame(width: sheetWidth, height: geometry.size.height, alignment: .topLeading)
-            .scaleEffect(contentScale, anchor: .topLeading)
-        }
+    private func temperatureText(_ temperature: Double?) -> String {
+        guard let temperature else { return "—" }
+        return String(format: "%.1f", temperature)
     }
 
-    private func header(width: CGFloat) -> some View {
-        let horizontalInset = max((width - 358) / 2, 0)
-
-        return ZStack {
-            Button(action: dismiss.callAsFunction) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(.black)
-                    .accessibilityHidden(true)
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
-            .tint(.white)
-            .frame(width: 44, height: 44)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, horizontalInset)
-            .accessibilityLabel("Close \(title)")
-
-            Text(title)
-                .font(.system(size: 17, weight: .semibold))
-                .offset(y: 2)
-
-            Image(systemName: "pencil")
-                .font(.body)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.blue, in: Circle())
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, horizontalInset)
-                .accessibilityLabel("Edit \(title)")
-        }
-        .frame(width: width, height: 44, alignment: .top)
+    private func groupedNumber(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
     }
-}
-
-/// One column of a sheet summary row: caption on top, value (optionally with a unit) below.
-func sheetSummaryValue(
-    title: String,
-    value: String,
-    unit: String = "",
-    valueColor: Color = .black,
-    alignment: HorizontalAlignment = .center
-) -> some View {
-    let isTemperature = !unit.isEmpty
-
-    return VStack(alignment: alignment, spacing: 4) {
-        Text(title)
-            .font(.system(size: 12, weight: .regular))
-            .foregroundStyle(Color(hex: "#8E8E93").opacity(0.75))
-            .lineLimit(1)
-            .padding(.leading, alignment == .leading ? 16 : 0)
-
-        HStack(alignment: .top, spacing: 0) {
-            Text(value)
-                .font(.system(size: isTemperature ? 28 : 20, weight: isTemperature ? .bold : .semibold))
-                .tracking(isTemperature ? 0.38 : 0)
-
-            if !unit.isEmpty {
-                Text(unit)
-                    .font(.system(size: 12, weight: .bold))
-                    .padding(.top, 1)
-            }
-        }
-        .foregroundStyle(valueColor)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .offset(y: isTemperature ? 0 : 10)
-    }
-    .padding(.top, 16)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment == .leading ? .topLeading : .top)
 }
 
 private struct SectionOverviewSheet: View {
-    let section: HatcherySectionSample
+    let section: HatcherySectionDashboard
 
-    @State private var selectedNest: NestSample?
+    @State private var selectedNest: NestDetailSelection?
 
     var body: some View {
         SheetChrome(title: "Section \(section.id)") { sheetWidth in
@@ -494,12 +395,16 @@ private struct SectionOverviewSheet: View {
             nestList
                 .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
         }
-        .sheet(item: $selectedNest) { nest in
-            NestDetailView(nest: nest)
-                .presentationDetents([.height(707)])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(34)
-                .presentationSizing(.page)
+        .sheet(item: $selectedNest) { selection in
+            NestDetailView(
+                item: selection.item,
+                ordinal: selection.ordinal,
+                sectionID: section.id
+            )
+            .presentationDetents([.height(707)])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(34)
+            .presentationSizing(.page)
         }
     }
 
@@ -507,35 +412,37 @@ private struct SectionOverviewSheet: View {
         HStack(alignment: .top, spacing: 12) {
             sheetSummaryValue(
                 title: "Average temperature",
-                value: section.averageTemperature.celsiusText,
+                value: temperatureText(section.averageTemperatureC),
                 unit: "°C",
                 valueColor: Color(hex: "#0C7C4D"),
                 alignment: .leading
             )
             .frame(width: 151, height: 85, alignment: .topLeading)
 
-            sheetSummaryValue(title: "Nests", value: section.nests.formatted())
+            sheetSummaryValue(title: "Nests", value: String(section.nestCount))
                 .frame(width: 97.5, height: 85, alignment: .top)
 
-            sheetSummaryValue(title: "Eggs", value: section.eggs.formatted())
+            sheetSummaryValue(title: "Eggs", value: groupedNumber(section.totalEggs))
                 .frame(width: 97.5, height: 85, alignment: .top)
         }
         .frame(width: 370, height: 85, alignment: .top)
     }
 
     private var nestList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(section.nestReadings.enumerated()), id: \.element.id) { index, nest in
+        let visibleNests = Array(section.nests.prefix(4))
+
+        return VStack(spacing: 0) {
+            ForEach(Array(visibleNests.enumerated()), id: \.element.id) { index, nest in
                 Button {
-                    selectedNest = nest
+                    selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
                 } label: {
-                    nestRow(nest)
+                    nestRow(nest, ordinal: index + 1)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .frame(height: 116)
                 .overlay(alignment: .bottom) {
-                    if index < section.nestReadings.count - 1 {
+                    if index < visibleNests.count - 1 {
                         Rectangle()
                             .fill(Color(hex: "#EEEEEE"))
                             .frame(height: 1)
@@ -548,14 +455,19 @@ private struct SectionOverviewSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 26))
     }
 
-    private func nestRow(_ nest: NestSample) -> some View {
-        ZStack(alignment: .topLeading) {
+    private func nestRow(
+        _ item: NestDashboardItem,
+        ordinal: Int
+    ) -> some View {
+        let temperature = temperaturePresentation(for: item.latestTemperatureC)
+
+        return ZStack(alignment: .topLeading) {
             HStack(spacing: 4) {
-                Text(nest.name)
+                Text("Nest #\(String(format: "%03d", ordinal))")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "#2B2B2B"))
 
-                Text("· \(nest.eggs.formatted()) eggs")
+                Text("· \(item.nest.numberOfEggs) eggs")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Color(hex: "#4A4A4A"))
 
@@ -565,7 +477,7 @@ private struct SectionOverviewSheet: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
 
-                Text("Hatch in 3 days")
+                Text(hatchCountdown(for: item.nest))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
             }
@@ -574,15 +486,15 @@ private struct SectionOverviewSheet: View {
 
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: nest.systemName)
+                    Image(systemName: temperature.systemName)
                         .font(.system(size: 12, weight: .regular))
 
-                    Text("\(nest.temperature.celsiusText)°C")
+                    Text(temperature.text)
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundStyle(.white)
-                .frame(width: nest.chipWidth, height: 36)
-                .background(nest.tint, in: RoundedRectangle(cornerRadius: 16))
+                .frame(width: temperature.chipWidth, height: 36)
+                .background(temperature.tint, in: RoundedRectangle(cornerRadius: 16))
 
                 Spacer(minLength: 0)
 
@@ -597,32 +509,103 @@ private struct SectionOverviewSheet: View {
         .frame(width: 371, height: 116, alignment: .topLeading)
         .accessibilityElement(children: .combine)
     }
+
+    private func temperatureText(_ temperature: Double?) -> String {
+        guard let temperature else { return "—" }
+        return String(format: "%.1f", temperature)
+    }
+
+    private func groupedNumber(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
+    }
+
+    private func hatchCountdown(for nest: Nest) -> String {
+        guard let days = nest.daysUntilHatch else { return "Hatch date pending" }
+        return days <= 0 ? "Hatching now" : "Hatch in \(days) days"
+    }
+
+    private func temperaturePresentation(for temperature: Double?) -> TemperaturePresentation {
+        guard let temperature else {
+            return TemperaturePresentation(
+                text: "--",
+                systemName: "thermometer.medium",
+                tint: Color(hex: "#8E8E93"),
+                chipWidth: 76
+            )
+        }
+        if temperature >= 32 {
+            return TemperaturePresentation(
+                text: temperatureText(temperature) + "°C",
+                systemName: "heat.waves",
+                tint: Color(hex: "#FF383C"),
+                chipWidth: 85
+            )
+        }
+        if temperature <= 27 {
+            return TemperaturePresentation(
+                text: temperatureText(temperature) + "°C",
+                systemName: "snowflake",
+                tint: Color(hex: "#00C3D0"),
+                chipWidth: 83
+            )
+        }
+        return TemperaturePresentation(
+            text: temperatureText(temperature) + "°C",
+            systemName: "checkmark.circle",
+            tint: Color(hex: "#34C759"),
+            chipWidth: 85
+        )
+    }
+
+    private struct TemperaturePresentation {
+        let text: String
+        let systemName: String
+        let tint: Color
+        let chipWidth: CGFloat
+    }
+
+    private struct NestDetailSelection: Identifiable {
+        let item: NestDashboardItem
+        let ordinal: Int
+
+        var id: UUID { item.id }
+    }
 }
 
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
-    HomeView(hatchery: .previewSample, onAddNest: { })
+    HomeView(
+        controller: AppContainer().makeHatcheryController(
+            sessionData: .previewSample
+        ),
+        onAddNest: { }
+    )
 }
 
-extension SavedHatchery {
-    static let previewSample: SavedHatchery = {
+extension HatcherySessionData {
+    static let previewSample: HatcherySessionData = {
         let boundary = HatcheryBoundary.fullImage
         let dimension = HatcheryDimension(widthM: 8, heightM: 6)
         let grid = HatcheryGridGenerator.generate(
             dimension: dimension,
             boundary: boundary
         )!
-        return SavedHatchery(
+        let photo = UIImage(named: "HatcherySamplePhoto") ?? UIImage()
+
+        return HatcherySessionData(
             hatchery: Hatchery(
                 id: UUID(),
                 name: "Hatch_01",
                 shape: .rectangle,
-                numberOfRow: grid.rows,
-                numberOfColumn: grid.columns,
+                numberOfRows: grid.rows,
+                numberOfColumns: grid.columns,
                 lengthM: dimension.heightM,
                 widthM: dimension.widthM,
-                organizationId: nil
+                organizationID: nil
             ),
-            rectifiedPhoto: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
+            photo: photo,
+            rectifiedPhoto: photo,
+            boundary: boundary,
+            sandRegion: .default(from: boundary),
             grid: grid
         )
     }()

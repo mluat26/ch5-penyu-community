@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import UIKit
 
-struct NormalizedPoint: Codable, Hashable {
+nonisolated struct NormalizedPoint: Codable, Hashable {
     var x: Double
     var y: Double
 
@@ -18,7 +18,7 @@ struct NormalizedPoint: Codable, Hashable {
 
 /// A four-corner hatchery boundary stored relative to the source image.
 /// Values stay in the 0...1 range, so the boundary survives layout and device changes.
-struct HatcheryBoundary: Codable, Hashable {
+nonisolated struct HatcheryBoundary: Codable, Hashable {
     var topLeft: NormalizedPoint
     var topRight: NormalizedPoint
     var bottomRight: NormalizedPoint
@@ -31,9 +31,7 @@ struct HatcheryBoundary: Codable, Hashable {
         bottomLeft: NormalizedPoint(x: 0, y: 1)
     )
 
-    /// The framing trapezoid used before the user adjusts anything. Mirrors
-    /// `QuadPoints.defaultShape(in:)` so a capture always starts out valid,
-    /// even if the container size is unknown at the moment of delivery.
+    /// The valid initial framing used when the camera has no detected boundary.
     static let defaultSuggestion = HatcheryBoundary(
         topLeft: NormalizedPoint(x: 0.2788, y: 0.2997),
         topRight: NormalizedPoint(x: 0.7062, y: 0.2997),
@@ -73,14 +71,6 @@ struct HatcheryBoundary: Codable, Hashable {
     }
 
     /// Prevents folded or collapsed projections before grid generation.
-    ///
-    /// The thresholds must stay *looser* than `QuadPoints.isValid()`, which is
-    /// what actually gates dragging. That check works in screen points, so its
-    /// limits shrink by the rendered area (roughly 6e5 px²) once normalized:
-    /// its 0.5 pt turn becomes ~9e-7 and its 24 pt corner spacing becomes an
-    /// area of ~1e-3. Anything stricter here would silently reject a boundary
-    /// the user was allowed to draw, disabling Confirm and Next with no
-    /// explanation.
     var isValid: Bool {
         let points = ordered.map(\.cgPoint)
         let signedTurns = points.indices.map { index -> CGFloat in
@@ -90,7 +80,7 @@ struct HatcheryBoundary: Codable, Hashable {
             return Self.cross(a, b, c)
         }
 
-        let epsilon: CGFloat = 1e-7
+        let epsilon: CGFloat = 0.0005
         guard signedTurns.allSatisfy({ abs($0) > epsilon }) else { return false }
         let allClockwise = signedTurns.allSatisfy { $0 < 0 }
         let allCounterClockwise = signedTurns.allSatisfy { $0 > 0 }
@@ -102,7 +92,7 @@ struct HatcheryBoundary: Codable, Hashable {
                 + points[index].x * points[nextIndex].y
                 - points[nextIndex].x * points[index].y
         }
-        return abs(doubledArea) * 0.5 > 1e-4
+        return abs(doubledArea) * 0.5 > 0.01
     }
 
     private static func interpolate(
@@ -121,8 +111,209 @@ struct HatcheryBoundary: Codable, Hashable {
     }
 }
 
+/// The usable sand footprint within a hatchery image.
+///
+/// The four-point `HatcheryBoundary` remains the perspective plane used to
+/// project a rectangular grid. This polygon is intentionally separate: it can
+/// describe concave or otherwise irregular sand areas and decides which grid
+/// sections are usable.
+nonisolated struct HatcherySandRegion: Codable, Hashable {
+    static let minimumPointCount = 3
+    static let maximumPointCount = 12
+
+    let points: [NormalizedPoint]
+
+    init?(points: [NormalizedPoint]) {
+        guard Self.isSimplePolygon(points) else { return nil }
+        self.points = points
+    }
+
+    init(boundary: HatcheryBoundary) {
+        self.points = boundary.ordered
+    }
+
+    static func `default`(from boundary: HatcheryBoundary) -> HatcherySandRegion {
+        HatcherySandRegion(boundary: boundary)
+    }
+
+    var isValid: Bool {
+        Self.isSimplePolygon(points)
+    }
+
+    /// Uses an even-odd ray test and treats the perimeter as part of the
+    /// region, so a grid center exactly on the sand boundary stays usable.
+    func contains(point: NormalizedPoint) -> Bool {
+        guard isValid else { return false }
+
+        for index in points.indices {
+            let start = points[index]
+            let end = points[(index + 1) % points.count]
+            if Self.isOnSegment(point, start, end) {
+                return true
+            }
+        }
+
+        var inside = false
+        var previous = points[points.count - 1]
+        for current in points {
+            let crossesHorizontalRay = (current.y > point.y) != (previous.y > point.y)
+            if crossesHorizontalRay {
+                let intersectionX = (previous.x - current.x)
+                    * (point.y - current.y)
+                    / (previous.y - current.y)
+                    + current.x
+                if point.x < intersectionX {
+                    inside.toggle()
+                }
+            }
+            previous = current
+        }
+        return inside
+    }
+
+    func contains(_ point: NormalizedPoint) -> Bool {
+        contains(point: point)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let decodedPoints = try container.decode([NormalizedPoint].self)
+        guard let region = HatcherySandRegion(points: decodedPoints) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Hatchery sand regions must be simple polygons with 3...12 points."
+            )
+        }
+        self = region
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(points)
+    }
+
+    private static let epsilon = 0.000_001
+
+    private static func isSimplePolygon(_ points: [NormalizedPoint]) -> Bool {
+        guard (minimumPointCount...maximumPointCount).contains(points.count) else {
+            return false
+        }
+        guard points.allSatisfy({
+            $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y)
+        }) else {
+            return false
+        }
+        guard abs(signedArea(of: points)) > epsilon else { return false }
+
+        for firstIndex in points.indices {
+            for secondIndex in points.indices where secondIndex > firstIndex {
+                guard squaredDistance(points[firstIndex], points[secondIndex]) > epsilon * epsilon else {
+                    return false
+                }
+            }
+        }
+
+        for index in points.indices {
+            let previous = points[(index - 1 + points.count) % points.count]
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            if isBacktracking(previous, current, next) {
+                return false
+            }
+        }
+
+        for firstEdge in points.indices {
+            let firstStart = points[firstEdge]
+            let firstEnd = points[(firstEdge + 1) % points.count]
+
+            for secondEdge in (firstEdge + 1)..<points.count {
+                guard !areAdjacent(firstEdge, secondEdge, count: points.count) else { continue }
+
+                let secondStart = points[secondEdge]
+                let secondEnd = points[(secondEdge + 1) % points.count]
+                if segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    private static func signedArea(of points: [NormalizedPoint]) -> Double {
+        points.indices.reduce(0) { area, index in
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            return area + current.x * next.y - next.x * current.y
+        } * 0.5
+    }
+
+    private static func areAdjacent(_ first: Int, _ second: Int, count: Int) -> Bool {
+        abs(first - second) == 1 || (first == 0 && second == count - 1)
+    }
+
+    private static func isBacktracking(
+        _ previous: NormalizedPoint,
+        _ current: NormalizedPoint,
+        _ next: NormalizedPoint
+    ) -> Bool {
+        let firstX = current.x - previous.x
+        let firstY = current.y - previous.y
+        let secondX = next.x - current.x
+        let secondY = next.y - current.y
+        let cross = firstX * secondY - firstY * secondX
+        let dot = firstX * secondX + firstY * secondY
+        return abs(cross) <= epsilon && dot < 0
+    }
+
+    private static func segmentsIntersect(
+        _ firstStart: NormalizedPoint,
+        _ firstEnd: NormalizedPoint,
+        _ secondStart: NormalizedPoint,
+        _ secondEnd: NormalizedPoint
+    ) -> Bool {
+        let first = cross(firstStart, firstEnd, secondStart)
+        let second = cross(firstStart, firstEnd, secondEnd)
+        let third = cross(secondStart, secondEnd, firstStart)
+        let fourth = cross(secondStart, secondEnd, firstEnd)
+
+        if abs(first) <= epsilon && isOnSegment(secondStart, firstStart, firstEnd) { return true }
+        if abs(second) <= epsilon && isOnSegment(secondEnd, firstStart, firstEnd) { return true }
+        if abs(third) <= epsilon && isOnSegment(firstStart, secondStart, secondEnd) { return true }
+        if abs(fourth) <= epsilon && isOnSegment(firstEnd, secondStart, secondEnd) { return true }
+
+        return (first > epsilon && second < -epsilon || first < -epsilon && second > epsilon)
+            && (third > epsilon && fourth < -epsilon || third < -epsilon && fourth > epsilon)
+    }
+
+    private static func isOnSegment(
+        _ point: NormalizedPoint,
+        _ start: NormalizedPoint,
+        _ end: NormalizedPoint
+    ) -> Bool {
+        guard abs(cross(start, end, point)) <= epsilon else { return false }
+        return point.x >= min(start.x, end.x) - epsilon
+            && point.x <= max(start.x, end.x) + epsilon
+            && point.y >= min(start.y, end.y) - epsilon
+            && point.y <= max(start.y, end.y) + epsilon
+    }
+
+    private static func cross(
+        _ start: NormalizedPoint,
+        _ end: NormalizedPoint,
+        _ point: NormalizedPoint
+    ) -> Double {
+        (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x)
+    }
+
+    private static func squaredDistance(_ first: NormalizedPoint, _ second: NormalizedPoint) -> Double {
+        let deltaX = first.x - second.x
+        let deltaY = first.y - second.y
+        return deltaX * deltaX + deltaY * deltaY
+    }
+}
+
 /// Converts points between an aspect-filled image and its SwiftUI container.
-struct AspectFillImageMapper {
+nonisolated struct AspectFillImageMapper {
     let imageSize: CGSize
     let containerSize: CGSize
 
@@ -181,18 +372,12 @@ struct AspectFillImageMapper {
     }
 }
 
-struct HatcheryDimension: Hashable {
+nonisolated struct HatcheryDimension: Hashable {
     var widthM: Double
     var heightM: Double
 
-    /// Why this dimension cannot be gridded, or `nil` when it is usable. The
-    /// screen shows this instead of just greying out Next, so the minimum-side
-    /// rule is never a silent dead end.
     var validationMessage: String? {
-        guard
-            widthM.isFinite, heightM.isFinite,
-            widthM > 0, heightM > 0
-        else {
+        guard widthM.isFinite, heightM.isFinite, widthM > 0, heightM > 0 else {
             return "Enter a width and a height in metres."
         }
 
@@ -219,11 +404,46 @@ struct HatcheryDimension: Hashable {
     }
 }
 
-struct HatcheryGrid: Hashable {
+nonisolated struct HatcherySection: Identifiable, Hashable {
+    let id: String
+    let row: Int
+    let column: Int
+    let widthM: Double
+    let heightM: Double
+    let boundary: HatcheryBoundary
+    /// `false` means this projected grid cell falls outside the usable sand region.
+    let isActive: Bool
+
+    init(
+        id: String,
+        row: Int,
+        column: Int,
+        widthM: Double,
+        heightM: Double,
+        boundary: HatcheryBoundary,
+        isActive: Bool = true
+    ) {
+        self.id = id
+        self.row = row
+        self.column = column
+        self.widthM = widthM
+        self.heightM = heightM
+        self.boundary = boundary
+        self.isActive = isActive
+    }
+}
+
+nonisolated struct HatcheryGrid: Hashable {
     let rows: Int
     let columns: Int
+    let sections: [HatcherySection]
 
     var sectionCount: Int { rows * columns }
+    var activeSectionCount: Int { sections.count(where: \.isActive) }
+
+    func isSectionActive(row: Int, column: Int) -> Bool {
+        sections.first { $0.row == row && $0.column == column }?.isActive ?? false
+    }
 
     var columnLabels: [String] {
         (0..<columns).map(Self.columnLabel)
@@ -245,29 +465,97 @@ struct HatcheryGrid: Hashable {
     }
 }
 
-enum HatcheryGridGenerator {
-    /// `HatcheryDimension.validationMessage` spells this out as "2 m" — change both together.
+nonisolated enum HatcheryGridGenerator {
     static let targetSectionSizeM = 2.0
 
     static func generate(
         dimension: HatcheryDimension,
-        boundary: HatcheryBoundary
+        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion? = nil
     ) -> HatcheryGrid? {
-        guard dimension.isValid, boundary.isValid else { return nil }
+        guard dimension.isValid, boundary.isValid, sandRegion?.isValid ?? true else { return nil }
 
         let columns = Int(floor(dimension.widthM / targetSectionSizeM))
         let rows = Int(floor(dimension.heightM / targetSectionSizeM))
         guard columns > 0, rows > 0 else { return nil }
 
-        return HatcheryGrid(rows: rows, columns: columns)
+        let cellWidth = targetSectionSizeM
+        let cellHeight = targetSectionSizeM
+        var sections: [HatcherySection] = []
+        sections.reserveCapacity(rows * columns)
+
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let sectionBoundary = boundary.sectionBoundary(
+                    row: row,
+                    column: column,
+                    rowCount: rows,
+                    columnCount: columns
+                )
+                let projectedCenter = sectionBoundary.point(columnFraction: 0.5, rowFraction: 0.5)
+                sections.append(
+                    HatcherySection(
+                        id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
+                        row: row,
+                        column: column,
+                        widthM: cellWidth,
+                        heightM: cellHeight,
+                        boundary: sectionBoundary,
+                        isActive: sandRegion?.contains(projectedCenter) ?? true
+                    )
+                )
+            }
+        }
+
+        return HatcheryGrid(rows: rows, columns: columns, sections: sections)
     }
 }
 
+struct HatcherySetupDraft {
+    var name = ""
+    var image: UIImage?
+    var rectifiedImage: UIImage?
+    var usesMockImage = false
+    var boundary: HatcheryBoundary?
+    /// The editable usable-sand outline. It is separate from `boundary`,
+    /// which remains the four-corner perspective plane for rectification.
+    var sandRegion: HatcherySandRegion?
+    var dimension = HatcheryDimension(widthM: 15, heightM: 7)
+    var grid: HatcheryGrid?
+}
+
 /// UI-only companion for the database-facing `Hatchery` model.
-struct SavedHatchery: Identifiable {
+///
+/// Photos, rectification, grid projection, and sand-region metadata remain in
+/// this session model until their Supabase Storage/schema contract is defined.
+struct HatcherySessionData: Identifiable {
     let hatchery: Hatchery
+    let photo: UIImage
     let rectifiedPhoto: UIImage
+    let boundary: HatcheryBoundary
+    /// The user-confirmed usable sand outline in original-photo coordinates.
+    /// A default preserves saved/preview hatcheries created before this field.
+    let sandRegion: HatcherySandRegion?
     let grid: HatcheryGrid
 
     var id: UUID { hatchery.id }
+
+    init(
+        hatchery: Hatchery,
+        photo: UIImage,
+        rectifiedPhoto: UIImage,
+        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion? = nil,
+        grid: HatcheryGrid
+    ) {
+        self.hatchery = hatchery
+        self.photo = photo
+        self.rectifiedPhoto = rectifiedPhoto
+        self.boundary = boundary
+        self.sandRegion = sandRegion
+        self.grid = grid
+    }
 }
+
+@available(*, deprecated, renamed: "HatcherySessionData")
+typealias SavedHatchery = HatcherySessionData

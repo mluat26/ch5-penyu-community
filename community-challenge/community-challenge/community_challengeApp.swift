@@ -9,15 +9,12 @@ import SwiftUI
 
 @main
 struct community_challengeApp: App {
-    @State private var savedHatchery: SavedHatchery?
+    @State private var session = AppSession()
+    private let container = AppContainer()
 
     var body: some Scene {
         WindowGroup {
-            if let savedHatchery {
-                ContentView(hatchery: savedHatchery)
-            } else {
-                OnboardingFlowController { savedHatchery = $0 }
-            }
+            AppRootView(container: container, session: session)
         }
     }
 }

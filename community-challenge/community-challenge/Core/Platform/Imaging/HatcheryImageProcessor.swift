@@ -1,7 +1,7 @@
 import CoreImage
 import UIKit
 
-enum HatcheryImageProcessor {
+nonisolated enum HatcheryImageProcessor {
     private static let context = CIContext(options: [.cacheIntermediates: false])
 
     /// Flattens EXIF orientation and limits very large camera photos before
@@ -26,7 +26,7 @@ enum HatcheryImageProcessor {
 
     /// Straightens the confirmed quadrilateral into the rectangular image used
     /// by Dimension, Preview, and Home. The original image and normalized
-    /// boundary remain available in `SavedHatchery` for section zooming.
+    /// boundary remain available in `HatcherySessionData` for section zooming.
     static func rectifiedImage(
         from image: UIImage,
         boundary: HatcheryBoundary

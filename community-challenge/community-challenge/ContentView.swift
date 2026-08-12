@@ -8,31 +8,52 @@
 import SwiftUI
 
 struct ContentView: View {
-    let hatchery: SavedHatchery
+    let hatchery: HatcherySessionData
+    let container: AppContainer
 
-    @State private var addNestPath: [AddNestRoute] = []
+    @State private var router = NestRouter()
+    @State private var hatcheryController: HatcheryController
+    @State private var nestController: NestController
+
+    init(hatchery: HatcherySessionData, container: AppContainer) {
+        self.hatchery = hatchery
+        self.container = container
+        _hatcheryController = State(
+            initialValue: container.makeHatcheryController(sessionData: hatchery)
+        )
+        _nestController = State(
+            initialValue: container.makeNestController(hatcheryID: hatchery.hatchery.id)
+        )
+    }
 
     var body: some View {
-        NavigationStack(path: $addNestPath) {
+        @Bindable var router = router
+
+        NavigationStack(path: $router.path) {
             HomeView(
-                hatchery: hatchery,
-                onAddNest: { addNestPath.append(.scan) }
+                controller: hatcheryController,
+                onAddNest: { router.push(.scan) }
             )
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: AddNestRoute.self) { route in
+            .navigationDestination(for: NestRoute.self) { route in
                 switch route {
                 case .scan:
                     AddNestScanView(
-                        onScanned: { addNestPath.append(.nestInfo) },
-                        onManualEntry: { addNestPath.append(.nestInfo) }
+                        onScanned: { router.push(.nestInfo) },
+                        onManualEntry: { router.push(.nestInfo) }
                     )
                 case .nestInfo:
-                    NewNestView {
-                        addNestPath.append(.review)
+                    NewNestView(controller: nestController) {
+                        router.push(.review)
                     }
                 case .review:
-                    ReviewNewNestView {
-                        addNestPath.removeAll()
+                    ReviewNewNestView(controller: nestController) {
+                        Task {
+                            guard await nestController.save() != nil else { return }
+                            nestController.reset()
+                            router.reset()
+                            await hatcheryController.load()
+                        }
                     }
                 }
             }
@@ -41,5 +62,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(hatchery: .previewSample)
+    ContentView(hatchery: .previewSample, container: AppContainer())
 }
