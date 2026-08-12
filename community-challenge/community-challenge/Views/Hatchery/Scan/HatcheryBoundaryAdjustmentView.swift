@@ -48,18 +48,21 @@ struct HatcheryBoundaryAdjustmentView: View {
                     isEditable: true
                 )
 
-                VStack(spacing: 0) {
-                    HatcheryScanInstructionBanner(
-                        systemName: "hand.draw.fill",
-                        text: "Adjust the area to fit into your hatchery area"
-                    )
-                    .padding(.top, 68)
+                GlassEffectContainer(spacing: 20) {
+                    VStack(spacing: 0) {
+                        HatcheryScanInstructionBanner(
+                            systemName: "hand.draw.fill",
+                            text: "Adjust the area to fit into your hatchery area"
+                        )
+                        .padding(.top, 68)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    adjustmentControls
-                        .padding(.bottom, 59)
+                        adjustmentControls
+                            .padding(.bottom, 59)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear { canvasSize = geometry.size }
             .onChange(of: geometry.size) { _, newSize in
@@ -68,6 +71,7 @@ struct HatcheryBoundaryAdjustmentView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        .toolbar(.hidden, for: .navigationBar)
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }
             Task {

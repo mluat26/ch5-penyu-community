@@ -31,18 +31,24 @@ struct CustomCameraView: View {
                     )
                 }
 
-                VStack(spacing: 0) {
-                    HatcheryScanInstructionBanner(
-                        systemName: "camera.viewfinder",
-                        text: "Get ready to check out the whole turtle hatching area"
-                    )
-                    .padding(.top, 68)
+                // One container for every glass element on screen, so the
+                // banner and the controls sample and tint as a single material
+                // instead of resolving independently.
+                GlassEffectContainer(spacing: 20) {
+                    VStack(spacing: 0) {
+                        HatcheryScanInstructionBanner(
+                            systemName: "camera.viewfinder",
+                            text: "Get ready to check out the whole turtle hatching area"
+                        )
+                        .padding(.top, 68)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    captureControls
-                        .padding(.bottom, 59)
+                        captureControls
+                            .padding(.bottom, 59)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear {
                 isDeliveringImage = false
@@ -61,6 +67,7 @@ struct CustomCameraView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        .toolbar(.hidden, for: .navigationBar)
         .onDisappear { camera.stop() }
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }

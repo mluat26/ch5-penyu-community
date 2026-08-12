@@ -79,6 +79,7 @@ struct HatcheryDimensionView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

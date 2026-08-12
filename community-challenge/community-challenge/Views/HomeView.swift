@@ -95,26 +95,26 @@ struct HomeView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 4) {
-                toolbarIcon(systemName: "bell", label: "Notifications")
+                toolbarIcon(systemName: "bell"
+                            , label: "Notifications")
                 toolbarIcon(systemName: "person", label: "Profile")
             }
             .frame(width: 148, height: 48)
         }
         .frame(width: max(screenWidth - 16, 0), height: 48)
         .padding(.leading, 16)
+    
     }
 
-    private func toolbarIcon(systemName: String, label: String) -> some View {
+    private func toolbarIcon(
+        systemName: String,
+        label: String
+    ) -> some View {
         Image(systemName: systemName)
-            .font(.body)
+            .font(.system(size: 24, weight: .regular))
             .foregroundStyle(.black)
-            .frame(width: 44, height: 44)
-            .background(.white, in: Circle())
-            .overlay {
-                Circle()
-                    .stroke(.black.opacity(0.06), lineWidth: 1)
-            }
-            .frame(width: 72, height: 48)
+            .frame(width: 48, height: 48)
+            .glassEffect(.regular, in: .circle)
             .accessibilityLabel(label)
     }
 

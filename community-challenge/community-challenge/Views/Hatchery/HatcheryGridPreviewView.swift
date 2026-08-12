@@ -56,6 +56,7 @@ struct HatcheryGridPreviewView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var summaryCards: some View {

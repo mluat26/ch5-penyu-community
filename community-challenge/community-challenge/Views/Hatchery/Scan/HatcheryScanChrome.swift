@@ -7,18 +7,23 @@ struct HatcheryScanInstructionBanner: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemName)
-                .font(.system(size: 34, weight: .regular))
+                .font(.largeTitle)
                 .foregroundStyle(.white)
-                
 
             Text(text)
                 .font(.body)
                 .foregroundStyle(.white)
-               
+                // Let the label grow to as many lines as it needs; the chip
+                // sizes to the text rather than the text being squeezed into a
+                // fixed 76 pt box with no optical margin.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .frame(width: 366, height: 76)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: 366)
         .glassEffect(in: RoundedRectangle(cornerRadius: 26))
+        .padding(.horizontal, 20)
     }
 }
 
@@ -92,17 +97,23 @@ struct HatcheryScanPrimaryControl: View {
 }
 
 struct HatcheryScanGradients: View {
+    /// The top scrim is deliberately short and semi-transparent: it sits behind
+    /// the instruction banner, and liquid glass needs varied content to refract.
+    /// Over a full-black field the material has nothing to lens and flattens
+    /// into a plain frosted rectangle.
+    var topHeight: CGFloat = 260
+    var topOpacity: Double = 0.55
     let bottomHeight: CGFloat
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .top) {
                 LinearGradient(
-                    colors: [.black, .black.opacity(0)],
+                    colors: [.black.opacity(topOpacity), .black.opacity(0)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 337)
+                .frame(height: topHeight)
 
                 LinearGradient(
                     colors: [.black.opacity(0), .black],
