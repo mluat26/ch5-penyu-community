@@ -11,7 +11,7 @@ struct HomeView: View {
     @Bindable var controller: HatcheryController
     let onAddNest: () -> Void
 
-    private var hatchery: HatcherySessionData { controller.sessionData }
+    private var hatchery: HatcherySessionState { controller.sessionState }
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
 
@@ -519,7 +519,7 @@ private struct SectionOverviewSheet: View {
         value.formatted(.number.grouping(.automatic))
     }
 
-    private func hatchCountdown(for nest: Nest) -> String {
+    private func hatchCountdown(for nest: NestEntity) -> String {
         guard let days = nest.daysUntilHatch else { return "Hatch date pending" }
         return days <= 0 ? "Hatching now" : "Hatch in \(days) days"
     }
@@ -575,38 +575,8 @@ private struct SectionOverviewSheet: View {
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
     HomeView(
         controller: AppContainer().makeHatcheryController(
-            sessionData: .previewSample
+            sessionState: .previewSample
         ),
         onAddNest: { }
     )
-}
-
-extension HatcherySessionData {
-    static let previewSample: HatcherySessionData = {
-        let boundary = HatcheryBoundary.fullImage
-        let dimension = HatcheryDimension(widthM: 8, heightM: 6)
-        let grid = HatcheryGridGenerator.generate(
-            dimension: dimension,
-            boundary: boundary
-        )!
-        let photo = UIImage(named: "HatcherySamplePhoto") ?? UIImage()
-
-        return HatcherySessionData(
-            hatchery: Hatchery(
-                id: UUID(),
-                name: "Hatch_01",
-                shape: .rectangle,
-                numberOfRows: grid.rows,
-                numberOfColumns: grid.columns,
-                lengthM: dimension.heightM,
-                widthM: dimension.widthM,
-                organizationID: nil
-            ),
-            photo: photo,
-            rectifiedPhoto: photo,
-            boundary: boundary,
-            sandRegion: .default(from: boundary),
-            grid: grid
-        )
-    }()
 }
