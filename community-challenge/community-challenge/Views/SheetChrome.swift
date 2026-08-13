@@ -15,6 +15,8 @@ struct SheetChrome<Content: View>: View {
             let contentScale = geometry.size.width / sheetWidth
 
             ZStack(alignment: .topLeading) {
+                Color.white
+                    .ignoresSafeArea()
                 header(width: sheetWidth)
                     .frame(height: 54)
                     .offset(y: 11)
@@ -41,9 +43,11 @@ struct SheetChrome<Content: View>: View {
             .controlSize(.large)
             .tint(.white)
             .frame(width: 44, height: 44)
+            .glassEffect(.regular, in: .circle)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, horizontalInset)
             .accessibilityLabel("Close \(title)")
+        
 
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
@@ -54,9 +58,11 @@ struct SheetChrome<Content: View>: View {
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
                 .background(.blue, in: Circle())
+                .glassEffect(.regular, in: .circle)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, horizontalInset)
                 .accessibilityLabel("Edit \(title)")
+                
         }
         .frame(width: width, height: 44, alignment: .top)
     }

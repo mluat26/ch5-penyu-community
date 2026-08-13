@@ -77,42 +77,41 @@ struct HomeView: View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
                 Text(hatchery.hatchery.name)
-                    .font(.body)
+                    .font(.title3)
+                    .fontWeight(.semibold)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
+                    .font(.title3)
             }
-            .foregroundStyle(Color(hex: "#0C7C4D"))
+            .foregroundStyle(Color.appGreenPrimary)
             .frame(width: 101, height: 44, alignment: .leading)
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 12) {
                 toolbarIcon(systemName: "bell", label: "Notifications")
                 toolbarIcon(systemName: "person", label: "Profile")
             }
-            .frame(width: 148, height: 48)
+            .frame(width: 156, height: 48)
+            
         }
         .frame(width: max(screenWidth - 16, 0), height: 48)
-        .padding(.leading, 16)
+        .padding(.leading, 24)
     }
 
-    private func toolbarIcon(systemName: String, label: String) -> some View {
-        Image(systemName: systemName)
-            .font(.body)
-            .foregroundStyle(.black)
-            .frame(width: 44, height: 44)
-            .background(.white, in: Circle())
-            .overlay {
-                Circle()
-                    .stroke(.black.opacity(0.06), lineWidth: 1)
-            }
-            .frame(width: 72, height: 48)
-            .accessibilityLabel(label)
-    }
-
+    private func toolbarIcon(
+            systemName: String,
+            label: String
+        ) -> some View {
+            Image(systemName: systemName)
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(.black)
+                .frame(width: 48, height: 48)
+                .glassEffect(.regular, in: .circle)
+                .accessibilityLabel(label)
+        }
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 0) {
