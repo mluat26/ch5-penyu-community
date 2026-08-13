@@ -2,13 +2,13 @@ import Foundation
 
 /// Wire representation of the current `public.nest` table.
 ///
-/// The current schema has no `date_predicted_hatch` or `fail_eggs_hatch`
-/// columns. Those richer domain fields remain presentation/product work until a
-/// reviewed migration adds their persistence contract.
+/// The current schema still has no `fail_eggs_hatch` column, so that domain
+/// field remains presentation-only until a reviewed migration adds it.
 struct NestDTO: Codable, Sendable {
     let id: UUID
     let numberOfEggs: Int
     let dateEggsLaid: Date?
+    let datePredictedHatch: Date?
     let placeEggsLaid: Date?
     let successEggsHatch: Int?
     let hatcheryID: UUID?
@@ -20,6 +20,7 @@ struct NestDTO: Codable, Sendable {
         case id
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
+        case datePredictedHatch = "date_predicted_hatch"
         case placeEggsLaid = "place_eggs_laid"
         case successEggsHatch = "success_eggs_hatch"
         case hatcheryID = "hatchery_id"
@@ -33,6 +34,7 @@ struct NestDTO: Codable, Sendable {
 struct NestInsertDTO: Encodable, Sendable {
     let numberOfEggs: Int
     let dateEggsLaid: Date?
+    let datePredictedHatch: Date?
     let placeEggsLaid: Date?
     let hatcheryID: UUID
     let placementRow: Int?
@@ -42,11 +44,34 @@ struct NestInsertDTO: Encodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
+        case datePredictedHatch = "date_predicted_hatch"
         case placeEggsLaid = "place_eggs_laid"
         case hatcheryID = "hatchery_id"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
         case founderID = "founder_id"
+    }
+}
+
+/// Edit payload for the columns currently present in `public.nest`.
+///
+/// `hatchery_id` and `founder_id` are deliberately absent: re-parenting a nest
+/// is not an edit the app offers.
+struct NestUpdateDTO: Encodable, Sendable {
+    let numberOfEggs: Int
+    let dateEggsLaid: Date?
+    let datePredictedHatch: Date?
+    let placeEggsLaid: Date?
+    let placementRow: Int?
+    let placementColumn: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case numberOfEggs = "number_of_eggs"
+        case dateEggsLaid = "date_eggs_laid"
+        case datePredictedHatch = "date_predicted_hatch"
+        case placeEggsLaid = "place_eggs_laid"
+        case placementRow = "placement_row"
+        case placementColumn = "placement_col"
     }
 }
 
@@ -71,8 +96,7 @@ extension NestDTO {
             founderID: founderID,
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
-            // Not represented by the current remote schema.
-            datePredictedHatch: nil,
+            datePredictedHatch: datePredictedHatch,
             placeEggsLaid: placeEggsLaid,
             successEggsHatch: successEggsHatch,
             // Not represented by the current remote schema.
@@ -84,22 +108,29 @@ extension NestDTO {
 }
 
 extension CreateNestInput {
-    func toDTO() throws -> NestInsertDTO {
-        guard datePredictedHatch == nil else {
-            throw DataMappingError.schemaColumnUnavailable(
-                table: "nest",
-                column: "date_predicted_hatch"
-            )
-        }
-
-        return NestInsertDTO(
+    func toDTO() -> NestInsertDTO {
+        NestInsertDTO(
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
+            datePredictedHatch: datePredictedHatch,
             placeEggsLaid: placeEggsLaid,
             hatcheryID: hatcheryID,
             placementRow: placementRow,
             placementColumn: placementColumn,
             founderID: founderID
+        )
+    }
+}
+
+extension UpdateNestInput {
+    func toDTO() -> NestUpdateDTO {
+        NestUpdateDTO(
+            numberOfEggs: numberOfEggs,
+            dateEggsLaid: dateEggsLaid,
+            datePredictedHatch: datePredictedHatch,
+            placeEggsLaid: placeEggsLaid,
+            placementRow: placementRow,
+            placementColumn: placementColumn
         )
     }
 }
