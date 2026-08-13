@@ -217,6 +217,142 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(afterDelete.overview.nestCount, 0)
     }
 
+    /// A hatchery holding nests must not be deletable: the nests would be
+    /// orphaned, and nest_hatchery_id_fkey rejects it at the database anyway.
+    func testDeletingAHatcheryHoldingNestsIsBlocked() async throws {
+        let (hatcheryService, nestService, hatchery) = try await makeLiveishStack()
+
+        _ = try await nestService.createNest(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 10,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 0,
+                placementColumn: 0
+            )
+        )
+
+        do {
+            try await hatcheryService.deleteHatchery(id: hatchery.id)
+            XCTFail("Expected the delete to be refused while a nest remains")
+        } catch let error as DomainValidationError {
+            guard case let .hatcheryNotEmpty(nestCount) = error else {
+                return XCTFail("Expected .hatcheryNotEmpty, got \(error)")
+            }
+            XCTAssertEqual(nestCount, 1)
+        }
+
+        // still there
+        let remaining = try await hatcheryService.hatcheries()
+        XCTAssertEqual(remaining.map(\.id), [hatchery.id])
+    }
+
+    func testDeletingAnEmptyHatcherySucceeds() async throws {
+        let (hatcheryService, _, hatchery) = try await makeLiveishStack()
+
+        try await hatcheryService.deleteHatchery(id: hatchery.id)
+
+        let remaining = try await hatcheryService.hatcheries()
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
+    /// Shrinking the grid past an existing nest would make it invisible in every
+    /// section while still counting in the totals, so it is refused.
+    func testResizeThatWouldStrandANestIsBlocked() async throws {
+        let (hatcheryService, nestService, hatchery) = try await makeLiveishStack()
+
+        _ = try await nestService.createNest(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 10,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 2,
+                placementColumn: 2
+            )
+        )
+
+        do {
+            _ = try await hatcheryService.updateHatchery(
+                id: hatchery.id,
+                UpdateHatcheryInput(
+                    name: hatchery.name,
+                    numberOfRows: 2,
+                    numberOfColumns: 2,
+                    lengthM: 4,
+                    widthM: 4
+                )
+            )
+            XCTFail("Expected the resize to be refused")
+        } catch let error as DomainValidationError {
+            guard case let .resizeWouldStrandNests(count) = error else {
+                return XCTFail("Expected .resizeWouldStrandNests, got \(error)")
+            }
+            XCTAssertEqual(count, 1)
+        }
+    }
+
+    /// A rename touches no placement, so it is allowed even when the hatchery is
+    /// full of nests.
+    func testRenameIsAllowedWithNestsPresent() async throws {
+        let (hatcheryService, nestService, hatchery) = try await makeLiveishStack()
+
+        _ = try await nestService.createNest(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 10,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 2,
+                placementColumn: 2
+            )
+        )
+
+        let renamed = try await hatcheryService.updateHatchery(
+            id: hatchery.id,
+            UpdateHatcheryInput(
+                name: "Renamed",
+                numberOfRows: hatchery.numberOfRows,
+                numberOfColumns: hatchery.numberOfColumns,
+                lengthM: hatchery.lengthM,
+                widthM: hatchery.widthM
+            )
+        )
+
+        XCTAssertEqual(renamed.name, "Renamed")
+        XCTAssertEqual(renamed.numberOfRows, hatchery.numberOfRows)
+    }
+
+    /// Shared in-memory stack wired the way AppContainer wires the real one:
+    /// one nest repository behind both services.
+    private func makeLiveishStack() async throws -> (HatcheryService, NestService, HatcheryEntity) {
+        let nestRepository = InMemoryNestRepository()
+        let hatcheryService = HatcheryService(
+            hatcheryRepository: InMemoryHatcheryRepository(),
+            nestRepository: nestRepository,
+            telemetryRepository: InMemoryTelemetryRepository()
+        )
+        let hatchery = try await hatcheryService.createHatchery(
+            CreateHatcheryInput(
+                name: "Test hatchery",
+                shape: .rectangle,
+                numberOfRows: 4,
+                numberOfColumns: 4,
+                lengthM: 8,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+        return (hatcheryService, NestService(repository: nestRepository), hatchery)
+    }
+
     private func XCTAssertThrowsErrorAsync<T>(
         _ expression: @autoclosure () async throws -> T,
         file: StaticString = #filePath,

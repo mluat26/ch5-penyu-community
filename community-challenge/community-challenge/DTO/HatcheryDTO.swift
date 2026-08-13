@@ -24,6 +24,23 @@ struct HatcheryDTO: Codable, Sendable {
     }
 }
 
+/// Edit payload for the current `public.hatchery` table.
+struct HatcheryUpdateDTO: Encodable, Sendable {
+    let numberOfRows: Int
+    let numberOfColumns: Int
+    let name: String
+    let lengthM: Double
+    let widthM: Double
+
+    enum CodingKeys: String, CodingKey {
+        case numberOfRows = "number_of_row"
+        case numberOfColumns = "number_of_collumn"
+        case name
+        case lengthM = "length_m"
+        case widthM = "width_m"
+    }
+}
+
 /// Insert payload for the current `public.hatchery` table.
 struct HatcheryInsertDTO: Encodable, Sendable {
     let numberOfRows: Int
@@ -71,6 +88,18 @@ extension HatcheryDTO {
             widthM: widthM,
             // `organization_id` does not exist in the pulled schema yet.
             organizationID: nil
+        )
+    }
+}
+
+extension UpdateHatcheryInput {
+    func toDTO() -> HatcheryUpdateDTO {
+        HatcheryUpdateDTO(
+            numberOfRows: numberOfRows,
+            numberOfColumns: numberOfColumns,
+            name: name,
+            lengthM: lengthM,
+            widthM: widthM
         )
     }
 }
