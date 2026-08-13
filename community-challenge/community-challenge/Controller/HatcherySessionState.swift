@@ -12,6 +12,8 @@ struct HatcherySessionState: Identifiable {
     let usesMockImage: Bool
     let boundary: HatcheryBoundary
     let sandRegion: HatcherySandRegion?
+    /// Sand outline in the coordinate space of `rectifiedPhoto`.
+    let rectifiedSandRegion: HatcherySandRegion?
     let grid: HatcheryGrid
 
     var id: UUID { hatchery.id }
@@ -23,6 +25,7 @@ struct HatcherySessionState: Identifiable {
         usesMockImage: Bool = false,
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion? = nil,
+        rectifiedSandRegion: HatcherySandRegion? = nil,
         grid: HatcheryGrid
     ) {
         self.hatchery = hatchery
@@ -31,6 +34,7 @@ struct HatcherySessionState: Identifiable {
         self.usesMockImage = usesMockImage
         self.boundary = boundary
         self.sandRegion = sandRegion
+        self.rectifiedSandRegion = rectifiedSandRegion
         self.grid = grid
     }
 
@@ -97,7 +101,8 @@ struct HatcherySessionState: Identifiable {
         let images = try await HatcheryImageProcessor.restoredImagePayloads(
             captureMode: layout.captureMode,
             sourcePhotoData: sourcePhotoData,
-            boundary: layout.boundary
+            boundary: layout.boundary,
+            sandRegion: layout.sandRegion
         )
         try Task.checkCancellation()
 
@@ -110,6 +115,7 @@ struct HatcherySessionState: Identifiable {
             usesMockImage: false,
             boundary: layout.boundary,
             sandRegion: layout.sandRegion,
+            rectifiedSandRegion: images.rectifiedSandRegion,
             grid: grid
         )
     }
@@ -142,6 +148,7 @@ extension HatcherySessionState {
             usesMockImage: true,
             boundary: boundary,
             sandRegion: .default(from: boundary),
+            rectifiedSandRegion: .default(from: .fullImage),
             grid: grid
         )
     }()

@@ -4,7 +4,7 @@ import UIKit
 struct HatcheryDimensionView: View {
     let hatchName: String
     let image: UIImage
-    let boundary: HatcheryBoundary
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let showsCapturedImage: Bool
     let onNext: (HatcheryDimension) -> Void
@@ -22,7 +22,7 @@ struct HatcheryDimensionView: View {
     init(
         hatchName: String,
         image: UIImage,
-        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion?,
         usesMockImage: Bool,
         showsCapturedImage: Bool = true,
         initialDimension: HatcheryDimension,
@@ -31,7 +31,7 @@ struct HatcheryDimensionView: View {
     ) {
         self.hatchName = hatchName
         self.image = image
-        self.boundary = boundary
+        self.sandRegion = sandRegion
         self.usesMockImage = usesMockImage
         self.showsCapturedImage = showsCapturedImage
         self.onNext = onNext
@@ -112,11 +112,11 @@ struct HatcheryDimensionView: View {
                     usesMockCrop: usesMockImage
                 )
 
-                HatcheryBoundaryOverlay(
+                HatcherySandRegionOverlay(
+                    region: .constant(sandRegion),
                     imageSize: image.size,
-                    boundary: boundary
+                    isEditable: false
                 )
-                .padding(8)
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
@@ -321,43 +321,6 @@ struct HatcherySetupImage: View {
     }
 }
 
-/// Draws a confirmed boundary over an aspect-filled photo, read-only.
-///
-/// Mirrors `HatcheryOverlay`'s fill and stroke so the area the user adjusted
-/// during scanning is recognisable on the screens that follow. Assumes the
-/// photo is rendered with `scaledToFill`, matching `HatcherySetupImage`'s
-/// non-mock path.
-struct HatcheryBoundaryOverlay: View {
-    let imageSize: CGSize
-    let boundary: HatcheryBoundary
-    var color: Color = .appGreenPrimary
-
-    var body: some View {
-        GeometryReader { geometry in
-            let mapper = AspectFillImageMapper(
-                imageSize: imageSize,
-                containerSize: geometry.size
-            )
-            let quad = mapper.viewQuad(for: boundary)
-
-            ZStack {
-                path(for: quad).fill(color.opacity(0.30))
-                path(for: quad).stroke(color, lineWidth: 2)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func path(for quad: QuadPoints) -> Path {
-        var path = Path()
-        path.move(to: quad.topLeft)
-        path.addLine(to: quad.topRight)
-        path.addLine(to: quad.bottomRight)
-        path.addLine(to: quad.bottomLeft)
-        path.closeSubpath()
-        return path
-    }
-}
 
 struct HatcherySetupHeader: View {
     let eyebrow: String
@@ -415,7 +378,7 @@ struct HatcherySetupButton: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: true,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),
         onNext: { _ in },
@@ -427,7 +390,7 @@ struct HatcherySetupButton: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: false,
         showsCapturedImage: false,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),

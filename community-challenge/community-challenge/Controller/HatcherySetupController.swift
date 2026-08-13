@@ -19,6 +19,9 @@ struct HatcherySetupDraft {
     /// The editable usable-sand outline. It is separate from `boundary`,
     /// which remains the four-corner perspective plane for rectification.
     var sandRegion: HatcherySandRegion?
+    /// The same sand outline after it has been mapped into the perspective-
+    /// corrected photo shown by the later setup screens.
+    var rectifiedSandRegion: HatcherySandRegion?
     var dimension = HatcheryDimension(widthM: 15, heightM: 7)
     var grid: HatcheryGrid?
 }
@@ -71,6 +74,7 @@ final class HatcherySetupController {
         draft.isAwaitingScan = true
         draft.boundary = .fullImage
         draft.sandRegion = .default(from: .fullImage)
+        draft.rectifiedSandRegion = .default(from: .fullImage)
         draft.grid = nil
         errorMessage = nil
     }
@@ -83,6 +87,7 @@ final class HatcherySetupController {
         draft.isAwaitingScan = false
         draft.boundary = boundary
         draft.sandRegion = .default(from: boundary)
+        draft.rectifiedSandRegion = nil
         draft.grid = nil
         errorMessage = nil
     }
@@ -97,13 +102,15 @@ final class HatcherySetupController {
             resetPreparedSourcePhoto()
             let preparedCapture = try await HatcheryImageProcessor.prepareCapturedLayout(
                 from: sourcePayload,
-                boundary: boundary
+                boundary: boundary,
+                sandRegion: sandRegion
             )
             try Task.checkCancellation()
 
             draft.image = HatcheryImageProcessor.displayImage(from: preparedCapture.photo)
             draft.boundary = boundary
             draft.sandRegion = sandRegion
+            draft.rectifiedSandRegion = preparedCapture.rectifiedSandRegion
             draft.isAwaitingScan = false
             draft.rectifiedImage = HatcheryImageProcessor.displayImage(
                 from: preparedCapture.rectifiedPhoto
@@ -148,6 +155,7 @@ final class HatcherySetupController {
         draft.isAwaitingScan = false
         draft.boundary = nil
         draft.sandRegion = nil
+        draft.rectifiedSandRegion = nil
         draft.grid = nil
         errorMessage = nil
     }
@@ -244,6 +252,7 @@ final class HatcherySetupController {
                 usesMockImage: draft.usesMockImage,
                 boundary: boundary,
                 sandRegion: sandRegion,
+                rectifiedSandRegion: draft.rectifiedSandRegion,
                 grid: grid
             )
         } catch {

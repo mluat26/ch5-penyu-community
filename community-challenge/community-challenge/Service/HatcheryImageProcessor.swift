@@ -1,4 +1,5 @@
 import CoreImage
+import OSLog
 import UIKit
 
 /// A stable Core Graphics snapshot of a `UIImage`. Only this immutable payload
@@ -12,16 +13,22 @@ nonisolated struct HatcheryImagePayload: Sendable {
 nonisolated struct HatcheryRestoredImagePayloads: Sendable {
     let photo: HatcheryImagePayload
     let rectifiedPhoto: HatcheryImagePayload
+    let rectifiedSandRegion: HatcherySandRegion
 }
 
 nonisolated struct HatcheryPreparedCapture: Sendable {
     let photo: HatcheryImagePayload
     let rectifiedPhoto: HatcheryImagePayload
+    let rectifiedSandRegion: HatcherySandRegion
     let sourcePhoto: HatcherySourcePhoto
 }
 
 nonisolated enum HatcheryImageProcessor {
     private static let context = CIContext(options: [.cacheIntermediates: false])
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "community-challenge",
+        category: "HatcheryImageProcessor"
+    )
     /// The UI only renders this photo at hatchery-map scale. Keeping the stored
     /// source near the 1,960 px reference artwork avoids spending time encoding
     /// and uploading camera-original 12–48 MP files with no visible benefit.
@@ -87,7 +94,8 @@ nonisolated enum HatcheryImageProcessor {
     /// path and avoids encoding the same photo again when the user taps Done.
     static func prepareCapturedLayout(
         from payload: HatcheryImagePayload,
-        boundary: HatcheryBoundary
+        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion
     ) async throws -> HatcheryPreparedCapture {
         let task = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
@@ -97,15 +105,19 @@ nonisolated enum HatcheryImageProcessor {
             )
             let preparedPayload = try Self.makePayload(from: preparedImage)
             let sourcePhoto = try Self.makeSourcePhoto(from: preparedImage)
-            let rectifiedImage = Self.rectifiedImage(
+            guard let rectification = Self.rectification(
                 from: preparedImage,
-                boundary: boundary
-            )
+                boundary: boundary,
+                sandRegion: sandRegion
+            ) else {
+                throw HatcheryLayoutPersistenceError.invalidBoundary
+            }
             try Task.checkCancellation()
 
             return HatcheryPreparedCapture(
                 photo: preparedPayload,
-                rectifiedPhoto: try Self.makePayload(from: rectifiedImage),
+                rectifiedPhoto: try Self.makePayload(from: rectification.image),
+                rectifiedSandRegion: rectification.sandRegion,
                 sourcePhoto: sourcePhoto
             )
         }
@@ -120,7 +132,8 @@ nonisolated enum HatcheryImageProcessor {
     static func restoredImagePayloads(
         captureMode: HatcheryCaptureMode,
         sourcePhotoData: Data?,
-        boundary: HatcheryBoundary
+        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion
     ) async throws -> HatcheryRestoredImagePayloads {
         let task = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
@@ -140,12 +153,19 @@ nonisolated enum HatcheryImageProcessor {
             }
 
             let photoPayload = try Self.makePayload(from: photo)
-            let rectifiedImage = Self.rectifiedImage(from: photo, boundary: boundary)
+            guard let rectification = Self.rectification(
+                from: photo,
+                boundary: boundary,
+                sandRegion: sandRegion
+            ) else {
+                throw HatcheryLayoutPersistenceError.invalidBoundary
+            }
             try Task.checkCancellation()
 
             return HatcheryRestoredImagePayloads(
                 photo: photoPayload,
-                rectifiedPhoto: try Self.makePayload(from: rectifiedImage)
+                rectifiedPhoto: try Self.makePayload(from: rectification.image),
+                rectifiedSandRegion: rectification.sandRegion
             )
         }
 
@@ -169,14 +189,19 @@ nonisolated enum HatcheryImageProcessor {
         }
     }
 
-    /// Straightens the confirmed quadrilateral into the rectangular image used
-    /// by Dimension, Preview, and Home. The original image and normalized
-    /// boundary remain available in `HatcherySessionState` for section zooming.
-    static func rectifiedImage(
+    /// Straightens the confirmed quadrilateral and maps the editable sand
+    /// polygon into the corrected image. The canvas remains rectangular so
+    /// the logical grid retains stable coordinates; pixels outside the usable
+    /// sand area become transparent.
+    static func rectification(
         from image: UIImage,
-        boundary: HatcheryBoundary
-    ) -> UIImage {
-        guard boundary.isValid, let input = CIImage(image: image) else { return image }
+        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion
+    ) -> HatcheryRectification? {
+        guard boundary.isValid, let input = CIImage(image: image) else {
+            logger.error("Skipped hatchery rectification because the input boundary or image was invalid")
+            return nil
+        }
         let extent = input.extent
 
         func imagePoint(_ point: NormalizedPoint) -> CIVector {
@@ -186,8 +211,12 @@ nonisolated enum HatcheryImageProcessor {
             )
         }
 
-        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return image }
+        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else {
+            logger.error("CIPerspectiveCorrection is unavailable")
+            return nil
+        }
         filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(1, forKey: "inputCrop")
         filter.setValue(imagePoint(boundary.topLeft), forKey: "inputTopLeft")
         filter.setValue(imagePoint(boundary.topRight), forKey: "inputTopRight")
         filter.setValue(imagePoint(boundary.bottomRight), forKey: "inputBottomRight")
@@ -198,10 +227,60 @@ nonisolated enum HatcheryImageProcessor {
             !output.extent.isEmpty,
             let cgImage = context.createCGImage(output, from: output.extent.integral)
         else {
-            return image
+            logger.error("Perspective correction did not produce an image")
+            return nil
         }
 
-        return UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+        guard
+            let mapper = HatcheryPerspectiveMapper(boundary: boundary),
+            let rectifiedSandRegion = mapper.rectifiedRegion(for: sandRegion)
+        else {
+            logger.error("Could not map the sand region into corrected image coordinates")
+            return nil
+        }
+
+        let correctedImage = UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+        return HatcheryRectification(
+            image: maskedImage(correctedImage, to: rectifiedSandRegion),
+            sandRegion: rectifiedSandRegion
+        )
+    }
+
+    /// Applies the corrected-coordinate sand polygon as an alpha mask without
+    /// changing image dimensions. It remains internal so focused tests can
+    /// assert that post-capture screens receive a real segmented image.
+    static func maskedImage(
+        _ image: UIImage,
+        to region: HatcherySandRegion
+    ) -> UIImage {
+        guard image.size.width > 0, image.size.height > 0 else { return image }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+
+        return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+            guard let first = region.points.first else { return }
+
+            let path = UIBezierPath()
+            path.move(
+                to: CGPoint(
+                    x: CGFloat(first.x) * image.size.width,
+                    y: CGFloat(first.y) * image.size.height
+                )
+            )
+            for point in region.points.dropFirst() {
+                path.addLine(
+                    to: CGPoint(
+                        x: CGFloat(point.x) * image.size.width,
+                        y: CGFloat(point.y) * image.size.height
+                    )
+                )
+            }
+            path.close()
+            path.addClip()
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
     }
 
     private static func makePayload(from image: UIImage) throws -> HatcheryImagePayload {
@@ -243,4 +322,9 @@ nonisolated enum HatcheryImageProcessor {
             height: pixelHeight
         )
     }
+}
+
+struct HatcheryRectification {
+    let image: UIImage
+    let sandRegion: HatcherySandRegion
 }

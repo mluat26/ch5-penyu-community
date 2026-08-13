@@ -80,13 +80,15 @@ struct HatcherySandRegionOverlay: View {
                         )
                     }
 
-                    ForEach(Array(viewPoints.enumerated()), id: \.offset) { index, point in
-                        vertexHandle(
-                            at: index,
-                            in: displayedRegion,
-                            mapper: mapper
-                        )
-                        .position(point)
+                    if isEditable {
+                        ForEach(Array(viewPoints.enumerated()), id: \.offset) { index, point in
+                            vertexHandle(
+                                at: index,
+                                in: displayedRegion,
+                                mapper: mapper
+                            )
+                            .position(point)
+                        }
                     }
                 }
                 .coordinateSpace(name: coordinateSpaceName)
