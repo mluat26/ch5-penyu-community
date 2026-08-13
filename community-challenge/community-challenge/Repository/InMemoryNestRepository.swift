@@ -7,6 +7,13 @@ actor InMemoryNestRepository: NestRepository {
         nests = Dictionary(uniqueKeysWithValues: seed.map { ($0.id, $0) })
     }
 
+    func fetch(id: UUID) async throws -> NestEntity {
+        guard let nest = nests[id] else {
+            throw RepositoryError.notFound(resource: "Nest", id: id)
+        }
+        return nest
+    }
+
     func fetchAll(hatcheryID: UUID) async throws -> [NestEntity] {
         nests.values
             .filter { $0.hatcheryID == hatcheryID }
@@ -29,6 +36,27 @@ actor InMemoryNestRepository: NestRepository {
         )
         nests[nest.id] = nest
         return nest
+    }
+
+    func update(id: UUID, _ input: UpdateNestInput) async throws -> NestEntity {
+        guard var nest = nests[id] else {
+            throw RepositoryError.notFound(resource: "Nest", id: id)
+        }
+
+        nest.numberOfEggs = input.numberOfEggs
+        nest.dateEggsLaid = input.dateEggsLaid
+        nest.datePredictedHatch = input.datePredictedHatch
+        nest.placeEggsLaid = input.placeEggsLaid
+        nest.placementRow = input.placementRow
+        nest.placementColumn = input.placementColumn
+        nests[id] = nest
+        return nest
+    }
+
+    func delete(id: UUID) async throws {
+        guard nests.removeValue(forKey: id) != nil else {
+            throw RepositoryError.notFound(resource: "Nest", id: id)
+        }
     }
 
     func recordHatchResult(
