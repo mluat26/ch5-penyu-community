@@ -10,7 +10,8 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var controller: HatcheryController
     let onAddNest: () -> Void
-    let onShowSection: (HatcherySectionDashboard) -> Void
+
+    @State private var presentedSection: HatcherySectionDashboard?
 
     private var hatchery: HatcherySessionState { controller.sessionState }
     private var columns: [String] { hatchery.grid.columnLabels }
@@ -66,6 +67,13 @@ struct HomeView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .sheet(item: $presentedSection) { section in
+            SectionOverviewSheet(section: section)
+                .presentationDetents([.height(707)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+        }
         .task { await controller.load() }
         .onAppear(perform: clearInactiveSelection)
         .onChange(of: hatchery.grid) { _, _ in
@@ -221,9 +229,7 @@ struct HomeView: View {
                 Spacer(minLength: 0)
 
                 Button {
-                    if let selectedSection {
-                        onShowSection(selectedSection)
-                    }
+                    presentedSection = selectedSection
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.body)
@@ -336,6 +342,9 @@ struct HomeView: View {
 
     private func clearInactiveSelection() {
         controller.clearInactiveSelection()
+        if controller.selectedSection == nil {
+            presentedSection = nil
+        }
     }
 
     private var overviewKicker: Text {
@@ -374,9 +383,10 @@ struct HomeView: View {
     }
 }
 
-struct SectionOverviewView: View {
+private struct SectionOverviewSheet: View {
     let section: HatcherySectionDashboard
-    let onSelectNest: (NestDashboardItem, Int) -> Void
+
+    @State private var selectedNest: NestDetailSelection?
 
     var body: some View {
         SheetChrome(title: "Section \(section.id)") { sheetWidth in
@@ -387,7 +397,17 @@ struct SectionOverviewView: View {
             nestList
                 .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $selectedNest) { selection in
+            NestDetailView(
+                item: selection.item,
+                ordinal: selection.ordinal,
+                sectionID: section.id
+            )
+            .presentationDetents([.height(707)])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(34)
+            .presentationSizing(.page)
+        }
     }
 
     private var summary: some View {
@@ -416,7 +436,7 @@ struct SectionOverviewView: View {
         return VStack(spacing: 0) {
             ForEach(Array(visibleNests.enumerated()), id: \.element.id) { index, nest in
                 Button {
-                    onSelectNest(nest, index + 1)
+                    selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
                 } label: {
                     nestRow(nest, ordinal: index + 1)
                 }
@@ -546,6 +566,13 @@ struct SectionOverviewView: View {
         let chipWidth: CGFloat
     }
 
+    private struct NestDetailSelection: Identifiable {
+        let item: NestDashboardItem
+        let ordinal: Int
+
+        var id: UUID { item.id }
+    }
+
 }
 
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
@@ -553,7 +580,6 @@ struct SectionOverviewView: View {
         controller: AppContainer().makeHatcheryController(
             sessionState: .previewSample
         ),
-        onAddNest: { },
-        onShowSection: { _ in }
+        onAddNest: { }
     )
 }

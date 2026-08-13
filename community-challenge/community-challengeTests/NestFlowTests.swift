@@ -45,33 +45,23 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(router.path, [.identity])
     }
 
-    func testSectionOverviewAndNestDetailUseTypedNavigation() {
+    func testSuccessCanNavigateToSavedNestDetail() {
         let router = NestRouter()
         let item = makeNestDashboardItem()
-        let section = HatcherySectionDashboard(
-            id: "B2",
-            row: 1,
-            column: 1,
-            averageTemperatureC: 30,
-            nestCount: 1,
-            totalEggs: item.nest.numberOfEggs,
-            nextHatchDate: item.nest.datePredictedHatch,
-            nests: [item]
-        )
 
-        router.push(.sectionOverview(section: section))
-        router.push(.nestDetail(item: item, ordinal: 1, sectionID: section.id))
+        router.replace(with: .success)
+        router.push(.nestDetail(item: item, ordinal: 1, sectionID: "B2"))
 
         XCTAssertEqual(
             router.path,
             [
-                .sectionOverview(section: section),
-                .nestDetail(item: item, ordinal: 1, sectionID: section.id)
+                .success,
+                .nestDetail(item: item, ordinal: 1, sectionID: "B2")
             ]
         )
 
         router.pop()
-        XCTAssertEqual(router.path, [.sectionOverview(section: section)])
+        XCTAssertEqual(router.path, [.success])
     }
 
     func testResetClearsNestedNavigationDestinations() {

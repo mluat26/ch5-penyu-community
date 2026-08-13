@@ -6,7 +6,6 @@ enum NestRoute: Hashable {
     case eggInformation
     case preview
     case success
-    case sectionOverview(section: HatcherySectionDashboard)
     case nestDetail(
         item: NestDashboardItem,
         ordinal: Int,
@@ -14,7 +13,7 @@ enum NestRoute: Hashable {
     )
 }
 
-/// Typed SwiftUI navigation for hatchery and nest screens.
+/// Typed SwiftUI navigation for the Add Nest flow.
 @MainActor
 @Observable
 final class NestRouter {
