@@ -32,32 +32,114 @@ struct ContentView: View {
         NavigationStack(path: $router.path) {
             HomeView(
                 controller: hatcheryController,
-                onAddNest: { router.push(.scan) }
+                onAddNest: {
+                    nestController.reset()
+                    router.push(.identity)
+                },
+                onShowSection: { section in
+                    router.push(.sectionOverview(section: section))
+                }
             )
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: NestRoute.self) { route in
                 switch route {
-                case .scan:
-                    AddNestScanView(
-                        onScanned: { router.push(.nestInfo) },
-                        onManualEntry: { router.push(.nestInfo) }
+                case .identity:
+                    AddNestIdentityView(
+                        controller: nestController,
+                        onSelectSection: { router.push(.sectionPicker) },
+                        onNext: { router.push(.eggInformation) },
+                        onCancel: finishAddNestFlow
                     )
-                case .nestInfo:
-                    NewNestView(controller: nestController) {
-                        router.push(.review)
-                    }
-                case .review:
-                    ReviewNewNestView(controller: nestController) {
+                case .sectionPicker:
+                    NestSectionPickerView(
+                        controller: nestController,
+                        grid: hatchery.grid,
+                        mapImage: hatchery.rectifiedPhoto,
+                        usesMockMapCrop: hatchery.usesMockImage,
+                        dashboard: hatcheryController.dashboard,
+                        onCancel: router.pop,
+                        onConfirm: router.pop
+                    )
+                case .eggInformation:
+                    AddNestEggInformationView(
+                        controller: nestController,
+                        onBack: router.pop,
+                        onPreview: { router.push(.preview) },
+                        onCancel: finishAddNestFlow
+                    )
+                case .preview:
+                    AddNestPreviewView(
+                        controller: nestController,
+                        onEdit: router.pop,
+                        onCancel: finishAddNestFlow
+                    ) {
                         Task {
                             guard await nestController.save() != nil else { return }
-                            nestController.reset()
-                            router.reset()
                             await hatcheryController.load()
+                            router.replace(with: .success)
                         }
                     }
+                case .success:
+                    NestRegistrationSuccessView(
+                        nestNumber: nestController.draft.nestNumber,
+                        eggCount: savedEggCount,
+                        hatchDate: savedHatchDate,
+                        temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
+                        onViewNest: {
+                            guard let nest = nestController.lastSavedNest else { return }
+                            router.push(
+                                .nestDetail(
+                                    item: NestDashboardItem(
+                                        nest: nest,
+                                        latestTemperatureC: hatcheryController.overview?.averageTemperatureC
+                                    ),
+                                    ordinal: Int(nestController.draft.nestNumber) ?? 0,
+                                    sectionID: nestController.draft.section
+                                )
+                            )
+                        },
+                        onBackToHatchery: finishAddNestFlow
+                    )
+                case .sectionOverview(let section):
+                    SectionOverviewView(
+                        section: section,
+                        onSelectNest: { nest, ordinal in
+                            router.push(
+                                .nestDetail(
+                                    item: nest,
+                                    ordinal: ordinal,
+                                    sectionID: section.id
+                                )
+                            )
+                        }
+                    )
+                case .nestDetail(let item, let ordinal, let sectionID):
+                    NestDetailView(
+                        item: item,
+                        ordinal: ordinal,
+                        sectionID: sectionID
+                    )
+                    .toolbar(.hidden, for: .navigationBar)
                 }
             }
         }
+    }
+
+    private func finishAddNestFlow() {
+        nestController.reset()
+        router.reset()
+    }
+
+    private var savedEggCount: String {
+        nestController.lastSavedNest.map { String($0.numberOfEggs) }
+            ?? nestController.draft.numberOfEggs
+    }
+
+    private var savedHatchDate: String {
+        guard let date = nestController.lastSavedNest?.datePredictedHatch else {
+            return nestController.draft.hatchDate
+        }
+        return AppDateFormatting.nestDraftDateString(date)
     }
 }
 

@@ -118,6 +118,7 @@ final class HatcherySetupController {
                 hatchery: hatchery,
                 photo: photo,
                 rectifiedPhoto: rectifiedPhoto,
+                usesMockImage: draft.usesMockImage,
                 boundary: boundary,
                 sandRegion: sandRegion,
                 grid: grid

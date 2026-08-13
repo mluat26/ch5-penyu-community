@@ -8,6 +8,7 @@ struct HatcherySessionState: Identifiable {
     let hatchery: HatcheryEntity
     let photo: UIImage
     let rectifiedPhoto: UIImage
+    let usesMockImage: Bool
     let boundary: HatcheryBoundary
     let sandRegion: HatcherySandRegion?
     let grid: HatcheryGrid
@@ -18,6 +19,7 @@ struct HatcherySessionState: Identifiable {
         hatchery: HatcheryEntity,
         photo: UIImage,
         rectifiedPhoto: UIImage,
+        usesMockImage: Bool = false,
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion? = nil,
         grid: HatcheryGrid
@@ -25,6 +27,7 @@ struct HatcherySessionState: Identifiable {
         self.hatchery = hatchery
         self.photo = photo
         self.rectifiedPhoto = rectifiedPhoto
+        self.usesMockImage = usesMockImage
         self.boundary = boundary
         self.sandRegion = sandRegion
         self.grid = grid
@@ -55,6 +58,7 @@ extension HatcherySessionState {
             ),
             photo: photo,
             rectifiedPhoto: photo,
+            usesMockImage: true,
             boundary: boundary,
             sandRegion: .default(from: boundary),
             grid: grid
