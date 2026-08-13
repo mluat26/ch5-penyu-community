@@ -35,9 +35,6 @@ struct ContentView: View {
                 onAddNest: {
                     nestController.reset()
                     router.push(.identity)
-                },
-                onShowSection: { section in
-                    router.push(.sectionOverview(section: section))
                 }
             )
             .toolbar(.hidden, for: .navigationBar)
@@ -99,19 +96,6 @@ struct ContentView: View {
                             )
                         },
                         onBackToHatchery: finishAddNestFlow
-                    )
-                case .sectionOverview(let section):
-                    SectionOverviewView(
-                        section: section,
-                        onSelectNest: { nest, ordinal in
-                            router.push(
-                                .nestDetail(
-                                    item: nest,
-                                    ordinal: ordinal,
-                                    sectionID: section.id
-                                )
-                            )
-                        }
                     )
                 case .nestDetail(let item, let ordinal, let sectionID):
                     NestDetailView(
