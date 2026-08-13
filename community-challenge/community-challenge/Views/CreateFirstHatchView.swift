@@ -2,6 +2,10 @@ import SwiftUI
 
 struct CreateFirstHatchView: View {
 
+    /// Design-tuning knobs for the turtle artwork over the gradient.
+    private static let artworkOffsetX: CGFloat = 0
+    private static let artworkOffsetY: CGFloat = 0
+
     @State private var hatchName: String = ""
     @FocusState private var isNameFocused: Bool
 
@@ -18,11 +22,28 @@ struct CreateFirstHatchView: View {
 
             // MARK: - Background
 
-            Image("Onboarding1") // TODO: Change this later for using real gradient and image
+            Image("BGHatchery")
                 .resizable()
                 .scaledToFill()
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+
+            // Turtle artwork sits on top of the gradient, pinned to the top
+            // edge at full width. Nudge with the two offsets below.
+            GeometryReader { geometry in
+                Image("TurtleHatchingOnboarding")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: geometry.size.width)
+                    .offset(x: Self.artworkOffsetX, y: Self.artworkOffsetY)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .top
+                    )
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
 
             // MARK: - Content
 
@@ -52,38 +73,31 @@ struct CreateFirstHatchView: View {
 
                 VStack(spacing: 8) {
 
-                    ZStack {
-
-                        // Large typed text
-                        TextField(
-                            "",
-                            text: $hatchName
-                        )
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(Color.appNeutralBlack)
-                        .multilineTextAlignment(.center)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .focused($isNameFocused)
-                        .onSubmit {
-                            isNameFocused = false
-                        }
-                        .frame(height: 50)
-
-                        // Small placeholder
-                        if hatchName.isEmpty {
-                            Text("Naming your hatch")
-                                .foregroundStyle(Color.appNeutralGray1)
-                                .allowsHitTesting(false)
-                                .font(.body)
-            
-                        }
+                    // Large typed text
+                    TextField(
+                        "",
+                        text: $hatchName
+                    )
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Color.appNeutralBlack)
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .focused($isNameFocused)
+                    .onSubmit {
+                        isNameFocused = false
                     }
+                    .frame(height: 50)
 
                     Rectangle()
                         .fill(Color.appNeutralGray3)
                         .frame(height: 1)
+
+                    // Static caption below the line
+                    Text("Naming your hatch")
+                        .foregroundStyle(Color.appNeutralGray1)
+                        .font(.body)
                 }
                 .padding(.horizontal, 32)
 
@@ -113,6 +127,11 @@ struct CreateFirstHatchView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
             }
+        }
+        // Tapping anywhere outside the field dismisses the keyboard.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isNameFocused = false
         }
     }
 }
