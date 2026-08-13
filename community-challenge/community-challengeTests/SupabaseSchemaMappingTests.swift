@@ -65,6 +65,7 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             id: UUID(),
             numberOfEggs: 100,
             dateEggsLaid: nil,
+            datePredictedHatch: nil,
             placeEggsLaid: nil,
             successEggsHatch: 90,
             hatcheryID: hatcheryID,
@@ -80,19 +81,20 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         XCTAssertNil(nest.failEggsHatch)
     }
 
-    func testNestInsertRejectsUnsupportedPredictedHatchColumn() {
+    func testNestInsertIncludesPredictedHatchColumn() {
+        let predictedHatch = Date()
         let input = CreateNestInput(
             hatcheryID: UUID(),
             founderID: nil,
             numberOfEggs: 100,
             dateEggsLaid: nil,
-            datePredictedHatch: Date(),
+            datePredictedHatch: predictedHatch,
             placeEggsLaid: nil,
             placementRow: 1,
             placementColumn: 2
         )
 
-        XCTAssertThrowsError(try input.toDTO())
+        XCTAssertEqual(input.toDTO().datePredictedHatch, predictedHatch)
     }
 
     func testIoTDataDTODecodesCurrentTemperatureColumn() throws {
