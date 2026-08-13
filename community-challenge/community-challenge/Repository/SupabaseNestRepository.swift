@@ -81,23 +81,4 @@ actor SupabaseNestRepository: NestRepository {
             throw RepositoryError.notFound(resource: "Nest", id: id)
         }
     }
-
-    func recordHatchResult(
-        nestID: UUID,
-        input: RecordHatchResultInput
-    ) async throws -> NestEntity {
-        let updateDTO = try input.toDTO()
-        let rows: [NestDTO] = try await client
-            .from("nest")
-            .update(updateDTO)
-            .eq("id", value: nestID)
-            .select()
-            .execute()
-            .value
-
-        guard let dto = rows.first else {
-            throw RepositoryError.notFound(resource: "Nest", id: nestID)
-        }
-        return try dto.toEntity()
-    }
 }

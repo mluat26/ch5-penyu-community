@@ -86,12 +86,9 @@ final class SupabaseNestLiveTests: XCTestCase {
         XCTAssertEqual(updated.numberOfEggs, 80)
         XCTAssertEqual(updated.placementRow, 3)
 
-        // hatch result
-        let hatched = try await nestRepository.recordHatchResult(
-            nestID: created.id,
-            input: RecordHatchResultInput(successEggsHatch: 70, failEggsHatch: 0)
-        )
-        XCTAssertEqual(hatched.successEggsHatch, 70)
+        // hatch results now go through the inspection table, which the
+        // apply_inspection_to_nest trigger applies to the nest; covered by
+        // testInspectionUpdatesTheNestSummary below.
 
         // delete, and the row is really gone
         try await nestRepository.delete(id: created.id)
@@ -153,6 +150,284 @@ final class SupabaseNestLiveTests: XCTestCase {
         // once empty it succeeds, which also cleans up after this test
         try await nestRepository.delete(id: nest.id)
         try await hatcheryService.deleteHatchery(id: hatchery.id)
+    }
+
+    /// The apply_inspection_to_nest trigger must move the nest summary and
+    /// clear the schedule, so the two can never disagree.
+    func testInspectionUpdatesTheNestSummary() async throws {
+        let inspectionRepository = SupabaseInspectionRepository(client: SupabaseConfig.client)
+        let hatchery = try await hatcheryRepository.create(
+            CreateHatcheryInput(
+                name: "Live inspection \(UUID().uuidString.prefix(8))",
+                shape: .rectangle,
+                numberOfRows: 5,
+                numberOfColumns: 4,
+                lengthM: 10,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+        let nest = try await nestRepository.create(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 100,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: Date()
+            )
+        )
+
+        // not hatched yet: the next visit is scheduled
+        let nextDue = Calendar.current.date(byAdding: .day, value: 7, to: Date())!
+        _ = try await inspectionRepository.create(
+            RecordInspectionInput(
+                nestID: nest.id,
+                inspectedOn: Date(),
+                outcome: .notHatched,
+                eggsHatched: nil,
+                eggsRotten: nil,
+                nextInspectionDate: nextDue
+            )
+        )
+        let pending = try await nestRepository.fetch(id: nest.id)
+        XCTAssertNotNil(pending.nextInspectionDate)
+        XCTAssertNil(pending.successEggsHatch)
+
+        // hatched: counts land on the nest and the schedule ends
+        _ = try await inspectionRepository.create(
+            RecordInspectionInput(
+                nestID: nest.id,
+                inspectedOn: Date(),
+                outcome: .complete,
+                eggsHatched: 80,
+                eggsRotten: 20,
+                nextInspectionDate: nil
+            )
+        )
+        let hatched = try await nestRepository.fetch(id: nest.id)
+        XCTAssertEqual(hatched.successEggsHatch, 80)
+        XCTAssertEqual(hatched.failEggsHatch, 20)
+        XCTAssertNil(hatched.nextInspectionDate)
+
+        let history = try await inspectionRepository.fetchAll(nestID: nest.id)
+        XCTAssertEqual(history.count, 2, "Both visits are kept as history")
+
+        // inspections cascade with the nest
+        try await nestRepository.delete(id: nest.id)
+        try await hatcheryRepository.delete(id: hatchery.id)
+    }
+
+    /// The check constraints, exercised through the repository rather than
+    /// InspectionService so the Swift validation is bypassed and it is really
+    /// Postgres doing the rejecting. Without this, a mistake in the SQL and the
+    /// same mistake in InspectionService would agree with each other and no
+    /// test would notice.
+    func testInspectionConstraintsRejectContradictoryRows() async throws {
+        let inspectionRepository = SupabaseInspectionRepository(client: SupabaseConfig.client)
+        let hatchery = try await hatcheryRepository.create(
+            CreateHatcheryInput(
+                name: "Live constraints \(UUID().uuidString.prefix(8))",
+                shape: .rectangle,
+                numberOfRows: 5,
+                numberOfColumns: 4,
+                lengthM: 10,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+        let nest = try await nestRepository.create(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 100,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: nil
+            )
+        )
+
+        let laterDate = Calendar.current.date(byAdding: .day, value: 5, to: Date())!
+
+        // each of these must be refused by a check constraint
+        let contradictions: [(String, RecordInspectionInput)] = [
+            ("complete with a next visit still scheduled", .init(
+                nestID: nest.id, inspectedOn: Date(), outcome: .complete,
+                eggsHatched: 80, eggsRotten: 20, nextInspectionDate: laterDate
+            )),
+            ("unfinished with no next visit", .init(
+                nestID: nest.id, inspectedOn: Date(), outcome: .notHatched,
+                eggsHatched: nil, eggsRotten: nil, nextInspectionDate: nil
+            )),
+            ("complete without counts", .init(
+                nestID: nest.id, inspectedOn: Date(), outcome: .complete,
+                eggsHatched: nil, eggsRotten: nil, nextInspectionDate: nil
+            )),
+            ("partial hatch with zero hatchlings", .init(
+                nestID: nest.id, inspectedOn: Date(), outcome: .partiallyHatched,
+                eggsHatched: 0, eggsRotten: 5, nextInspectionDate: laterDate
+            )),
+            ("negative count", .init(
+                nestID: nest.id, inspectedOn: Date(), outcome: .partiallyHatched,
+                eggsHatched: 10, eggsRotten: -1, nextInspectionDate: laterDate
+            ))
+        ]
+
+        var accepted: [String] = []
+        for (label, input) in contradictions {
+            do {
+                _ = try await inspectionRepository.create(input)
+                accepted.append(label)
+            } catch {
+                // expected
+            }
+        }
+
+        try await nestRepository.delete(id: nest.id)
+        try await hatcheryRepository.delete(id: hatchery.id)
+
+        XCTAssertTrue(
+            accepted.isEmpty,
+            "Postgres accepted rows it should have refused: \(accepted.joined(separator: "; "))"
+        )
+    }
+
+    /// Counts are per visit, so the trigger must sum them. A single-visit test
+    /// cannot tell summing apart from copying the latest row.
+    func testCountsAccumulateAcrossVisitsInTheDatabase() async throws {
+        let inspectionRepository = SupabaseInspectionRepository(client: SupabaseConfig.client)
+        let hatchery = try await hatcheryRepository.create(
+            CreateHatcheryInput(
+                name: "Live totals \(UUID().uuidString.prefix(8))",
+                shape: .rectangle,
+                numberOfRows: 5,
+                numberOfColumns: 4,
+                lengthM: 10,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+        let nest = try await nestRepository.create(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 100,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: Date()
+            )
+        )
+
+        // 30 out, 10 rotten, 60 still incubating
+        let recorded = try await inspectionRepository.create(
+            RecordInspectionInput(
+                nestID: nest.id,
+                inspectedOn: Calendar.current.date(byAdding: .day, value: -3, to: Date())!,
+                outcome: .partiallyHatched,
+                eggsHatched: 30,
+                eggsRotten: 10,
+                nextInspectionDate: Date()
+            )
+        )
+        let midway = try await nestRepository.fetch(id: nest.id)
+
+        // the rest emerge
+        _ = try await inspectionRepository.create(
+            RecordInspectionInput(
+                nestID: nest.id,
+                inspectedOn: Date(),
+                outcome: .complete,
+                eggsHatched: 55,
+                eggsRotten: 5,
+                nextInspectionDate: nil
+            )
+        )
+        let finished = try await nestRepository.fetch(id: nest.id)
+
+        // correcting the first visit must re-total, not add again
+        _ = try await inspectionRepository.update(
+            id: recorded.id,
+            CorrectInspectionInput(
+                outcome: .partiallyHatched,
+                eggsHatched: 32,
+                eggsRotten: 10,
+                nextInspectionDate: Date()
+            )
+        )
+        let corrected = try await nestRepository.fetch(id: nest.id)
+
+        try await nestRepository.delete(id: nest.id)
+        try await hatcheryRepository.delete(id: hatchery.id)
+
+        XCTAssertEqual(midway.successEggsHatch, 30)
+        XCTAssertEqual(midway.eggsRemaining, 60)
+        XCTAssertEqual(finished.successEggsHatch, 85, "30 + 55, summed by the trigger")
+        XCTAssertEqual(finished.failEggsHatch, 15, "10 + 5")
+        XCTAssertEqual(finished.eggsRemaining, 0)
+        XCTAssertNil(finished.nextInspectionDate)
+        XCTAssertEqual(corrected.successEggsHatch, 87, "32 + 55, re-totalled not double counted")
+    }
+
+    /// The unique constraint on device.nest_id: one device per nest, while any
+    /// number may sit unassigned.
+    func testANestCannotHoldTwoDevices() async throws {
+        let deviceRepository = SupabaseDeviceRepository(client: SupabaseConfig.client)
+        let hatchery = try await hatcheryRepository.create(
+            CreateHatcheryInput(
+                name: "Live device \(UUID().uuidString.prefix(8))",
+                shape: .rectangle,
+                numberOfRows: 5,
+                numberOfColumns: 4,
+                lengthM: 10,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+        let nest = try await nestRepository.create(
+            CreateNestInput(
+                hatcheryID: hatchery.id,
+                founderID: nil,
+                numberOfEggs: 50,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placeEggsLaid: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: nil
+            )
+        )
+
+        let first = try await deviceRepository.create(
+            RegisterDeviceInput(name: "Probe A", nestID: nest.id)
+        )
+
+        var secondSucceeded = true
+        do {
+            _ = try await deviceRepository.create(
+                RegisterDeviceInput(name: "Probe B", nestID: nest.id)
+            )
+        } catch {
+            secondSucceeded = false
+        }
+
+        // deleting the nest frees the device rather than destroying it
+        try await nestRepository.delete(id: nest.id)
+        let freed = try await deviceRepository.fetch(id: first.id)
+
+        try await deviceRepository.delete(id: first.id)
+        try await hatcheryRepository.delete(id: hatchery.id)
+
+        XCTAssertFalse(secondSucceeded, "device.nest_id is unique")
+        XCTAssertNil(freed.nestID, "ON DELETE SET NULL keeps the hardware record")
     }
 
     /// The database trigger is the backstop behind HatcheryService's own check:

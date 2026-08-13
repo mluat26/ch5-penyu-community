@@ -128,12 +128,9 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(updated.numberOfEggs, 80)
         XCTAssertEqual(updated.placementRow, 3)
 
-        // hatch result
-        let hatched = try await service.recordHatchResult(
-            nestID: created.id,
-            input: RecordHatchResultInput(successEggsHatch: 70, failEggsHatch: 10)
-        )
-        XCTAssertEqual(hatched.successEggsHatch, 70)
+        // hatch results are recorded through InspectionService now, so that a
+        // hatch always leaves history and clears the inspection schedule;
+        // see InspectionAndDeviceTests.
 
         // validation rejects a nest with no eggs
         await XCTAssertThrowsErrorAsync(

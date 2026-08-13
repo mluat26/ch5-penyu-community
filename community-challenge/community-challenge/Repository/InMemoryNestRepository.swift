@@ -32,7 +32,8 @@ actor InMemoryNestRepository: NestRepository {
             successEggsHatch: nil,
             failEggsHatch: nil,
             placementRow: input.placementRow,
-            placementColumn: input.placementColumn
+            placementColumn: input.placementColumn,
+            nextInspectionDate: input.nextInspectionDate
         )
         nests[nest.id] = nest
         return nest
@@ -59,23 +60,26 @@ actor InMemoryNestRepository: NestRepository {
         }
     }
 
-    func recordHatchResult(
-        nestID: UUID,
-        input: RecordHatchResultInput
-    ) async throws -> NestEntity {
-        guard var nest = nests[nestID] else {
-            throw RepositoryError.notFound(resource: "Nest", id: nestID)
-        }
-
-        nest.successEggsHatch = input.successEggsHatch
-        nest.failEggsHatch = input.failEggsHatch
-        nests[nestID] = nest
-        return nest
-    }
-
     func seed(_ newNests: [NestEntity]) async {
         for nest in newNests {
             nests[nest.id] = nest
         }
+    }
+
+    /// Local stand-in for the `apply_inspection_to_nest` trigger, so in-memory
+    /// tests observe the same summary the database produces. Totals are the sum
+    /// across visits, since each inspection records only what it found.
+    func applyInspectionTotals(
+        nestID: UUID,
+        eggsHatched: Int?,
+        eggsRotten: Int?,
+        nextInspectionDate: Date?
+    ) {
+        guard var nest = nests[nestID] else { return }
+
+        nest.successEggsHatch = eggsHatched
+        nest.failEggsHatch = eggsRotten
+        nest.nextInspectionDate = nextInspectionDate
+        nests[nestID] = nest
     }
 }

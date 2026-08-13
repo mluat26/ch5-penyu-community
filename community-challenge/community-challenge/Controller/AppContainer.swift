@@ -10,6 +10,8 @@ final class AppContainer {
     private let hatcheryRepository = SupabaseHatcheryRepository(client: SupabaseConfig.client)
     private let nestRepository = SupabaseNestRepository(client: SupabaseConfig.client)
     private let telemetryRepository = InMemoryTelemetryRepository()
+    private let inspectionRepository = SupabaseInspectionRepository(client: SupabaseConfig.client)
+    private let deviceRepository = SupabaseDeviceRepository(client: SupabaseConfig.client)
 
     private lazy var hatcheryService = HatcheryService(
         hatcheryRepository: hatcheryRepository,
@@ -18,6 +20,10 @@ final class AppContainer {
     )
 
     private lazy var nestService = NestService(repository: nestRepository)
+
+    private lazy var inspectionService = InspectionService(repository: inspectionRepository)
+
+    private lazy var deviceService = DeviceService(repository: deviceRepository)
 
     /// `DemoHatcheryDataSeeder` seeded the 312-nest prototype dashboard into the
     /// in-memory repositories. It cannot seed Supabase-backed ones, so a
@@ -45,4 +51,10 @@ final class AppContainer {
     func makeHatcheryListController() -> HatcheryListController {
         HatcheryListController(hatcheryService: hatcheryService)
     }
+
+    // No UI consumes these yet; they are the composition points for the
+    // inspection and device screens when those are built.
+    func makeInspectionService() -> InspectionService { inspectionService }
+
+    func makeDeviceService() -> DeviceService { deviceService }
 }

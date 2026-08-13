@@ -41,7 +41,8 @@ actor DemoHatcheryDataSeeder: HatcheryDemoDataSeeding {
                 successEggsHatch: nil,
                 failEggsHatch: nil,
                 placementRow: (index / columnCount) % rowCount,
-                placementColumn: index % columnCount
+                placementColumn: index % columnCount,
+                nextInspectionDate: nil
             )
         }
 
