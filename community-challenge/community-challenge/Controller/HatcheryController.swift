@@ -10,7 +10,6 @@ final class HatcheryController {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     var selectedSectionID: String?
-    var showsSectionSheet = false
 
     private let hatcheryService: HatcheryService
     private let demoDataSeeder: (any HatcheryDemoDataSeeding)?
@@ -50,14 +49,9 @@ final class HatcheryController {
         selectedSectionID = id
     }
 
-    func showSelectedSection() {
-        showsSectionSheet = selectedSection != nil
-    }
-
     func clearInactiveSelection() {
         guard let selectedSectionID, isSectionActive(id: selectedSectionID) else {
             self.selectedSectionID = nil
-            showsSectionSheet = false
             return
         }
     }
