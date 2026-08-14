@@ -110,7 +110,7 @@ final class SupabaseNestLiveTests: XCTestCase {
         let hatcheryService = HatcheryService(
             hatcheryRepository: hatcheryRepository,
             nestRepository: nestRepository,
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
 
         let hatchery = try await hatcheryRepository.create(
@@ -411,12 +411,14 @@ final class SupabaseNestLiveTests: XCTestCase {
         )
 
         var secondSucceeded = true
+        var secondError: (any Error)?
         do {
             _ = try await deviceRepository.create(
                 RegisterDeviceInput(name: "Probe B", nestID: nest.id)
             )
         } catch {
             secondSucceeded = false
+            secondError = error
         }
 
         // deleting the nest frees the device rather than destroying it
@@ -427,6 +429,13 @@ final class SupabaseNestLiveTests: XCTestCase {
         try await hatcheryRepository.delete(id: hatchery.id)
 
         XCTAssertFalse(secondSucceeded, "device.nest_id is unique")
+        // ...and it must fail the SAME way the in-memory fake does, or a view
+        // that shows the message will work in tests and break in the app.
+        guard case .nestAlreadyHasDevice = (secondError as? DomainValidationError) else {
+            return XCTFail(
+                "Expected .nestAlreadyHasDevice from Supabase, got \(String(describing: secondError))"
+            )
+        }
         XCTAssertNil(freed.nestID, "ON DELETE SET NULL keeps the hardware record")
     }
 

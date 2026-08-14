@@ -10,6 +10,30 @@ import Supabase
 /// `nest`, so today this key *is* effectively a database credential. Keep it
 /// out of version control until real ownership policies replace that one.
 enum SupabaseConfig {
+    /// Ensures there is a session before anything tries to write.
+    ///
+    /// The database requires an authenticated user to create a hatchery, so an
+    /// anonymous request is refused with "An authenticated user is required to
+    /// create a hatchery". Anonymous sign-in is not "no auth": Supabase creates
+    /// a real `auth.users` row and issues a genuine session, so `auth.uid()`
+    /// returns a value and `hatchery.owner_id` gets populated.
+    ///
+    /// Idempotent — a session persists across launches, so this is a no-op on
+    /// every launch after the first.
+    ///
+    /// ponytail: anonymous sign-in unblocks development; replace with the real
+    /// provider once one is enabled on the project. Note that each install
+    /// becomes its own user, so hatcheries created on one device are owned by
+    /// an account no other device can sign into.
+    @discardableResult
+    static func ensureSignedIn() async throws -> UUID {
+        if let existing = client.auth.currentSession {
+            return existing.user.id
+        }
+        let session = try await client.auth.signInAnonymously()
+        return session.user.id
+    }
+
     static let client = SupabaseClient(
         supabaseURL: SupabaseSecrets.projectURL,
         supabaseKey: SupabaseSecrets.anonKey,

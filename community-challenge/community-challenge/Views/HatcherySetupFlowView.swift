@@ -100,7 +100,9 @@ struct HatcherySetupFlowView: View {
                     dimension: controller.draft.dimension,
                     grid: grid,
                     onDone: saveHatchery,
-                    onBack: router.pop
+                    onBack: router.pop,
+                    errorMessage: controller.errorMessage,
+                    isSaving: controller.isSaving
                 )
                 .disabled(controller.isSaving)
             }

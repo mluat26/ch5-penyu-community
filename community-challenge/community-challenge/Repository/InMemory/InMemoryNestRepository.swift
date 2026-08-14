@@ -31,6 +31,7 @@ actor InMemoryNestRepository: NestRepository {
             placeEggsLaid: input.placeEggsLaid,
             successEggsHatch: nil,
             failEggsHatch: nil,
+            eggsUnhatched: nil,
             placementRow: input.placementRow,
             placementColumn: input.placementColumn,
             nextInspectionDate: input.nextInspectionDate
@@ -80,6 +81,23 @@ actor InMemoryNestRepository: NestRepository {
         nest.successEggsHatch = eggsHatched
         nest.failEggsHatch = eggsRotten
         nest.nextInspectionDate = nextInspectionDate
+        nests[nestID] = nest
+    }
+
+    /// Mirrors the hatching branch of `refresh_nest_summary`: a final tally
+    /// overwrites the summary outright and ends the inspection schedule.
+    func applyHatching(
+        nestID: UUID,
+        eggsHatched: Int,
+        eggsRotten: Int,
+        eggsUnhatched: Int
+    ) {
+        guard var nest = nests[nestID] else { return }
+
+        nest.successEggsHatch = eggsHatched
+        nest.failEggsHatch = eggsRotten
+        nest.eggsUnhatched = eggsUnhatched
+        nest.nextInspectionDate = nil
         nests[nestID] = nest
     }
 }

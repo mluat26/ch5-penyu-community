@@ -9,6 +9,11 @@ struct HatcheryGridPreviewView: View {
     let grid: HatcheryGrid
     let onDone: () -> Void
     let onBack: () -> Void
+    /// Saving is the first thing in setup that can fail for a reason outside
+    /// the app — no session, no network, a rejected write. Without showing it,
+    /// Done appears to do nothing at all.
+    var errorMessage: String?
+    var isSaving = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -100,7 +105,20 @@ struct HatcheryGridPreviewView: View {
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            HatcherySetupButton(title: "Done", isPrimary: true, action: onDone)
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Color.appRed)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+            }
+
+            HatcherySetupButton(
+                title: isSaving ? "Saving…" : "Done",
+                isPrimary: true,
+                action: onDone
+            )
             HatcherySetupButton(title: "Back", isPrimary: false, action: onBack)
         }
     }

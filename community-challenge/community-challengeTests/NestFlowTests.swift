@@ -162,7 +162,7 @@ final class NestFlowTests: XCTestCase {
         let hatcheryService = HatcheryService(
             hatcheryRepository: hatcheryRepository,
             nestRepository: nestRepository,
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
         let nestService = NestService(repository: nestRepository)
 
@@ -334,7 +334,7 @@ final class NestFlowTests: XCTestCase {
         let hatcheryService = HatcheryService(
             hatcheryRepository: InMemoryHatcheryRepository(),
             nestRepository: nestRepository,
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
         let hatchery = try await hatcheryService.createHatchery(
             CreateHatcheryInput(

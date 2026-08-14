@@ -34,12 +34,18 @@ actor SupabaseDeviceRepository: DeviceRepository {
     }
 
     func create(_ input: RegisterDeviceInput) async throws -> DeviceEntity {
-        let rows: [DeviceDTO] = try await client
-            .from("device")
-            .insert(input.toDTO())
-            .select()
-            .execute()
-            .value
+        let rows: [DeviceDTO]
+        do {
+            rows = try await client
+                .from("device")
+                .insert(input.toDTO())
+                .select()
+                .execute()
+                .value
+        } catch {
+            // device.nest_id is unique, matching InMemoryDeviceRepository.
+            throw Self.assignmentError(for: input.nestID, underlying: error)
+        }
 
         guard let dto = rows.first else {
             throw DataMappingError.missingRequiredValue(field: "device insert response")
@@ -48,18 +54,37 @@ actor SupabaseDeviceRepository: DeviceRepository {
     }
 
     func update(id: UUID, _ input: UpdateDeviceInput) async throws -> DeviceEntity {
-        let rows: [DeviceDTO] = try await client
-            .from("device")
-            .update(input.toDTO())
-            .eq("id", value: id)
-            .select()
-            .execute()
-            .value
+        let rows: [DeviceDTO]
+        do {
+            rows = try await client
+                .from("device")
+                .update(input.toDTO())
+                .eq("id", value: id)
+                .select()
+                .execute()
+                .value
+        } catch {
+            throw Self.assignmentError(for: input.nestID, underlying: error)
+        }
 
         guard let dto = rows.first else {
             throw RepositoryError.notFound(resource: "Device", id: id)
         }
         return dto.toEntity()
+    }
+
+    /// The only unique constraint on `device` besides its primary key is
+    /// `nest_id`, so a uniqueness failure means the nest is taken. If the
+    /// device was not being assigned to a nest, the cause is something this
+    /// mapping does not know about and the original error is kept.
+    private static func assignmentError(for nestID: UUID?, underlying: any Error) -> any Error {
+        guard
+            PostgresErrorCode.matches(underlying, PostgresErrorCode.uniqueViolation),
+            let nestID
+        else {
+            return underlying
+        }
+        return DomainValidationError.nestAlreadyHasDevice(nestID: nestID)
     }
 
     func delete(id: UUID) async throws {

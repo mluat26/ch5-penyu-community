@@ -70,6 +70,7 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             placeEggsLaid: nil,
             successEggsHatch: 90,
             failEggsHatch: 10,
+            eggsUnhatched: 5,
             hatcheryID: hatcheryID,
             placementRow: 1,
             placementColumn: 2,
@@ -85,6 +86,7 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         // neither is dropped in mapping any more.
         XCTAssertEqual(nest.successEggsHatch, 90)
         XCTAssertEqual(nest.failEggsHatch, 10)
+        XCTAssertEqual(nest.eggsUnhatched, 5)
         XCTAssertEqual(nest.nextInspectionDate, nextInspection)
     }
 
@@ -123,25 +125,76 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         XCTAssertEqual(input.toDTO().datePredictedHatch, predictedHatch)
     }
 
-    func testIoTDataDTODecodesCurrentTemperatureColumn() throws {
+    func testIoTDataDTOMapsToAReading() throws {
         let id = UUID()
         let nestID = UUID()
-        let data = Data(
-            """
-            {
-              "id": "\(id.uuidString)",
-              "nest_id": "\(nestID.uuidString)",
-              "sensor_id": null,
-              "temperature": 29.5,
-              "alert": "low"
-            }
-            """.utf8
+        let timestamp = Date()
+        let dto = IoTDataDTO(
+            id: id,
+            nestID: nestID,
+            sensorID: nil,
+            position: "centre",
+            depthCM: 45,
+            temperature: 29.5,
+            timestamp: timestamp,
+            alert: "low",
+            sensorStatus: "online",
+            batteryVoltage: 3.7,
+            signalRSSIDBM: -70
         )
 
-        let dto = try JSONDecoder().decode(IoTDataDTO.self, from: data)
+        let reading = try dto.toEntity()
 
-        XCTAssertEqual(dto.nestID, nestID)
-        XCTAssertEqual(dto.temperature, 29.5)
+        XCTAssertEqual(reading.nestID, nestID)
+        XCTAssertEqual(reading.temperatureC, 29.5)
+        XCTAssertEqual(reading.timestamp, timestamp)
+        XCTAssertEqual(reading.alert, .low)
+        XCTAssertEqual(reading.sensorStatus, .online)
+        XCTAssertEqual(reading.depthCM, 45)
+    }
+
+    /// Temperature is the reason a reading exists, so its absence is the one
+    /// thing that makes a row unusable.
+    func testIoTDataWithoutTemperatureCannotMap() {
+        let dto = IoTDataDTO(
+            id: UUID(),
+            nestID: UUID(),
+            sensorID: nil,
+            position: nil,
+            depthCM: nil,
+            temperature: nil,
+            timestamp: Date(),
+            alert: nil,
+            sensorStatus: nil,
+            batteryVoltage: nil,
+            signalRSSIDBM: nil
+        )
+
+        XCTAssertThrowsError(try dto.toEntity())
+    }
+
+    /// Firmware reporting a status the app does not know must not hide an
+    /// otherwise valid temperature.
+    func testUnknownEnumValuesAreDroppedNotFatal() throws {
+        let dto = IoTDataDTO(
+            id: UUID(),
+            nestID: UUID(),
+            sensorID: nil,
+            position: nil,
+            depthCM: nil,
+            temperature: 31.2,
+            timestamp: Date(),
+            alert: "meltdown",
+            sensorStatus: "unplugged",
+            batteryVoltage: nil,
+            signalRSSIDBM: nil
+        )
+
+        let reading = try dto.toEntity()
+
+        XCTAssertEqual(reading.temperatureC, 31.2)
+        XCTAssertNil(reading.alert)
+        XCTAssertNil(reading.sensorStatus)
     }
 
     private func encodedObject<T: Encodable>(_ value: T) throws -> [String: Any] {

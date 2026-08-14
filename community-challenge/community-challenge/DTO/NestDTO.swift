@@ -9,6 +9,7 @@ struct NestDTO: Codable, Sendable {
     let placeEggsLaid: Date?
     let successEggsHatch: Int?
     let failEggsHatch: Int?
+    let eggsUnhatched: Int?
     let hatcheryID: UUID?
     let placementRow: Int?
     let placementColumn: Int?
@@ -23,6 +24,7 @@ struct NestDTO: Codable, Sendable {
         case placeEggsLaid = "place_eggs_laid"
         case successEggsHatch = "success_eggs_hatch"
         case failEggsHatch = "fail_eggs_hatch"
+        case eggsUnhatched = "eggs_unhatched"
         case hatcheryID = "hatchery_id"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
@@ -94,6 +96,7 @@ extension NestDTO {
             placeEggsLaid: placeEggsLaid,
             successEggsHatch: successEggsHatch,
             failEggsHatch: failEggsHatch,
+            eggsUnhatched: eggsUnhatched,
             placementRow: placementRow,
             placementColumn: placementColumn,
             nextInspectionDate: nextInspectionDate

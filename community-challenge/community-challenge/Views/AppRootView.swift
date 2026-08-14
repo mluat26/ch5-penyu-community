@@ -41,7 +41,14 @@ struct AppRootView: View {
             // showing one and swapping to the other reads as a glitch.
             Color.appOffWhite
                 .ignoresSafeArea()
-                .task { await hatcheryListController.load() }
+                .task {
+                    // Writes are refused without a session, so this has to
+                    // happen before the first screen that can save anything.
+                    // Reads still work if it fails, so a failure here does not
+                    // block the list; the save error explains itself.
+                    try? await container.prepareSession()
+                    await hatcheryListController.load()
+                }
         } else if hatcheryListController.hatcheries.isEmpty {
             // Nothing to open, so setup is the only useful screen.
             HatcherySetupFlowView(

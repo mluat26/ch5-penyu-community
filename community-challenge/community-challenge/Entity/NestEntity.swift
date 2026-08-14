@@ -9,7 +9,11 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     var datePredictedHatch: Date?
     var placeEggsLaid: Date?
     var successEggsHatch: Int?
+    /// Eggs that spoiled.
     var failEggsHatch: Int?
+    /// Eggs that stayed intact but never developed. Distinct from rotten, and
+    /// only known once a hatching record exists.
+    var eggsUnhatched: Int?
     var placementRow: Int?
     var placementColumn: Int?
     /// When the next inspection is expected. Nil once the nest has hatched,
@@ -21,7 +25,13 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     /// Computed rather than stored: a third number kept in the database could
     /// disagree with the other two, and there is nothing here that can drift.
     var eggsRemaining: Int {
-        max(numberOfEggs - (successEggsHatch ?? 0) - (failEggsHatch ?? 0), 0)
+        max(
+            numberOfEggs
+                - (successEggsHatch ?? 0)
+                - (failEggsHatch ?? 0)
+                - (eggsUnhatched ?? 0),
+            0
+        )
     }
 
     /// True once an inspection reported the nest finished. Deliberately not

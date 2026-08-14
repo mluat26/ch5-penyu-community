@@ -11,6 +11,8 @@ enum DomainValidationError: Error, LocalizedError, Sendable {
     case unfinishedInspectionNeedsNextDate
     case partialHatchNeedsHatchlings
     case nestAlreadyHasDevice(nestID: UUID)
+    case nestAlreadyHatched(nestID: UUID)
+    case hatchingExceedsClutch(counted: Int, clutchSize: Int)
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +38,10 @@ enum DomainValidationError: Error, LocalizedError, Sendable {
             "A partial hatch means at least one egg hatched."
         case .nestAlreadyHasDevice:
             "That nest already has a device. Unassign it first."
+        case .nestAlreadyHatched:
+            "This nest already has a hatching result. Edit it instead."
+        case let .hatchingExceedsClutch(counted, clutchSize):
+            "That totals \(counted) eggs, but the nest holds \(clutchSize)."
         }
     }
 }
