@@ -127,24 +127,22 @@ struct HatcheryManagementView: View {
             .buttonStyle(.plain)
             .offset(x: 16 * scale, y: 795 * scale)
             .accessibilityHint("Creates a new hatchery")
+
+            managementMenuTapTarget(scale: scale)
         }
     }
 
     private func managementHeader(scale: CGFloat) -> some View {
         HStack(spacing: 0) {
-            Button(action: onDismiss) {
-                HStack(spacing: 4 * scale) {
-                    Text("Management")
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 12 * scale, weight: .semibold))
-                }
-                .font(.system(size: 17 * scale, weight: .semibold))
-                .foregroundStyle(Color(hex: "#0C7C4D"))
-                .frame(width: 132 * scale, height: 44 * scale, alignment: .leading)
+            HStack(spacing: 4 * scale) {
+                Text("Management")
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 12 * scale, weight: .semibold))
             }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .accessibilityLabel("Close management")
+            .font(.system(size: 17 * scale, weight: .semibold))
+            .foregroundStyle(Color(hex: "#0C7C4D"))
+            .frame(width: 132 * scale, height: 44 * scale, alignment: .leading)
+            .accessibilityHidden(true)
 
             Spacer(minLength: 0)
 
@@ -155,6 +153,23 @@ struct HatcheryManagementView: View {
             .frame(width: 156 * scale, height: 48 * scale)
         }
         .frame(width: 386 * scale, height: 48 * scale)
+    }
+
+    /// Figma's Popup Button stays visually in the header. Its touch target is
+    /// a separate top-level SwiftUI Button so every part of “Management”
+    /// responds reliably on physical devices.
+    private func managementMenuTapTarget(scale: CGFloat) -> some View {
+        Button(action: onDismiss) {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: 176 * scale, height: 56 * scale)
+        .contentShape(Rectangle())
+        .offset(x: 16 * scale, y: 83 * scale)
+        .accessibilityIdentifier("management-menu")
+        .accessibilityLabel("Close management")
+        .accessibilityHint("Returns to the hatchery overview")
     }
 
     private func toolbarIcon(
