@@ -15,13 +15,32 @@ import XCTest
 ///
 /// An environment-variable gate was tried first; xcodebuild does not forward
 /// environment to hosted unit tests, so the flag has to be compile time.
+///
+/// The layout-persistence migration deliberately forbids direct client
+/// hatchery creation/deletion, so this pre-lifecycle suite is skipped until a
+/// service-role integration harness can perform immutable-photo cleanup. The
+/// normal offline tests exercise the client lifecycle without shared-state
+/// mutations.
 final class SupabaseNestLiveTests: XCTestCase {
+    private var identity: SupabaseAuthenticationService!
     private var hatcheryRepository: SupabaseHatcheryRepository!
     private var nestRepository: SupabaseNestRepository!
 
     override func setUpWithError() throws {
-        hatcheryRepository = SupabaseHatcheryRepository(client: SupabaseConfig.client)
-        nestRepository = SupabaseNestRepository(client: SupabaseConfig.client)
+        throw XCTSkip(
+            "Direct hatchery CRUD is unavailable after private layout persistence; use a trusted lifecycle integration harness."
+        )
+
+        let client = SupabaseConfig.client
+        identity = SupabaseAuthenticationService(client: client)
+        hatcheryRepository = SupabaseHatcheryRepository(
+            client: client,
+            identity: identity
+        )
+        nestRepository = SupabaseNestRepository(
+            client: client,
+            identity: identity
+        )
     }
 
     /// Full CRUD against the live `nest` table, cleaning up after itself so

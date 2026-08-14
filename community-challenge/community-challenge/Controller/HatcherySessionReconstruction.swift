@@ -1,13 +1,11 @@
 import UIKit
 
 extension HatcherySessionState {
-    /// Rebuilds a session for a hatchery loaded from the database.
+    /// Rebuilds a session for a legacy hatchery loaded from the database.
     ///
-    /// Only name, shape, dimensions, and grid counts are persisted. The photo,
-    /// boundary, and sand region exist solely because the scan flow produced
-    /// them and have no Supabase Storage contract yet, so switching to an
-    /// existing hatchery reconstructs the same placeholders `skipScanning()`
-    /// uses.
+    /// Modern hatcheries use the persisted-layout overload below. This remains
+    /// only for rows created before scan-layout persistence shipped, so their
+    /// sample image is clearly a compatibility fallback—not a saved scan.
     ///
     /// The grid is regenerated from the stored dimensions by the generator that
     /// produced the persisted row/column counts in the first place, so the two
@@ -37,6 +35,48 @@ extension HatcherySessionState {
             usesMockImage: true,
             boundary: .fullImage,
             sandRegion: .default(from: .fullImage),
+            grid: grid
+        )
+    }
+
+    /// Rebuilds a session from the exact current scan revision. The source
+    /// image, perspective boundary, sand mask, and active-cell grid all come
+    /// from the durable layout record rather than being regenerated from a
+    /// placeholder.
+    @MainActor
+    static func reconstructed(
+        from hatchery: HatcheryEntity,
+        layout: HatcheryLayoutRevision,
+        sourcePhotoData: Data?
+    ) async throws -> HatcherySessionState {
+        guard
+            layout.hatcheryID == hatchery.id,
+            layout.state == .ready,
+            layout.isCurrent,
+            layout.dimension.widthM == hatchery.widthM,
+            layout.dimension.heightM == hatchery.lengthM,
+            layout.grid.rows == hatchery.numberOfRows,
+            layout.grid.columns == hatchery.numberOfColumns
+        else {
+            throw HatcheryLayoutPersistenceError.unexpectedLayoutState
+        }
+
+        let images = try await HatcheryImageProcessor.restoredImagePayloads(
+            captureMode: layout.captureMode,
+            sourcePhotoData: sourcePhotoData,
+            boundary: layout.boundary
+        )
+        try Task.checkCancellation()
+
+        let grid = try layout.grid.makeGrid(boundary: layout.boundary)
+
+        return HatcherySessionState(
+            hatchery: hatchery,
+            photo: HatcheryImageProcessor.displayImage(from: images.photo),
+            rectifiedPhoto: HatcheryImageProcessor.displayImage(from: images.rectifiedPhoto),
+            usesMockImage: false,
+            boundary: layout.boundary,
+            sandRegion: layout.sandRegion,
             grid: grid
         )
     }

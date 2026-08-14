@@ -6,12 +6,18 @@ import Supabase
 /// that needs to know which one is in use.
 actor SupabaseNestRepository: NestRepository {
     private let client: SupabaseClient
+    private let identity: any SupabaseIdentityProviding
 
-    init(client: SupabaseClient) {
+    init(
+        client: SupabaseClient,
+        identity: any SupabaseIdentityProviding
+    ) {
         self.client = client
+        self.identity = identity
     }
 
     func fetch(id: UUID) async throws -> NestEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [NestDTO] = try await client
             .from("nest")
             .select()
@@ -26,6 +32,7 @@ actor SupabaseNestRepository: NestRepository {
     }
 
     func fetchAll(hatcheryID: UUID) async throws -> [NestEntity] {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [NestDTO] = try await client
             .from("nest")
             .select()
@@ -38,6 +45,7 @@ actor SupabaseNestRepository: NestRepository {
     }
 
     func create(_ input: CreateNestInput) async throws -> NestEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let insertDTO = input.toDTO()
         let rows: [NestDTO] = try await client
             .from("nest")
@@ -53,6 +61,7 @@ actor SupabaseNestRepository: NestRepository {
     }
 
     func update(id: UUID, _ input: UpdateNestInput) async throws -> NestEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let updateDTO = input.toDTO()
         let rows: [NestDTO] = try await client
             .from("nest")
@@ -69,6 +78,7 @@ actor SupabaseNestRepository: NestRepository {
     }
 
     func delete(id: UUID) async throws {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [NestDTO] = try await client
             .from("nest")
             .delete()

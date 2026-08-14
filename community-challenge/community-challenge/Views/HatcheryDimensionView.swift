@@ -6,6 +6,7 @@ struct HatcheryDimensionView: View {
     let image: UIImage
     let boundary: HatcheryBoundary
     let usesMockImage: Bool
+    let showsCapturedImage: Bool
     let onNext: (HatcheryDimension) -> Void
     let onRescan: () -> Void
 
@@ -23,6 +24,7 @@ struct HatcheryDimensionView: View {
         image: UIImage,
         boundary: HatcheryBoundary,
         usesMockImage: Bool,
+        showsCapturedImage: Bool = true,
         initialDimension: HatcheryDimension,
         onNext: @escaping (HatcheryDimension) -> Void,
         onRescan: @escaping () -> Void
@@ -31,6 +33,7 @@ struct HatcheryDimensionView: View {
         self.image = image
         self.boundary = boundary
         self.usesMockImage = usesMockImage
+        self.showsCapturedImage = showsCapturedImage
         self.onNext = onNext
         self.onRescan = onRescan
         // `.grouping(.never)`: this seeds a text field that `number(from:)` reads
@@ -57,17 +60,23 @@ struct HatcheryDimensionView: View {
                         hatchName: hatchName
                     )
 
-                    Spacer().frame(height: 61)
+                    // 402 × 874 Figma reference: the photo is anchored at
+                    // y=210 after the 66 pt header that begins at y=102.
+                    Spacer().frame(height: 42)
 
                     photo
                         .frame(width: contentWidth, height: 279)
 
-                    Spacer().frame(height: 31)
+                    Spacer().frame(height: 38)
 
                     dimensionForm
-                        .frame(width: min(321, contentWidth), height: 141)
+                        .frame(width: contentWidth, height: 137)
+                        // The Figma form is centred 6 pt to the right of the
+                        // screen centre; keeping that reference alignment is
+                        // visually important against the photo above.
+                        .offset(x: 6)
 
-                    Spacer().frame(height: 30)
+                    Spacer().frame(height: 46)
 
                     actionButtons
                         .frame(width: contentWidth, height: 122)
@@ -95,18 +104,30 @@ struct HatcheryDimensionView: View {
 
     private var photo: some View {
         ZStack {
-            HatcherySetupImage(
-                image: image,
-                usesMockCrop: usesMockImage
-            )
+            Color.white
 
-            HatcheryBoundaryOverlay(
-                imageSize: image.size,
-                boundary: boundary
-            )
+            if showsCapturedImage {
+                HatcherySetupImage(
+                    image: image,
+                    usesMockCrop: usesMockImage
+                )
+
+                HatcheryBoundaryOverlay(
+                    imageSize: image.size,
+                    boundary: boundary
+                )
+                .padding(8)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .accessibilityLabel("Captured hatchery area")
+        .accessibilityLabel(
+            showsCapturedImage
+                ? "Captured hatchery area"
+                : "Hatchery area awaiting a scan"
+        )
     }
 
     private var dimensionForm: some View {
@@ -119,7 +140,7 @@ struct HatcheryDimensionView: View {
 
                 // Doubles as the validation slot so an unusable value explains
                 // itself in place, without disturbing the fixed layout.
-                Text(validationMessage ?? "Input your hatching dimension")
+                Text(validationMessage ?? "Input your hatching demesion")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(validationMessage == nil ? Color.appNeutralGray1 : .red)
                     .lineLimit(1)
@@ -129,15 +150,15 @@ struct HatcheryDimensionView: View {
             .multilineTextAlignment(.center)
             .frame(height: 51)
 
-            Spacer().frame(height: 27)
+            Spacer().frame(height: 16)
 
-            HStack(spacing: 45) {
+            HStack(spacing: 36) {
                 dimensionField(
                     label: "W",
                     labelWidth: 20,
-                    fieldWidth: 88,
-                    textWidth: 43,
-                    unitSpacing: 1,
+                    fieldWidth: 128,
+                    textWidth: 64,
+                    unitSpacing: 6,
                     text: $widthText,
                     field: .width
                 )
@@ -145,14 +166,14 @@ struct HatcheryDimensionView: View {
                 dimensionField(
                     label: "H",
                     labelWidth: 16,
-                    fieldWidth: 98,
-                    textWidth: 48,
+                    fieldWidth: 116,
+                    textWidth: 64,
                     unitSpacing: 6,
                     text: $heightText,
                     field: .height
                 )
             }
-            .frame(height: 63)
+            .frame(height: 70)
         }
     }
 
@@ -171,25 +192,25 @@ struct HatcheryDimensionView: View {
                 .foregroundStyle(.black.opacity(0.5))
                 .frame(width: labelWidth, height: 25)
 
-            HStack(alignment: .top, spacing: unitSpacing) {
+            HStack(spacing: unitSpacing) {
                 TextField("0", text: text)
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(.black)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .focused($focusedField, equals: field)
-                    .frame(width: textWidth, height: 41, alignment: .topLeading)
+                    .multilineTextAlignment(.center)
+                    .frame(width: textWidth, height: 41)
                     .lineLimit(1)
 
                 Text("m")
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black.opacity(0.5))
-                    .frame(width: 18, height: 25, alignment: .top)
-                    .padding(.top, 2)
+                    .frame(height: 25)
             }
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(width: fieldWidth, height: 63, alignment: .topLeading)
+            .frame(width: fieldWidth, height: 70)
             .background(HatcherySetupPalette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
@@ -197,7 +218,7 @@ struct HatcheryDimensionView: View {
                     .stroke(HatcherySetupPalette.border, lineWidth: 1)
             }
         }
-        .frame(height: 63)
+        .frame(height: 70)
     }
 
     private var actionButtons: some View {
@@ -390,13 +411,26 @@ struct HatcherySetupButton: View {
     }
 }
 
-#Preview {
+#Preview("Figma reference", traits: .fixedLayout(width: 402, height: 874)) {
     HatcheryDimensionView(
-        hatchName: "Hatch_01",
+        hatchName: "Hatch 01",
         image: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
-        boundary: .defaultSuggestion,
+        boundary: .fullImage,
+        usesMockImage: true,
+        initialDimension: HatcheryDimension(widthM: 4, heightM: 5),
+        onNext: { _ in },
+        onRescan: {}
+    )
+}
+
+#Preview("Skipped scan", traits: .fixedLayout(width: 402, height: 874)) {
+    HatcheryDimensionView(
+        hatchName: "Hatch 01",
+        image: UIImage(),
+        boundary: .fullImage,
         usesMockImage: false,
-        initialDimension: HatcheryDimension(widthM: 15, heightM: 7),
+        showsCapturedImage: false,
+        initialDimension: HatcheryDimension(widthM: 4, heightM: 5),
         onNext: { _ in },
         onRescan: {}
     )

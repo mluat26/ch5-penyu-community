@@ -7,11 +7,42 @@ import Foundation
 /// nests carry no temperature until a sensor writes one.
 @MainActor
 final class AppContainer {
-    private let hatcheryRepository = SupabaseHatcheryRepository(client: SupabaseConfig.client)
-    private let nestRepository = SupabaseNestRepository(client: SupabaseConfig.client)
+    private let hatcheryRepository: SupabaseHatcheryRepository
+    private let nestRepository: SupabaseNestRepository
     private let telemetryRepository = InMemoryTelemetryRepository()
-    private let inspectionRepository = SupabaseInspectionRepository(client: SupabaseConfig.client)
-    private let deviceRepository = SupabaseDeviceRepository(client: SupabaseConfig.client)
+    private let inspectionRepository: SupabaseInspectionRepository
+    private let deviceRepository: SupabaseDeviceRepository
+    private let layoutService: HatcheryLayoutService
+
+    init() {
+        let client = SupabaseConfig.client
+        let identity = SupabaseAuthenticationService(client: client)
+
+        let hatcheryRepository = SupabaseHatcheryRepository(
+            client: client,
+            identity: identity
+        )
+        let nestRepository = SupabaseNestRepository(
+            client: client,
+            identity: identity
+        )
+        let layoutRepository = SupabaseHatcheryLayoutRepository(
+            client: client,
+            identity: identity
+        )
+        let photoStore = SupabaseHatcheryPhotoStore(
+            client: client,
+            identity: identity
+        )
+        self.hatcheryRepository = hatcheryRepository
+        self.nestRepository = nestRepository
+        self.inspectionRepository = SupabaseInspectionRepository(client: client)
+        self.deviceRepository = SupabaseDeviceRepository(client: client)
+        self.layoutService = HatcheryLayoutService(
+            repository: layoutRepository,
+            photoStore: photoStore
+        )
+    }
 
     private lazy var hatcheryService = HatcheryService(
         hatcheryRepository: hatcheryRepository,
@@ -30,8 +61,14 @@ final class AppContainer {
     /// hatchery now starts genuinely empty and fills up as nests are added.
     private let demoDataSeeder: (any HatcheryDemoDataSeeding)? = nil
 
-    func makeHatcherySetupController() -> HatcherySetupController {
-        HatcherySetupController(hatcheryService: hatcheryService)
+    func makeHatcherySetupController(
+        editingHatchery: HatcheryEntity? = nil
+    ) -> HatcherySetupController {
+        HatcherySetupController(
+            hatcheryService: hatcheryService,
+            layoutService: layoutService,
+            existingHatchery: editingHatchery
+        )
     }
 
     func makeHatcheryController(
@@ -49,7 +86,10 @@ final class AppContainer {
     }
 
     func makeHatcheryListController() -> HatcheryListController {
-        HatcheryListController(hatcheryService: hatcheryService)
+        HatcheryListController(
+            hatcheryService: hatcheryService,
+            layoutService: layoutService
+        )
     }
 
     // No UI consumes these yet; they are the composition points for the

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-nonisolated struct NormalizedPoint: Codable, Hashable {
+nonisolated struct NormalizedPoint: Codable, Hashable, Sendable {
     var x: Double
     var y: Double
 
@@ -17,7 +17,7 @@ nonisolated struct NormalizedPoint: Codable, Hashable {
 
 /// A four-corner hatchery boundary stored relative to the source image.
 /// Values stay in the 0...1 range, so the boundary survives layout and device changes.
-nonisolated struct HatcheryBoundary: Codable, Hashable {
+nonisolated struct HatcheryBoundary: Codable, Hashable, Sendable {
     var topLeft: NormalizedPoint
     var topRight: NormalizedPoint
     var bottomRight: NormalizedPoint
@@ -116,7 +116,7 @@ nonisolated struct HatcheryBoundary: Codable, Hashable {
 /// project a rectangular grid. This polygon is intentionally separate: it can
 /// describe concave or otherwise irregular sand areas and decides which grid
 /// sections are usable.
-nonisolated struct HatcherySandRegion: Codable, Hashable {
+nonisolated struct HatcherySandRegion: Codable, Hashable, Sendable {
     static let minimumPointCount = 3
     static let maximumPointCount = 12
 
@@ -311,7 +311,7 @@ nonisolated struct HatcherySandRegion: Codable, Hashable {
     }
 }
 
-nonisolated struct HatcheryDimension: Hashable {
+nonisolated struct HatcheryDimension: Codable, Hashable, Sendable {
     var widthM: Double
     var heightM: Double
 
@@ -401,5 +401,155 @@ nonisolated struct HatcheryGrid: Hashable {
             value /= 26
         }
         return label
+    }
+}
+
+/// A compact, versioned representation of the grid that is safe to store in
+/// Postgres. Individual section quadrilaterals are deliberately not persisted:
+/// they are deterministically derived from the saved perspective boundary.
+/// The active-cell list is retained because it records the user's irregular
+/// sand mask without depending on a future grid-generation algorithm.
+nonisolated struct HatcheryGridSnapshot: Codable, Hashable, Sendable {
+    static let currentSchemaVersion = 1
+    static let maximumRowsOrColumns = 100
+    static let maximumCellCount = 2_500
+
+    let schemaVersion: Int
+    let rows: Int
+    let columns: Int
+    let sectionWidthM: Double
+    let sectionHeightM: Double
+    let activeCells: [HatcheryGridCellCoordinate]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case rows
+        case columns
+        case sectionWidthM = "section_width_m"
+        case sectionHeightM = "section_height_m"
+        case activeCells = "active_cells"
+    }
+
+    init(grid: HatcheryGrid) {
+        schemaVersion = Self.currentSchemaVersion
+        rows = grid.rows
+        columns = grid.columns
+        sectionWidthM = grid.sections.first?.widthM ?? HatcheryGridGenerator.targetSectionSizeM
+        sectionHeightM = grid.sections.first?.heightM ?? HatcheryGridGenerator.targetSectionSizeM
+        activeCells = grid.sections
+            .filter(\.isActive)
+            .map { HatcheryGridCellCoordinate(row: $0.row, column: $0.column) }
+            .sorted()
+    }
+
+    init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        rows: Int,
+        columns: Int,
+        sectionWidthM: Double,
+        sectionHeightM: Double,
+        activeCells: [HatcheryGridCellCoordinate]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.rows = rows
+        self.columns = columns
+        self.sectionWidthM = sectionWidthM
+        self.sectionHeightM = sectionHeightM
+        self.activeCells = activeCells.sorted()
+    }
+
+    /// Recreates the projection exactly as it was saved. This intentionally
+    /// does not call `HatcheryGridGenerator`: its future tuning must never
+    /// change which cells were usable for a historical hatchery scan.
+    func makeGrid(boundary: HatcheryBoundary) throws -> HatcheryGrid {
+        try validate(boundary: boundary)
+
+        let activeCoordinates = Set(activeCells)
+        let sections = (0..<rows).flatMap { row in
+            (0..<columns).map { column in
+                HatcherySection(
+                    id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
+                    row: row,
+                    column: column,
+                    widthM: sectionWidthM,
+                    heightM: sectionHeightM,
+                    boundary: boundary.sectionBoundary(
+                        row: row,
+                        column: column,
+                        rowCount: rows,
+                        columnCount: columns
+                    ),
+                    isActive: activeCoordinates.contains(
+                        HatcheryGridCellCoordinate(row: row, column: column)
+                    )
+                )
+            }
+        }
+
+        return HatcheryGrid(rows: rows, columns: columns, sections: sections)
+    }
+
+    func validate(boundary: HatcheryBoundary) throws {
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw HatcheryLayoutPersistenceError.unsupportedGridSchema
+        }
+        guard boundary.isValid else {
+            throw HatcheryLayoutPersistenceError.invalidBoundary
+        }
+        guard
+            (1...Self.maximumRowsOrColumns).contains(rows),
+            (1...Self.maximumRowsOrColumns).contains(columns),
+            rows * columns <= Self.maximumCellCount,
+            sectionWidthM.isFinite,
+            sectionHeightM.isFinite,
+            sectionWidthM > 0,
+            sectionHeightM > 0
+        else {
+            throw HatcheryLayoutPersistenceError.invalidGridSnapshot
+        }
+
+        let coordinateSet = Set(activeCells)
+        guard coordinateSet.count == activeCells.count,
+              activeCells.allSatisfy({
+                  (0..<rows).contains($0.row) && (0..<columns).contains($0.column)
+              })
+        else {
+            throw HatcheryLayoutPersistenceError.invalidGridSnapshot
+        }
+    }
+}
+
+nonisolated struct HatcheryGridCellCoordinate: Codable, Hashable, Comparable, Sendable {
+    let row: Int
+    let column: Int
+
+    static func < (lhs: HatcheryGridCellCoordinate, rhs: HatcheryGridCellCoordinate) -> Bool {
+        lhs.row == rhs.row ? lhs.column < rhs.column : lhs.row < rhs.row
+    }
+}
+
+nonisolated enum HatcheryLayoutPersistenceError: LocalizedError {
+    case invalidBoundary
+    case invalidGridSnapshot
+    case unsupportedGridSchema
+    case malformedPhoto
+    case missingSourcePhoto
+    case unexpectedLayoutState
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidBoundary:
+            "The saved hatchery boundary is invalid. Please scan it again."
+        case .invalidGridSnapshot:
+            "The saved hatchery grid is invalid. Please scan it again."
+        case .unsupportedGridSchema:
+            "This hatchery layout needs to be re-scanned before it can be opened."
+        case .malformedPhoto:
+            "The saved hatchery photo could not be opened. Please scan it again."
+        case .missingSourcePhoto:
+            "The saved hatchery photo is missing. Please scan it again."
+        case .unexpectedLayoutState:
+            "This hatchery layout is not ready yet. Please try again."
+        }
     }
 }
