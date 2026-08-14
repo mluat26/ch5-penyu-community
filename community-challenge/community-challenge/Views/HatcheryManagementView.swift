@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Full-screen hatchery management for the backend-backed list of hatcheries.
 /// It follows Figma nodes 94:1514 and 94:1614, while its cards intentionally
@@ -317,9 +318,8 @@ struct HatcheryManagementView: View {
     }
 }
 
-/// The direct SwiftUI control behind the Figma Popup Button at node 94:1374.
-/// The popup itself is hosted above the navigation stack so it has a reliable,
-/// deterministic touch path on every supported iOS version.
+/// The Figma Popup Button visual at node 94:1374. Its popup is hosted above
+/// the navigation stack, while UIKit supplies the hardware touch surface.
 struct HatcheryPopupMenuButton: View {
     let hatcheryName: String
     let action: () -> Void
@@ -330,31 +330,67 @@ struct HatcheryPopupMenuButton: View {
     private let touchTargetHeight: CGFloat = 56
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    Text(hatcheryName)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
+        ZStack(alignment: .leading) {
+            HatcherySelectorTouchSurface(action: action)
+                .frame(width: touchTargetWidth, height: touchTargetHeight)
 
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.title3)
-                }
-                .foregroundStyle(Color.appGreenPrimary)
-                .frame(width: 148, height: 48, alignment: .leading)
+            HStack(spacing: 4) {
+                Text(hatcheryName)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
 
-                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.title3)
             }
-            .frame(width: touchTargetWidth, height: touchTargetHeight)
-            .contentShape(.interaction, Rectangle())
+            .foregroundStyle(Color.appGreenPrimary)
+            .frame(width: 148, height: 48, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .contentShape(.interaction, Rectangle())
-        .accessibilityIdentifier("hatchery-menu")
-        .accessibilityLabel("Switch hatchery")
-        .accessibilityHint("Opens the hatchery menu")
+        .frame(width: touchTargetWidth, height: touchTargetHeight, alignment: .leading)
+    }
+}
+
+/// UIKit owns the physical-device touch surface while SwiftUI continues to
+/// render the pixel-matched Figma label above it.
+private struct HatcherySelectorTouchSurface: UIViewRepresentable {
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .custom)
+        button.backgroundColor = .clear
+        button.isAccessibilityElement = true
+        button.accessibilityIdentifier = "hatchery-menu"
+        button.accessibilityLabel = "Switch hatchery"
+        button.accessibilityHint = "Opens the hatchery menu"
+        button.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.didTap),
+            for: .touchUpInside
+        )
+        return button
+    }
+
+    func updateUIView(_ button: UIButton, context: Context) {
+        context.coordinator.action = action
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func didTap() {
+            action()
+        }
     }
 }
 
