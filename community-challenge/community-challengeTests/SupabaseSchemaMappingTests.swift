@@ -24,6 +24,31 @@ final class SupabaseSchemaMappingTests: XCTestCase {
 
         XCTAssertEqual(hatchery.numberOfRows, 3)
         XCTAssertEqual(hatchery.numberOfColumns, 4)
+        XCTAssertNil(hatchery.createdAt)
+    }
+
+    func testHatcheryDTOMapsCreatedAt() throws {
+        let id = UUID()
+        let data = Data(
+            """
+            {
+              "id": "\(id.uuidString)",
+              "number_of_row": 3,
+              "number_of_collumn": 4,
+              "name": "Hatch 01",
+              "shape": "rectangle",
+              "length_m": 6,
+              "width_m": 8,
+              "created_at": "2026-06-15T00:00:00Z"
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let hatchery = try decoder.decode(HatcheryDTO.self, from: data).toEntity()
+
+        XCTAssertEqual(hatchery.createdAt, Date(timeIntervalSince1970: 1_781_481_600))
     }
 
     func testHatcheryInsertUsesOnlyCurrentColumns() throws {

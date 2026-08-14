@@ -5,33 +5,28 @@ import SwiftUI
 /// render live dashboard values instead of the static mock values in the file.
 struct HatcheryManagementView: View {
     @Bindable var controller: HatcheryListController
-    let activeHatcheryID: UUID?
     let onSelect: (HatcherySessionState) -> Void
     let onCreateNew: () -> Void
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
-    let onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var editingHatchery: HatcheryEntity?
+    @State private var selectedHatchery: HatcheryEntity?
+    @State private var selectedHatcheryStartsRenaming = false
     @State private var isShowingHatcheryMenu = false
 
     init(
         controller: HatcheryListController,
-        activeHatcheryID: UUID? = nil,
         onSelect: @escaping (HatcherySessionState) -> Void,
         onCreateNew: @escaping () -> Void,
         onRescan: @escaping (HatcheryEntity) -> Void = { _ in },
-        onRename: @escaping (HatcheryEntity) -> Void = { _ in },
-        onDismiss: @escaping () -> Void = {}
+        onRename: @escaping (HatcheryEntity) -> Void = { _ in }
     ) {
         self.controller = controller
-        self.activeHatcheryID = activeHatcheryID
         self.onSelect = onSelect
         self.onCreateNew = onCreateNew
         self.onRescan = onRescan
         self.onRename = onRename
-        self.onDismiss = onDismiss
     }
 
     var body: some View {
@@ -77,14 +72,18 @@ struct HatcheryManagementView: View {
         .preferredColorScheme(.light)
         .toolbar(.hidden, for: .navigationBar)
         .task { await controller.loadManagement() }
-        .sheet(item: $editingHatchery) { hatchery in
-            HatcheryManagementEditorSheet(
+        .sheet(item: $selectedHatchery) { hatchery in
+            HatcheryManagementDetailSheet(
                 hatchery: hatchery,
                 controller: controller,
                 onRescan: onRescan,
-                onRename: onRename
+                onRename: onRename,
+                startsRenaming: selectedHatcheryStartsRenaming
             )
-            .presentationDetents([.height(713)])
+            // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
+            // fixed detent. 679pt of content therefore produces the Figma
+            // reference's 713pt visible sheet.
+            .presentationDetents([.height(679)])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(34)
             .presentationSizing(.page)
@@ -248,87 +247,89 @@ struct HatcheryManagementView: View {
         let hatchery = summary.hatchery
         let isOpening = controller.openingHatcheryID == hatchery.id
 
-        return VStack(spacing: 20 * scale) {
-            HStack(spacing: 12 * scale) {
-                Text(hatchery.name)
-                    .font(.system(size: 17 * scale, weight: .semibold))
-                    .tracking(-0.43 * scale)
-                    .foregroundStyle(Color.appNeutralBlack)
-                    .lineLimit(1)
+        return ZStack(alignment: .topTrailing) {
+            Button { presentDetails(for: hatchery) } label: {
+                VStack(spacing: 20 * scale) {
+                    HStack(spacing: 12 * scale) {
+                        Text(hatchery.name)
+                            .font(.system(size: 17 * scale, weight: .semibold))
+                            .tracking(-0.43 * scale)
+                            .foregroundStyle(Color.appNeutralBlack)
+                            .lineLimit(1)
 
-                Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                Button { editingHatchery = hatchery } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 17 * scale, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .frame(width: 32 * scale, height: 32 * scale)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Edit \(hatchery.name)")
-            }
-            .frame(height: 22 * scale)
-
-            HStack(spacing: 12 * scale) {
-                temperaturePill(summary.overview?.averageTemperatureC, scale: scale)
-                dimensionPill(hatchery, scale: scale)
-
-                Spacer(minLength: 0)
-
-                HStack(alignment: .lastTextBaseline, spacing: 2 * scale) {
-                    Text((summary.overview?.totalEggs ?? 0).formatted(.number.grouping(.never)))
-                        .font(.system(size: 17 * scale, weight: .semibold))
-                        .tracking(-0.43 * scale)
-                        .foregroundStyle(.black)
-                    Text("eggs")
-                        .font(.system(size: 12 * scale, weight: .regular))
-                        .foregroundStyle(Color(hex: "#8E8E93"))
-                }
-                .lineLimit(1)
-            }
-            .frame(height: 30 * scale)
-        }
-        .padding(16 * scale)
-        .frame(width: 370 * scale, height: 106 * scale, alignment: .top)
-        .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24 * scale)
-                .stroke(Color(hex: "#F2F2F7"), lineWidth: 1)
-        }
-        .overlay {
-            if isOpening {
-                RoundedRectangle(cornerRadius: 24 * scale)
-                    .fill(.white.opacity(0.72))
-                    .overlay {
-                        ProgressView("Opening hatchery…")
-                            .tint(Color.appGreenPrimary)
-                            .foregroundStyle(Color.appGreenPrimary)
+                        Color.clear
+                            .frame(width: 32 * scale, height: 32 * scale)
                     }
-            }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 24 * scale))
-        .onTapGesture {
-            // The active hatchery is already rendered behind this management
-            // screen. Do not wait for its photo/layout to download again just
-            // to return to the same session.
-            guard hatchery.id != activeHatcheryID else {
-                onDismiss()
-                return
-            }
+                    .frame(height: 22 * scale)
 
-            Task { @MainActor in
-                guard let session = await controller.session(for: hatchery) else { return }
-                onSelect(session)
+                    HStack(spacing: 12 * scale) {
+                        temperaturePill(summary.overview?.averageTemperatureC, scale: scale)
+                        dimensionPill(hatchery, scale: scale)
+
+                        Spacer(minLength: 0)
+
+                        HStack(alignment: .lastTextBaseline, spacing: 2 * scale) {
+                            Text((summary.overview?.totalEggs ?? 0).formatted(.number.grouping(.never)))
+                                .font(.system(size: 17 * scale, weight: .semibold))
+                                .tracking(-0.43 * scale)
+                                .foregroundStyle(.black)
+                            Text("eggs")
+                                .font(.system(size: 12 * scale, weight: .regular))
+                                .foregroundStyle(Color(hex: "#8E8E93"))
+                        }
+                        .lineLimit(1)
+                    }
+                    .frame(height: 30 * scale)
+                }
+                .padding(16 * scale)
+                .frame(width: 370 * scale, height: 106 * scale, alignment: .top)
+                .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24 * scale)
+                        .stroke(Color(hex: "#F2F2F7"), lineWidth: 1)
+                }
+                .overlay {
+                    if isOpening {
+                        RoundedRectangle(cornerRadius: 24 * scale)
+                            .fill(.white.opacity(0.72))
+                            .overlay {
+                                ProgressView("Opening hatchery…")
+                                    .tint(Color.appGreenPrimary)
+                                    .foregroundStyle(Color.appGreenPrimary)
+                            }
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 24 * scale))
             }
+            .buttonStyle(.plain)
+            .disabled(controller.openingHatcheryID != nil)
+            .accessibilityLabel("\(hatchery.name) details")
+            .accessibilityHint("Shows hatchery details")
+
+            Button { presentDetails(for: hatchery, startsRenaming: true) } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 17 * scale, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .frame(width: 44 * scale, height: 44 * scale)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(controller.openingHatcheryID != nil)
+            .padding(.trailing, 10 * scale)
+            .padding(.top, 5 * scale)
+            .accessibilityLabel("Edit \(hatchery.name)")
         }
-        .disabled(controller.openingHatcheryID != nil)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(
-            hatchery.id == activeHatcheryID
-                ? "Current hatchery. Double tap to open it."
-                : "Double tap to open this hatchery."
-        )
+        .frame(width: 370 * scale, height: 106 * scale)
+    }
+
+    private func presentDetails(
+        for hatchery: HatcheryEntity,
+        startsRenaming: Bool = false
+    ) {
+        selectedHatcheryStartsRenaming = startsRenaming
+        selectedHatchery = hatchery
     }
 
     private func temperaturePill(_ value: Double?, scale: CGFloat) -> some View {
@@ -564,31 +565,35 @@ struct HatcheryQuickMenu: View {
     }
 }
 
-/// The bottom sheet from Figma node 94:1614. Its default state is deliberately
-/// sparse and pixel-matched; tapping the blue pencil reveals the backend-bound
-/// rename controls without mixing an editing state into the reference frame.
-private struct HatcheryManagementEditorSheet: View {
+/// The hatchery detail sheet from Figma node 116:1915. It keeps information,
+/// re-scanning, and rename actions together without navigating away from
+/// Management.
+private struct HatcheryManagementDetailSheet: View {
     let hatchery: HatcheryEntity
     let controller: HatcheryListController
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
+    let startsRenaming: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
-    @State private var isRenaming = false
+    @State private var isRenaming: Bool
     @FocusState private var isNameFocused: Bool
 
     init(
         hatchery: HatcheryEntity,
         controller: HatcheryListController,
         onRescan: @escaping (HatcheryEntity) -> Void,
-        onRename: @escaping (HatcheryEntity) -> Void
+        onRename: @escaping (HatcheryEntity) -> Void,
+        startsRenaming: Bool
     ) {
         self.hatchery = hatchery
         self.controller = controller
         self.onRescan = onRescan
         self.onRename = onRename
+        self.startsRenaming = startsRenaming
         _name = State(initialValue: hatchery.name)
+        _isRenaming = State(initialValue: startsRenaming)
     }
 
     var body: some View {
@@ -596,22 +601,34 @@ private struct HatcheryManagementEditorSheet: View {
             let contentWidth = min(358, max(0, geometry.size.width - 44))
 
             ZStack(alignment: .top) {
-                Color.white
+                Color(hex: "#F2F2F7")
                     .ignoresSafeArea()
 
-                sheetHeader(contentWidth: contentWidth)
-                    .padding(.top, 14)
+                VStack(alignment: .leading, spacing: 0) {
+                    sheetHeader(contentWidth: contentWidth)
 
-                if isRenaming {
-                    renameForm(contentWidth: contentWidth)
-                        .padding(.top, 82)
-                } else {
-                    rescanAction(contentWidth: contentWidth)
-                        .padding(.top, 80)
+                    if isRenaming {
+                        renameForm(contentWidth: contentWidth)
+                            .padding(.top, 24)
+                    } else {
+                        rescanAction(contentWidth: contentWidth)
+                            .padding(.top, 22)
+
+                        informationSection(contentWidth: contentWidth)
+                            .padding(.top, 24)
+                    }
                 }
+                .frame(width: contentWidth, alignment: .leading)
+                .padding(.top, 14)
             }
         }
         .preferredColorScheme(.light)
+        .onAppear {
+            guard startsRenaming else { return }
+            DispatchQueue.main.async {
+                isNameFocused = true
+            }
+        }
     }
 
     private func sheetHeader(contentWidth: CGFloat) -> some View {
@@ -694,6 +711,102 @@ private struct HatcheryManagementEditorSheet: View {
             .accessibilityHint("Starts a new scan for this hatchery")
         }
         .frame(width: contentWidth, alignment: .leading)
+    }
+
+    private func informationSection(contentWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Information")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.black)
+
+            Text("Hatch detail information")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.black.opacity(0.5))
+                .padding(.top, 2)
+
+            detailInformationCard(contentWidth: contentWidth)
+                .padding(.top, 16)
+        }
+        .frame(width: contentWidth, alignment: .leading)
+    }
+
+    private func detailInformationCard(contentWidth: CGFloat) -> some View {
+        let rows = [
+            ("Area", "\(formattedArea) m²"),
+            ("Section", String(hatchery.sectionCount)),
+            ("Date created", formattedCreatedDate),
+            ("Demension", formattedDimension)
+        ]
+
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                HStack(spacing: 16) {
+                    Text(row.0)
+                        .foregroundStyle(.black)
+
+                    Spacer(minLength: 8)
+
+                    Text(row.1)
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                        .multilineTextAlignment(.trailing)
+                }
+                .font(.system(size: 17, weight: .regular))
+                .frame(height: 67.25)
+
+                if index < rows.count - 1 {
+                    Rectangle()
+                        .fill(Color(hex: "#E5E5EA"))
+                        .frame(height: 1)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(width: contentWidth, height: 272)
+        .background(.white, in: RoundedRectangle(cornerRadius: 26))
+    }
+
+    private var formattedArea: String {
+        let area = hatchery.shape == .circle
+            ? .pi * hatchery.widthM * hatchery.widthM
+            : hatchery.areaM2
+        guard area.rounded() != area else { return String(Int(area)) }
+        return fixedDecimal(area)
+    }
+
+    private var formattedDimension: String {
+        "W \(fixedDecimal(hatchery.widthM)) x H \(fixedDecimal(hatchery.lengthM))m"
+    }
+
+    private var formattedCreatedDate: String {
+        guard let createdAt = hatchery.createdAt else { return "—" }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let day = calendar.component(.day, from: createdAt)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = .current
+        formatter.dateFormat = "MMMM, yyyy"
+        return "\(day)\(ordinalSuffix(for: day)) \(formatter.string(from: createdAt))"
+    }
+
+    private func fixedDecimal(_ value: Double) -> String {
+        String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
+
+    private func ordinalSuffix(for day: Int) -> String {
+        switch day % 100 {
+        case 11, 12, 13:
+            return "th"
+        default:
+            switch day % 10 {
+            case 1: return "st"
+            case 2: return "nd"
+            case 3: return "rd"
+            default: return "th"
+            }
+        }
     }
 
     private func renameForm(contentWidth: CGFloat) -> some View {

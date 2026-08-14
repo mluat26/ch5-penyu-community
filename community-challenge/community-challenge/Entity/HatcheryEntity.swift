@@ -17,6 +17,9 @@ struct HatcheryEntity: Identifiable, Hashable, Sendable {
     var lengthM: Double
     var widthM: Double
     var organizationID: UUID?
+    /// Nil only for legacy hatcheries created before the backend retained this
+    /// audit timestamp. New rows receive it from Postgres at insertion.
+    var createdAt: Date? = nil
 
     var sectionCount: Int { numberOfRows * numberOfColumns }
     var areaM2: Double { lengthM * widthM }

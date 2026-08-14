@@ -63,7 +63,6 @@ struct ContentView: View {
                 .fullScreenCover(isPresented: $isShowingHatcheryManagement) {
                     HatcheryManagementView(
                         controller: hatcheryListController,
-                        activeHatcheryID: hatchery.hatchery.id,
                         onSelect: { session in
                             isShowingHatcheryManagement = false
                             guard session.hatchery.id != hatchery.hatchery.id else { return }
@@ -74,8 +73,7 @@ struct ContentView: View {
                             onCreateHatchery()
                         },
                         onRescan: beginRescan,
-                        onRename: updateActiveHatchery,
-                        onDismiss: { isShowingHatcheryManagement = false }
+                        onRename: updateActiveHatchery
                     )
                 }
                 .toolbar(.hidden, for: .navigationBar)
