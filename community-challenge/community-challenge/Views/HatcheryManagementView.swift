@@ -57,7 +57,8 @@ struct HatcheryManagementView: View {
                         onSelect: onSelect,
                         onManagement: {},
                         onCreateNew: onCreateNew,
-                        onDismiss: dismissHatcheryMenu
+                        onDismiss: dismissHatcheryMenu,
+                        canvasOriginOverride: canvasX
                     )
                     .transition(
                         .scale(scale: 0.94, anchor: .topLeading)
@@ -408,15 +409,35 @@ struct HatcheryQuickMenu: View {
     let onManagement: () -> Void
     let onCreateNew: () -> Void
     let onDismiss: () -> Void
+    let canvasOriginOverride: CGFloat?
 
     private let referenceCanvasWidth: CGFloat = 402
     private let menuWidth: CGFloat = 250
     private let menuHeight: CGFloat = 241
 
+    init(
+        controller: HatcheryListController,
+        activeHatchery: HatcheryEntity,
+        onSelect: @escaping (HatcherySessionState) -> Void,
+        onManagement: @escaping () -> Void,
+        onCreateNew: @escaping () -> Void,
+        onDismiss: @escaping () -> Void,
+        canvasOriginOverride: CGFloat? = nil
+    ) {
+        self.controller = controller
+        self.activeHatchery = activeHatchery
+        self.onSelect = onSelect
+        self.onManagement = onManagement
+        self.onCreateNew = onCreateNew
+        self.onDismiss = onDismiss
+        self.canvasOriginOverride = canvasOriginOverride
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let canvasWidth = min(geometry.size.width, referenceCanvasWidth)
-            let canvasOrigin = max((geometry.size.width - canvasWidth) / 2, 0)
+            let canvasOrigin = canvasOriginOverride
+                ?? max((geometry.size.width - canvasWidth) / 2, 0)
             let availableMenuWidth = min(menuWidth, max(geometry.size.width - 30, 0))
 
             ZStack(alignment: .topLeading) {
