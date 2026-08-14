@@ -12,7 +12,9 @@ struct HatcheryManagementView: View {
     let onRename: (HatcheryEntity) -> Void
     let onDismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var editingHatchery: HatcheryEntity?
+    @State private var isShowingHatcheryMenu = false
 
     init(
         controller: HatcheryListController,
@@ -47,6 +49,22 @@ struct HatcheryManagementView: View {
                     .frame(width: canvasWidth, height: 874 * scale, alignment: .topLeading)
                     .clipped()
                     .offset(x: canvasX)
+
+                if isShowingHatcheryMenu, let activeHatchery {
+                    HatcheryQuickMenu(
+                        controller: controller,
+                        activeHatchery: activeHatchery,
+                        onSelect: onSelect,
+                        onManagement: {},
+                        onCreateNew: onCreateNew,
+                        onDismiss: dismissHatcheryMenu
+                    )
+                    .transition(
+                        .scale(scale: 0.94, anchor: .topLeading)
+                            .combined(with: .opacity)
+                    )
+                    .zIndex(1)
+                }
             }
             .frame(
                 width: geometry.size.width,
@@ -159,7 +177,7 @@ struct HatcheryManagementView: View {
     /// a separate top-level SwiftUI Button so every part of “Management”
     /// responds reliably on physical devices.
     private func managementMenuTapTarget(scale: CGFloat) -> some View {
-        Button(action: onDismiss) {
+        Button(action: presentHatcheryMenu) {
             Color.clear
                 .contentShape(Rectangle())
         }
@@ -168,8 +186,32 @@ struct HatcheryManagementView: View {
         .contentShape(Rectangle())
         .offset(x: 16 * scale, y: 83 * scale)
         .accessibilityIdentifier("management-menu")
-        .accessibilityLabel("Close management")
-        .accessibilityHint("Returns to the hatchery overview")
+        .accessibilityLabel("Open hatchery menu")
+        .accessibilityHint("Shows hatchery options")
+    }
+
+    private var activeHatchery: HatcheryEntity? {
+        controller.hatcheries.first { $0.id == activeHatcheryID }
+            ?? controller.hatcheries.first
+    }
+
+    private func presentHatcheryMenu() {
+        guard activeHatchery != nil else { return }
+        setHatcheryMenuPresented(true)
+    }
+
+    private func dismissHatcheryMenu() {
+        setHatcheryMenuPresented(false)
+    }
+
+    private func setHatcheryMenuPresented(_ isPresented: Bool) {
+        withAnimation(menuAnimation) {
+            isShowingHatcheryMenu = isPresented
+        }
+    }
+
+    private var menuAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12)
     }
 
     private func toolbarIcon(
