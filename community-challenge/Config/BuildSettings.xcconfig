@@ -1,0 +1,6 @@
+// Safe defaults for builds without a local Supabase configuration.
+// The optional include below overrides these values when present.
+SUPABASE_HOST = missing-supabase-configuration.invalid
+SUPABASE_ANON_KEY = missing-supabase-configuration
+
+#include? "SupabaseSecrets.xcconfig"

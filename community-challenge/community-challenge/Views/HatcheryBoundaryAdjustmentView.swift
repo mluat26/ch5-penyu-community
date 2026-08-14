@@ -4,7 +4,7 @@ import SwiftUI
 /// The dedicated boundary-editing step shown after a hatchery photo is made.
 struct HatcheryBoundaryAdjustmentView: View {
     let onRetake: () -> Void
-    let onConfirm: (UIImage, HatcheryBoundary, HatcherySandRegion) -> Void
+    let onConfirm: (UIImage, HatcheryBoundary, HatcherySandRegion) async -> Void
 
     @State private var image: UIImage
     /// The four-point perspective plane is intentionally not editable here.
@@ -18,13 +18,15 @@ struct HatcheryBoundaryAdjustmentView: View {
     @State private var replacementTask: Task<Void, Never>?
     @State private var replacementRequestID: UUID?
     @State private var isReplacingImage = false
+    @State private var isConfirming = false
+    @State private var confirmationTask: Task<Void, Never>?
 
     init(
         image: UIImage,
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion? = nil,
         onRetake: @escaping () -> Void,
-        onConfirm: @escaping (UIImage, HatcheryBoundary, HatcherySandRegion) -> Void
+        onConfirm: @escaping (UIImage, HatcheryBoundary, HatcherySandRegion) async -> Void
     ) {
         _image = State(initialValue: image)
         _boundary = State(initialValue: boundary)
@@ -54,7 +56,7 @@ struct HatcheryBoundaryAdjustmentView: View {
                     region: $sandRegion,
                     imageSize: image.size,
                     fallbackBoundary: boundary,
-                    isEditable: true
+                    isEditable: !isConfirming
                 )
 
                 GlassEffectContainer(spacing: 20) {
@@ -81,7 +83,11 @@ struct HatcheryBoundaryAdjustmentView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .toolbar(.hidden, for: .navigationBar)
-        .onDisappear { cancelReplacement() }
+        .onDisappear {
+            cancelReplacement()
+            confirmationTask?.cancel()
+            confirmationTask = nil
+        }
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }
             loadPickerItem(newItem)
@@ -95,12 +101,20 @@ struct HatcheryBoundaryAdjustmentView: View {
                 label: "Retake",
                 action: retake
             )
+            .disabled(isConfirming)
 
-            HatcheryScanPrimaryControl(systemName: "checkmark") {
-                guard let sandRegion, !isReplacingImage else { return }
-                onConfirm(image, boundary, sandRegion)
+            ZStack {
+                HatcheryScanPrimaryControl(systemName: isConfirming ? nil : "checkmark") {
+                    confirm()
+                }
+
+                if isConfirming {
+                    ProgressView()
+                        .tint(Color.appGreenPrimary)
+                        .frame(width: 87, height: 87)
+                }
             }
-            .disabled(!(sandRegion?.isValid ?? false) || isReplacingImage)
+            .disabled(!(sandRegion?.isValid ?? false) || isReplacingImage || isConfirming)
             .opacity((sandRegion?.isValid ?? false) ? 1 : 0.5)
 
             PhotosPicker(
@@ -116,6 +130,7 @@ struct HatcheryBoundaryAdjustmentView: View {
             .buttonStyle(.plain)
             .frame(width: 72, height: 78)
             .disabled(isReplacingImage)
+            .disabled(isConfirming)
         }
         .frame(height: 107)
     }
@@ -199,8 +214,28 @@ struct HatcheryBoundaryAdjustmentView: View {
     }
 
     private func retake() {
+        guard !isConfirming else { return }
         cancelReplacement()
         onRetake()
+    }
+
+    private func confirm() {
+        guard
+            let sandRegion,
+            sandRegion.isValid,
+            !isReplacingImage,
+            !isConfirming
+        else { return }
+
+        isConfirming = true
+        let confirmedImage = image
+        let confirmedBoundary = boundary
+        confirmationTask = Task {
+            await onConfirm(confirmedImage, confirmedBoundary, sandRegion)
+            guard !Task.isCancelled else { return }
+            isConfirming = false
+            confirmationTask = nil
+        }
     }
 
     private func cancelReplacement() {

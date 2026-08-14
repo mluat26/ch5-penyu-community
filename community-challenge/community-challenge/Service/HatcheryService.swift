@@ -57,6 +57,30 @@ struct HatcheryService: Sendable {
         try await hatcheryRepository.fetchAll()
     }
 
+    func hatchery(id: UUID) async throws -> HatcheryEntity {
+        try await hatcheryRepository.fetch(id: id)
+    }
+
+    /// The management cards only need aggregate nest data, not another copy of
+    /// their hatchery row. Keeping this separate avoids an N+1 read when the
+    /// list already has those rows.
+    func loadOverview(hatcheryID: UUID) async throws -> HatcheryOverview {
+        let loadedNests = try await nestRepository.fetchAll(hatcheryID: hatcheryID)
+        let readings = try await telemetryRepository.fetchReadings(
+            nestIDs: loadedNests.map(\.id),
+            in: nil
+        )
+        let latestReadings = Dictionary(grouping: readings, by: \.nestID)
+            .values
+            .compactMap { $0.max { $0.timestamp < $1.timestamp } }
+
+        return HatcheryOverview(
+            averageTemperatureC: averageTemperature(in: latestReadings),
+            nestCount: loadedNests.count,
+            totalEggs: loadedNests.reduce(0) { $0 + $1.numberOfEggs }
+        )
+    }
+
     /// Renaming is always safe; resizing is not. Shrinking the grid can leave
     /// nests on coordinates that no longer exist, which makes them invisible in
     /// every section while still counting toward the dashboard totals, so that

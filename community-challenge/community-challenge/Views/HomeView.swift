@@ -10,7 +10,7 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var controller: HatcheryController
     let onAddNest: () -> Void
-    let onSwitchHatchery: () -> Void
+    let onOpenHatcheryMenu: () -> Void
 
     @State private var presentedSection: HatcherySectionDashboard?
 
@@ -31,6 +31,7 @@ struct HomeView: View {
                         Circle()
                             .fill(Color(hex: "#FEF6ED"))
                             .frame(width: 621, height: 621)
+                            .blur(radius: 50)
                             .offset(x: -110, y: -378)
                             .allowsHitTesting(false)
                     }
@@ -84,23 +85,10 @@ struct HomeView: View {
 
     private func header(screenWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
-            Button(action: onSwitchHatchery) {
-                HStack(spacing: 4) {
-                    Text(hatchery.hatchery.name)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.title3)
-                }
-                .foregroundStyle(Color.appGreenPrimary)
-                .frame(width: 101, height: 44, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .accessibilityLabel("Switch hatchery")
+            HatcheryPopupMenuButton(
+                hatcheryName: hatchery.hatchery.name,
+                action: onOpenHatcheryMenu
+            )
 
             Spacer(minLength: 0)
 
@@ -112,7 +100,7 @@ struct HomeView: View {
             
         }
         .frame(width: max(screenWidth - 16, 0), height: 48)
-        .padding(.leading, 24)
+        .padding(.leading, 16)
     }
 
     private func toolbarIcon(
@@ -234,18 +222,19 @@ struct HomeView: View {
 
                 Spacer(minLength: 0)
 
-                Button {
-                    presentedSection = selectedSection
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.body)
-                        .foregroundStyle(Color(hex: "#0C7C4D"))
-                        .accessibilityHidden(true)
-                        .frame(width: 44, height: 44, alignment: .trailing)
+                if selectedSection != nil {
+                    Button {
+                        presentedSection = selectedSection
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.body)
+                            .foregroundStyle(Color(hex: "#0C7C4D"))
+                            .accessibilityHidden(true)
+                            .frame(width: 44, height: 44, alignment: .trailing)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show section overview")
                 }
-                .buttonStyle(.plain)
-                .disabled(selectedSection == nil)
-                .accessibilityLabel("Show section overview")
             }
             .frame(height: 44)
 
@@ -587,6 +576,6 @@ private struct SectionOverviewSheet: View {
             sessionState: .previewSample
         ),
         onAddNest: { },
-        onSwitchHatchery: { }
+        onOpenHatcheryMenu: { }
     )
 }

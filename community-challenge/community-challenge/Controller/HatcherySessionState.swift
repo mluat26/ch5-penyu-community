@@ -2,8 +2,9 @@ import UIKit
 
 /// Presentation state for the currently configured hatchery.
 ///
-/// Photos, rectification, grid projection, and sand-region metadata stay here
-/// until their Supabase Storage and database contract is defined.
+/// The private source photo and normalized layout are persisted as an immutable
+/// scan revision; rectification and section projection are rebuilt locally for
+/// the active session.
 struct HatcherySessionState: Identifiable {
     let hatchery: HatcheryEntity
     let photo: UIImage

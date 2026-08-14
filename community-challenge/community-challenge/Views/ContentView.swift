@@ -13,11 +13,16 @@ struct ContentView: View {
     let onSwitchHatchery: (HatcherySessionState) -> Void
     let onCreateHatchery: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var router = NestRouter()
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
     @State private var hatcheryListController: HatcheryListController
-    @State private var isShowingHatcheryList = false
+    @State private var isShowingHatcheryMenu = false
+    @State private var isShowingHatcheryManagement = false
+    @State private var rescanningHatchery: HatcheryEntity?
+    @State private var rescanSetupController: HatcherySetupController?
 
     init(
         hatchery: HatcherySessionState,
@@ -43,102 +48,143 @@ struct ContentView: View {
     var body: some View {
         @Bindable var router = router
 
-        NavigationStack(path: $router.path) {
-            HomeView(
-                controller: hatcheryController,
-                onAddNest: {
-                    nestController.reset()
-                    router.push(.identity)
-                },
-                onSwitchHatchery: { isShowingHatcheryList = true }
-            )
-            .sheet(isPresented: $isShowingHatcheryList) {
-                HatcheryListView(
+        ZStack {
+            NavigationStack(path: $router.path) {
+                HomeView(
+                    controller: hatcheryController,
+                    onAddNest: {
+                        nestController.reset()
+                        router.push(.identity)
+                    },
+                    onOpenHatcheryMenu: {
+                        presentHatcheryMenu()
+                    }
+                )
+                .fullScreenCover(isPresented: $isShowingHatcheryManagement) {
+                    HatcheryManagementView(
+                        controller: hatcheryListController,
+                        activeHatcheryID: hatchery.hatchery.id,
+                        onSelect: { session in
+                            isShowingHatcheryManagement = false
+                            guard session.hatchery.id != hatchery.hatchery.id else { return }
+                            onSwitchHatchery(session)
+                        },
+                        onCreateNew: {
+                            isShowingHatcheryManagement = false
+                            onCreateHatchery()
+                        },
+                        onRescan: beginRescan,
+                        onRename: updateActiveHatchery,
+                        onDismiss: { isShowingHatcheryManagement = false }
+                    )
+                }
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: NestRoute.self) { route in
+                    switch route {
+                    case .identity:
+                        AddNestIdentityView(
+                            controller: nestController,
+                            onSelectSection: { router.push(.sectionPicker) },
+                            onNext: { router.push(.eggInformation) },
+                            onCancel: finishAddNestFlow
+                        )
+                    case .sectionPicker:
+                        NestSectionPickerView(
+                            controller: nestController,
+                            grid: hatchery.grid,
+                            mapImage: hatchery.rectifiedPhoto,
+                            usesMockMapCrop: hatchery.usesMockImage,
+                            dashboard: hatcheryController.dashboard,
+                            onCancel: router.pop,
+                            onConfirm: router.pop
+                        )
+                    case .eggInformation:
+                        AddNestEggInformationView(
+                            controller: nestController,
+                            onBack: router.pop,
+                            onPreview: { router.push(.preview) },
+                            onCancel: finishAddNestFlow
+                        )
+                    case .preview:
+                        AddNestPreviewView(
+                            controller: nestController,
+                            onEdit: router.pop,
+                            onCancel: finishAddNestFlow
+                        ) {
+                            Task {
+                                guard await nestController.save() != nil else { return }
+                                await hatcheryController.load()
+                                router.replace(with: .success)
+                            }
+                        }
+                    case .success:
+                        NestRegistrationSuccessView(
+                            nestNumber: nestController.draft.nestNumber,
+                            eggCount: savedEggCount,
+                            hatchDate: savedHatchDate,
+                            temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
+                            onViewNest: {
+                                guard let nest = nestController.lastSavedNest else { return }
+                                router.push(
+                                    .nestDetail(
+                                        item: NestDashboardItem(
+                                            nest: nest,
+                                            latestTemperatureC: hatcheryController.overview?.averageTemperatureC
+                                        ),
+                                        ordinal: Int(nestController.draft.nestNumber) ?? 0,
+                                        sectionID: nestController.draft.section
+                                    )
+                                )
+                            },
+                            onBackToHatchery: finishAddNestFlow
+                        )
+                    case .nestDetail(let item, let ordinal, let sectionID):
+                        NestDetailView(
+                            item: item,
+                            ordinal: ordinal,
+                            sectionID: sectionID
+                        )
+                        .toolbar(.hidden, for: .navigationBar)
+                    }
+                }
+            }
+
+            if isShowingHatcheryMenu {
+                HatcheryQuickMenu(
                     controller: hatcheryListController,
-                    activeHatcheryID: hatchery.hatchery.id,
+                    activeHatchery: hatchery.hatchery,
                     onSelect: { session in
-                        isShowingHatcheryList = false
                         guard session.hatchery.id != hatchery.hatchery.id else { return }
                         onSwitchHatchery(session)
                     },
-                    onCreateNew: {
-                        isShowingHatcheryList = false
-                        onCreateHatchery()
+                    onManagement: {
+                        isShowingHatcheryManagement = true
+                    },
+                    onCreateNew: onCreateHatchery,
+                    onDismiss: {
+                        dismissHatcheryMenu()
                     }
                 )
-                .presentationDetents([.height(707)])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(34)
-                .presentationSizing(.page)
+                .transition(
+                    .scale(scale: 0.94, anchor: .topLeading)
+                        .combined(with: .opacity)
+                )
+                .zIndex(1)
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: NestRoute.self) { route in
-                switch route {
-                case .identity:
-                    AddNestIdentityView(
-                        controller: nestController,
-                        onSelectSection: { router.push(.sectionPicker) },
-                        onNext: { router.push(.eggInformation) },
-                        onCancel: finishAddNestFlow
-                    )
-                case .sectionPicker:
-                    NestSectionPickerView(
-                        controller: nestController,
-                        grid: hatchery.grid,
-                        mapImage: hatchery.rectifiedPhoto,
-                        usesMockMapCrop: hatchery.usesMockImage,
-                        dashboard: hatcheryController.dashboard,
-                        onCancel: router.pop,
-                        onConfirm: router.pop
-                    )
-                case .eggInformation:
-                    AddNestEggInformationView(
-                        controller: nestController,
-                        onBack: router.pop,
-                        onPreview: { router.push(.preview) },
-                        onCancel: finishAddNestFlow
-                    )
-                case .preview:
-                    AddNestPreviewView(
-                        controller: nestController,
-                        onEdit: router.pop,
-                        onCancel: finishAddNestFlow
-                    ) {
-                        Task {
-                            guard await nestController.save() != nil else { return }
-                            await hatcheryController.load()
-                            router.replace(with: .success)
-                        }
-                    }
-                case .success:
-                    NestRegistrationSuccessView(
-                        nestNumber: nestController.draft.nestNumber,
-                        eggCount: savedEggCount,
-                        hatchDate: savedHatchDate,
-                        temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
-                        onViewNest: {
-                            guard let nest = nestController.lastSavedNest else { return }
-                            router.push(
-                                .nestDetail(
-                                    item: NestDashboardItem(
-                                        nest: nest,
-                                        latestTemperatureC: hatcheryController.overview?.averageTemperatureC
-                                    ),
-                                    ordinal: Int(nestController.draft.nestNumber) ?? 0,
-                                    sectionID: nestController.draft.section
-                                )
-                            )
-                        },
-                        onBackToHatchery: finishAddNestFlow
-                    )
-                case .nestDetail(let item, let ordinal, let sectionID):
-                    NestDetailView(
-                        item: item,
-                        ordinal: ordinal,
-                        sectionID: sectionID
-                    )
-                    .toolbar(.hidden, for: .navigationBar)
-                }
+        }
+        // Prime the popup list while the dashboard is visible, so opening the
+        // hatchery menu never waits on its first list request.
+        .task { await hatcheryListController.load() }
+        .fullScreenCover(item: $rescanningHatchery) { _ in
+            if let rescanSetupController {
+                HatcherySetupFlowView(
+                    controller: rescanSetupController,
+                    onSave: finishRescan,
+                    entryPoint: .rescan,
+                    onCancel: cancelRescan
+                )
+            } else {
+                Color.clear
             }
         }
     }
@@ -146,6 +192,24 @@ struct ContentView: View {
     private func finishAddNestFlow() {
         nestController.reset()
         router.reset()
+    }
+
+    private func presentHatcheryMenu() {
+        setHatcheryMenuPresented(true)
+    }
+
+    private func dismissHatcheryMenu() {
+        setHatcheryMenuPresented(false)
+    }
+
+    private func setHatcheryMenuPresented(_ isPresented: Bool) {
+        withAnimation(menuAnimation) {
+            isShowingHatcheryMenu = isPresented
+        }
+    }
+
+    private var menuAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12)
     }
 
     private var savedEggCount: String {
@@ -158,6 +222,48 @@ struct ContentView: View {
             return nestController.draft.hatchDate
         }
         return AppDateFormatting.nestDraftDateString(date)
+    }
+
+    private func beginRescan(_ hatchery: HatcheryEntity) {
+        isShowingHatcheryManagement = false
+        rescanSetupController = container.makeHatcherySetupController(
+            editingHatchery: hatchery
+        )
+
+        // Let the management sheet and full-screen cover complete their
+        // dismissal/presentation handoff before opening the scanner.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard rescanSetupController != nil else { return }
+            rescanningHatchery = hatchery
+        }
+    }
+
+    private func finishRescan(_ session: HatcherySessionState) {
+        rescanningHatchery = nil
+        rescanSetupController = nil
+        onSwitchHatchery(session)
+    }
+
+    private func cancelRescan() {
+        rescanningHatchery = nil
+        rescanSetupController = nil
+    }
+
+    private func updateActiveHatchery(_ updated: HatcheryEntity) {
+        guard updated.id == hatchery.hatchery.id else { return }
+
+        onSwitchHatchery(
+            HatcherySessionState(
+                hatchery: updated,
+                photo: hatchery.photo,
+                rectifiedPhoto: hatchery.rectifiedPhoto,
+                usesMockImage: hatchery.usesMockImage,
+                boundary: hatchery.boundary,
+                sandRegion: hatchery.sandRegion,
+                grid: hatchery.grid
+            )
+        )
     }
 }
 
