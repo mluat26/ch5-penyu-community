@@ -331,13 +331,7 @@ struct HatcheryPopupMenuButton: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .leading) {
-                // A concrete full-size label surface makes every point in the
-                // target hit-testable on hardware, not just rendered glyphs.
-                Rectangle()
-                    .fill(Color.white.opacity(0.001))
-                    .frame(width: touchTargetWidth, height: touchTargetHeight)
-
+            HStack(spacing: 0) {
                 HStack(spacing: 4) {
                     Text(hatcheryName)
                         .font(.title3)
@@ -350,13 +344,14 @@ struct HatcheryPopupMenuButton: View {
                 }
                 .foregroundStyle(Color.appGreenPrimary)
                 .frame(width: 148, height: 48, alignment: .leading)
-                .allowsHitTesting(false)
+
+                Spacer(minLength: 0)
             }
             .frame(width: touchTargetWidth, height: touchTargetHeight)
-            .contentShape(Rectangle())
+            .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
+        .contentShape(.interaction, Rectangle())
         .accessibilityIdentifier("hatchery-menu")
         .accessibilityLabel("Switch hatchery")
         .accessibilityHint("Opens the hatchery menu")
