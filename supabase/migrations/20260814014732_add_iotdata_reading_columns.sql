@@ -25,15 +25,31 @@ alter table public.iotdata add constraint iotdata_sensor_status_known
       or sensor_status in ('online', 'offline', 'faulty'));
 
 -- Matches AlertLevel. Same reasoning.
+--
+-- NOT VALID for the same reason as iotdata_nest_id_fkey in 20260813151652:
+-- this table already holds junk rows that predate every rule the app relies
+-- on, and one of them carries an alert string outside this set. Adding the
+-- constraint plainly fails with SQLSTATE 23514 and takes the whole migration
+-- down with it. NOT VALID still enforces the check on every future insert and
+-- update; it only declines to re-check rows written before now. Those rows are
+-- unreachable from the app, whose policy on this table grants INSERT and
+-- nothing else. Once they are cleaned up, promote this with:
+--     alter table public.iotdata validate constraint iotdata_alert_known;
 alter table public.iotdata add constraint iotdata_alert_known
   check (alert is null
-      or alert in ('none', 'low', 'high', 'critical'));
+      or alert in ('none', 'low', 'high', 'critical'))
+  not valid;
 
 -- Temperature is the reason this table exists; a reading without one is noise.
 -- Not NOT NULL, because rows predating this migration may lack it.
+--
+-- NOT VALID as well: temperature is the other column those junk rows already
+-- populate, so it carries the same risk of holding a value this rejects.
+--     alter table public.iotdata validate constraint iotdata_temperature_sane;
 alter table public.iotdata add constraint iotdata_temperature_sane
   check (temperature is null
-      or (temperature > -50 and temperature < 100));
+      or (temperature > -50 and temperature < 100))
+  not valid;
 
 -- Every query is "the readings for these nests, newest first". Without this
 -- index that is a full scan, and this table grows unbounded: one row per

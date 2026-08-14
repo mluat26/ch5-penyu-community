@@ -3,12 +3,13 @@ import Supabase
 
 /// The Supabase project this app talks to.
 ///
-/// Credentials live in `SupabaseSecrets`, which is git-ignored because this
-/// repository is public. An anon key is normally safe to ship, since it names
-/// the project rather than a user and Row Level Security decides what it may
-/// touch — but the current dev policy grants anon full access to `hatchery` and
-/// `nest`, so today this key *is* effectively a database credential. Keep it
-/// out of version control until real ownership policies replace that one.
+/// Credentials come from Info.plist values declared by `Config/Info.plist` and
+/// populated by `Config/BuildSettings.xcconfig`. That tracked file optionally
+/// includes the local, git-ignored `Config/SupabaseSecrets.xcconfig` file.
+///
+/// An anon/publishable key necessarily ships in a client app; its safety comes
+/// from Row Level Security. The app exchanges it for a per-device anonymous
+/// Auth session before it accesses owner-scoped hatcheries or private Storage.
 enum SupabaseConfig {
     /// Ensures there is a session before anything tries to write.
     ///
@@ -35,12 +36,43 @@ enum SupabaseConfig {
     }
 
     static let client = SupabaseClient(
-        supabaseURL: SupabaseSecrets.projectURL,
-        supabaseKey: SupabaseSecrets.anonKey,
+        supabaseURL: projectURL,
+        supabaseKey: anonKey,
         options: SupabaseClientOptions(
             db: .init(decoder: .postgresDateAware)
         )
     )
+
+    /// A harmless valid URL lets local builds and offline tests start before a
+    /// developer has created their ignored configuration file. Any attempted
+    /// backend request then fails without exposing a real project endpoint.
+    private static let placeholderURL = URL(string: "https://missing-supabase-configuration.invalid")!
+    private static let placeholderAnonKey = "missing-supabase-configuration"
+
+    private static var projectURL: URL {
+        let value = configurationValue(
+            for: "SUPABASE_URL",
+            fallback: placeholderURL.absoluteString
+        )
+
+        guard let url = URL(string: value), url.scheme == "https", url.host != nil else {
+            return placeholderURL
+        }
+        return url
+    }
+
+    private static var anonKey: String {
+        configurationValue(for: "SUPABASE_ANON_KEY", fallback: placeholderAnonKey)
+    }
+
+    private static func configurationValue(for key: String, fallback: String) -> String {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
+            return fallback
+        }
+
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty || trimmedValue.hasPrefix("$(") ? fallback : trimmedValue
+    }
 }
 
 private extension JSONDecoder {

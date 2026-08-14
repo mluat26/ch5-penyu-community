@@ -6,12 +6,18 @@ import Supabase
 /// that needs to know which one is in use.
 actor SupabaseHatcheryRepository: HatcheryRepository {
     private let client: SupabaseClient
+    private let identity: any SupabaseIdentityProviding
 
-    init(client: SupabaseClient) {
+    init(
+        client: SupabaseClient,
+        identity: any SupabaseIdentityProviding
+    ) {
         self.client = client
+        self.identity = identity
     }
 
     func fetch(id: UUID) async throws -> HatcheryEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [HatcheryDTO] = try await client
             .from("hatchery")
             .select()
@@ -26,6 +32,7 @@ actor SupabaseHatcheryRepository: HatcheryRepository {
     }
 
     func fetchAll() async throws -> [HatcheryEntity] {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [HatcheryDTO] = try await client
             .from("hatchery")
             .select()
@@ -37,6 +44,7 @@ actor SupabaseHatcheryRepository: HatcheryRepository {
     }
 
     func create(_ input: CreateHatcheryInput) async throws -> HatcheryEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let insertDTO = try input.toDTO()
         let rows: [HatcheryDTO] = try await client
             .from("hatchery")
@@ -52,6 +60,7 @@ actor SupabaseHatcheryRepository: HatcheryRepository {
     }
 
     func update(id: UUID, _ input: UpdateHatcheryInput) async throws -> HatcheryEntity {
+        _ = try await identity.ensureAuthenticatedUserID()
         let updateDTO = input.toDTO()
         let rows: [HatcheryDTO] = try await client
             .from("hatchery")
@@ -68,6 +77,7 @@ actor SupabaseHatcheryRepository: HatcheryRepository {
     }
 
     func delete(id: UUID) async throws {
+        _ = try await identity.ensureAuthenticatedUserID()
         let rows: [HatcheryDTO] = try await client
             .from("hatchery")
             .delete()

@@ -21,6 +21,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		9A08F0010000000000000001 /* BuildSettings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = BuildSettings.xcconfig; sourceTree = "<group>"; };
+		9A08F0010000000000000002 /* SupabaseSecrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = SupabaseSecrets.xcconfig.example; sourceTree = "<group>"; };
+		9A08F0010000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C5CB68E3302956C10077B52E /* community-challenge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "community-challenge.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5CB6901302A00010077B52E /* community-challengeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "community-challengeTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -57,11 +60,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9A08F0010000000000000003 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				9A08F0010000000000000001 /* BuildSettings.xcconfig */,
+				9A08F0010000000000000002 /* SupabaseSecrets.xcconfig.example */,
+				9A08F0010000000000000004 /* Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		C5CB68DA302956C10077B52E = {
 			isa = PBXGroup;
 			children = (
 				C5CB68E5302956C10077B52E /* community-challenge */,
 				C5CB6902302A00010077B52E /* community-challengeTests */,
+				9A08F0010000000000000003 /* Config */,
 				C5CB68E4302956C10077B52E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -332,14 +346,17 @@
 		};
 		C5CB68EF302956C20077B52E /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9A08F0010000000000000001 /* BuildSettings.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6CC5V2CXMD;
+				DEVELOPMENT_TEAM = NA9CXGVRMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan your hatchery area and map the turtle nest grid.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use your photos to let you pick an existing hatchery image.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -352,7 +369,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jason";
+				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -366,14 +383,17 @@
 		};
 		C5CB68F0302956C20077B52E /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9A08F0010000000000000001 /* BuildSettings.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6CC5V2CXMD;
+				DEVELOPMENT_TEAM = NA9CXGVRMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan your hatchery area and map the turtle nest grid.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use your photos to let you pick an existing hatchery image.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -386,7 +406,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jason";
+				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -413,7 +433,7 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jasonTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challengeTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -439,7 +459,7 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jasonTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challengeTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;

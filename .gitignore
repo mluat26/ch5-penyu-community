@@ -15,8 +15,9 @@ community-challenge/Assets/
 # Secrets. This repository is public, and the current dev RLS policy gives the
 # anon key full access to hatchery and nest, so the key is a real credential
 # until ownership policies replace that policy.
-# Copy community-challenge/SupabaseSecrets.swift.example to the path below.
-community-challenge/community-challenge/Service/SupabaseSecrets.swift
+# Copy community-challenge/Config/SupabaseSecrets.xcconfig.example to this
+# ignored path, then add the local values.
+community-challenge/Config/SupabaseSecrets.xcconfig
 
 # Supabase CLI local state (contains the linked project ref).
 supabase/.temp/
