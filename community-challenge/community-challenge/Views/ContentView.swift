@@ -153,6 +153,7 @@ struct ContentView: View {
                 HatcheryQuickMenu(
                     controller: hatcheryListController,
                     activeHatchery: hatchery.hatchery,
+                    selectedDestination: .hatchery(hatchery.hatchery.id),
                     onSelect: { session in
                         guard session.hatchery.id != hatchery.hatchery.id else { return }
                         onSwitchHatchery(session)

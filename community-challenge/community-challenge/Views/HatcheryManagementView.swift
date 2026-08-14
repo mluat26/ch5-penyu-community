@@ -50,15 +50,15 @@ struct HatcheryManagementView: View {
                     .clipped()
                     .offset(x: canvasX)
 
-                if isShowingHatcheryMenu, let activeHatchery {
+                if isShowingHatcheryMenu {
                     HatcheryQuickMenu(
                         controller: controller,
-                        activeHatchery: activeHatchery,
+                        activeHatchery: nil,
+                        selectedDestination: .management,
                         onSelect: onSelect,
                         onManagement: {},
                         onCreateNew: onCreateNew,
-                        onDismiss: dismissHatcheryMenu,
-                        canvasOriginOverride: canvasX
+                        onDismiss: dismissHatcheryMenu
                     )
                     .transition(
                         .scale(scale: 0.94, anchor: .topLeading)
@@ -92,24 +92,24 @@ struct HatcheryManagementView: View {
     }
 
     private func managementBackdrop(scale: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            Color.white
-
-            Circle()
-                .fill(Color(hex: "#FEF6ED"))
-                .frame(width: 621 * scale, height: 621 * scale)
-                .blur(radius: 50 * scale)
-                .offset(x: -110 * scale, y: -378 * scale)
-        }
-        .allowsHitTesting(false)
+        Color.white
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(Color(hex: "#FEF6ED"))
+                    .frame(width: 621 * scale, height: 621 * scale)
+                    .blur(radius: 50 * scale)
+                    .offset(x: -110 * scale, y: -378 * scale)
+            }
+            .allowsHitTesting(false)
     }
 
     private func managementCanvas(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Image("HatcheryManagementHero")
                 .resizable()
-                .scaledToFit()
+                .scaledToFill()
                 .frame(width: 284 * scale, height: 158 * scale)
+                .clipped()
                 .offset(x: 195 * scale, y: 115 * scale)
                 .accessibilityHidden(true)
 
@@ -191,13 +191,7 @@ struct HatcheryManagementView: View {
         .accessibilityHint("Shows hatchery options")
     }
 
-    private var activeHatchery: HatcheryEntity? {
-        controller.hatcheries.first { $0.id == activeHatcheryID }
-            ?? controller.hatcheries.first
-    }
-
     private func presentHatcheryMenu() {
-        guard activeHatchery != nil else { return }
         setHatcheryMenuPresented(true)
     }
 
@@ -403,41 +397,27 @@ struct HatcherySelectorLabel: View {
 /// SwiftUI Buttons instead of a system popover: the design stays pixel-stable
 /// and the presentation is owned by ContentView rather than a UIKit host view.
 struct HatcheryQuickMenu: View {
+    enum SelectedDestination: Equatable {
+        case hatchery(UUID)
+        case management
+    }
+
     @Bindable var controller: HatcheryListController
-    let activeHatchery: HatcheryEntity
+    let activeHatchery: HatcheryEntity?
+    let selectedDestination: SelectedDestination
     let onSelect: (HatcherySessionState) -> Void
     let onManagement: () -> Void
     let onCreateNew: () -> Void
     let onDismiss: () -> Void
-    let canvasOriginOverride: CGFloat?
 
     private let referenceCanvasWidth: CGFloat = 402
     private let menuWidth: CGFloat = 250
     private let menuHeight: CGFloat = 241
 
-    init(
-        controller: HatcheryListController,
-        activeHatchery: HatcheryEntity,
-        onSelect: @escaping (HatcherySessionState) -> Void,
-        onManagement: @escaping () -> Void,
-        onCreateNew: @escaping () -> Void,
-        onDismiss: @escaping () -> Void,
-        canvasOriginOverride: CGFloat? = nil
-    ) {
-        self.controller = controller
-        self.activeHatchery = activeHatchery
-        self.onSelect = onSelect
-        self.onManagement = onManagement
-        self.onCreateNew = onCreateNew
-        self.onDismiss = onDismiss
-        self.canvasOriginOverride = canvasOriginOverride
-    }
-
     var body: some View {
         GeometryReader { geometry in
             let canvasWidth = min(geometry.size.width, referenceCanvasWidth)
-            let canvasOrigin = canvasOriginOverride
-                ?? max((geometry.size.width - canvasWidth) / 2, 0)
+            let canvasOrigin = max((geometry.size.width - canvasWidth) / 2, 0)
             let availableMenuWidth = min(menuWidth, max(geometry.size.width - 30, 0))
 
             ZStack(alignment: .topLeading) {
@@ -456,6 +436,8 @@ struct HatcheryQuickMenu: View {
     }
 
     private var displayedHatcheries: [HatcheryEntity] {
+        guard let activeHatchery else { return controller.hatcheries }
+
         let remainingHatcheries = controller.hatcheries.filter {
             $0.id != activeHatchery.id
         }
@@ -491,7 +473,8 @@ struct HatcheryQuickMenu: View {
 
             actionRow(
                 title: "Management",
-                systemImage: "list.bullet.below.rectangle"
+                systemImage: "list.bullet.below.rectangle",
+                isSelected: selectedDestination == .management
             ) {
                 onDismiss()
                 onManagement()
@@ -512,7 +495,7 @@ struct HatcheryQuickMenu: View {
     }
 
     private func hatcheryRow(_ hatchery: HatcheryEntity) -> some View {
-        let isActive = hatchery.id == activeHatchery.id
+        let isActive = selectedDestination == .hatchery(hatchery.id)
 
         return Button {
             onDismiss()
@@ -558,11 +541,12 @@ struct HatcheryQuickMenu: View {
     private func actionRow(
         title: String,
         systemImage: String,
+        isSelected: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: systemImage)
+                Image(systemName: isSelected ? "checkmark" : systemImage)
                     .font(.system(size: 22, weight: .regular))
                     .frame(width: 24, height: 24)
 
