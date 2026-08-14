@@ -324,23 +324,39 @@ struct HatcheryPopupMenuButton: View {
     let hatcheryName: String
     let action: () -> Void
 
+    /// Preserves the 148 × 48pt Figma artwork while providing a forgiving
+    /// 176 × 56pt native Button target on physical devices.
+    private let touchTargetWidth: CGFloat = 176
+    private let touchTargetHeight: CGFloat = 56
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Text(hatcheryName)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            ZStack(alignment: .leading) {
+                // A concrete full-size label surface makes every point in the
+                // target hit-testable on hardware, not just rendered glyphs.
+                Rectangle()
+                    .fill(Color.white.opacity(0.001))
+                    .frame(width: touchTargetWidth, height: touchTargetHeight)
 
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.title3)
+                HStack(spacing: 4) {
+                    Text(hatcheryName)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.title3)
+                }
+                .foregroundStyle(Color.appGreenPrimary)
+                .frame(width: 148, height: 48, alignment: .leading)
+                .allowsHitTesting(false)
             }
-            .foregroundStyle(Color.appGreenPrimary)
-            .frame(width: 148, height: 48, alignment: .leading)
+            .frame(width: touchTargetWidth, height: touchTargetHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
         .accessibilityIdentifier("hatchery-menu")
         .accessibilityLabel("Switch hatchery")
         .accessibilityHint("Opens the hatchery menu")
