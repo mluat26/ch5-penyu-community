@@ -42,7 +42,13 @@ final class NestController {
                     datePredictedHatch: AppDateFormatting.parseNestDraftDate(draft.hatchDate),
                     placeEggsLaid: nil,
                     placementRow: sectionRow,
-                    placementColumn: sectionColumn
+                    placementColumn: sectionColumn,
+                    // Queues the nest for its first visit. The wizard already
+                    // asks for this date; without persisting it the nest is
+                    // never due for inspection and nobody is prompted to look.
+                    nextInspectionDate: AppDateFormatting.parseNestDraftDate(
+                        draft.inspectionDate
+                    )
                 )
             )
             lastSavedNest = nest

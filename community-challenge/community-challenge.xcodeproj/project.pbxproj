@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		628A495F9A0876B9A620E74E /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DA64574A4B33E1F3B7315863 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C5CB690A302A00010077B52E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -39,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				628A495F9A0876B9A620E74E /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +95,7 @@
 			);
 			name = "community-challenge";
 			packageProductDependencies = (
+				DA64574A4B33E1F3B7315863 /* Supabase */,
 			);
 			productName = "community-challenge";
 			productReference = C5CB68E3302956C10077B52E /* community-challenge.app */;
@@ -146,6 +152,9 @@
 			);
 			mainGroup = C5CB68DA302956C10077B52E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				63F34389543C49536E225216 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C5CB68E4302956C10077B52E /* Products */;
 			projectDirPath = "";
@@ -472,6 +481,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		63F34389543C49536E225216 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DA64574A4B33E1F3B7315863 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 63F34389543C49536E225216 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C5CB68DB302956C10077B52E /* Project object */;
 }

@@ -9,6 +9,9 @@ struct CreateNestInput: Hashable, Sendable {
     var placeEggsLaid: Date?
     var placementRow: Int?
     var placementColumn: Int?
+    /// When the first inspection is expected. Without it the nest is never
+    /// queued, so nothing ever prompts anyone to go and look at it.
+    var nextInspectionDate: Date?
 }
 
 struct UpdateNestInput: Hashable, Sendable {
@@ -18,11 +21,6 @@ struct UpdateNestInput: Hashable, Sendable {
     var placeEggsLaid: Date?
     var placementRow: Int?
     var placementColumn: Int?
-}
-
-struct RecordHatchResultInput: Hashable, Sendable {
-    var successEggsHatch: Int
-    var failEggsHatch: Int
 }
 
 struct NestService: Sendable {
@@ -47,6 +45,23 @@ struct NestService: Sendable {
         try await repository.fetchAll(hatcheryID: hatcheryID)
     }
 
+    /// Nests whose inspection date has arrived, soonest first. Filters the
+    /// hatchery's nests rather than issuing its own query: the dashboard
+    /// already loads all of them, and a hatchery holds hundreds, not millions.
+    // ponytail: client-side filter, add a repository query if a hatchery ever
+    // grows past what the dashboard can load in one go.
+    func nestsDueForInspection(
+        hatcheryID: UUID,
+        on date: Date = Date()
+    ) async throws -> [NestEntity] {
+        try await repository.fetchAll(hatcheryID: hatcheryID)
+            .filter { $0.isDueForInspection(on: date) }
+            .sorted {
+                ($0.nextInspectionDate ?? .distantFuture)
+                    < ($1.nextInspectionDate ?? .distantFuture)
+            }
+    }
+
     func updateNest(id: UUID, _ input: UpdateNestInput) async throws -> NestEntity {
         guard input.numberOfEggs > 0 else {
             throw DomainValidationError.invalidEggCount
@@ -56,12 +71,5 @@ struct NestService: Sendable {
 
     func deleteNest(id: UUID) async throws {
         try await repository.delete(id: id)
-    }
-
-    func recordHatchResult(
-        nestID: UUID,
-        input: RecordHatchResultInput
-    ) async throws -> NestEntity {
-        try await repository.recordHatchResult(nestID: nestID, input: input)
     }
 }

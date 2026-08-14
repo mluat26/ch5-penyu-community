@@ -10,6 +10,7 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var controller: HatcheryController
     let onAddNest: () -> Void
+    let onSwitchHatchery: () -> Void
 
     @State private var presentedSection: HatcherySectionDashboard?
 
@@ -83,18 +84,23 @@ struct HomeView: View {
 
     private func header(screenWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
-            HStack(spacing: 4) {
-                Text(hatchery.hatchery.name)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            Button(action: onSwitchHatchery) {
+                HStack(spacing: 4) {
+                    Text(hatchery.hatchery.name)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
 
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.title3)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.title3)
+                }
+                .foregroundStyle(Color.appGreenPrimary)
+                .frame(width: 101, height: 44, alignment: .leading)
             }
-            .foregroundStyle(Color.appGreenPrimary)
-            .frame(width: 101, height: 44, alignment: .leading)
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Switch hatchery")
 
             Spacer(minLength: 0)
 
@@ -580,6 +586,7 @@ private struct SectionOverviewSheet: View {
         controller: AppContainer().makeHatcheryController(
             sessionState: .previewSample
         ),
-        onAddNest: { }
+        onAddNest: { },
+        onSwitchHatchery: { }
     )
 }

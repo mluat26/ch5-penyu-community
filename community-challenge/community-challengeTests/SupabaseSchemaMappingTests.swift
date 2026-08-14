@@ -59,8 +59,9 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         XCTAssertThrowsError(try input.toDTO())
     }
 
-    func testNestDTOLeavesUnsupportedDomainFieldsUnset() throws {
+    func testNestDTOMapsHatchCountsAndInspectionDate() throws {
         let hatcheryID = UUID()
+        let nextInspection = Date()
         let dto = NestDTO(
             id: UUID(),
             numberOfEggs: 100,
@@ -68,17 +69,42 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             datePredictedHatch: nil,
             placeEggsLaid: nil,
             successEggsHatch: 90,
+            failEggsHatch: 10,
             hatcheryID: hatcheryID,
             placementRow: 1,
             placementColumn: 2,
-            founderID: nil
+            founderID: nil,
+            nextInspectionDate: nextInspection
         )
 
         let nest = try dto.toEntity()
 
         XCTAssertEqual(nest.hatcheryID, hatcheryID)
         XCTAssertNil(nest.datePredictedHatch)
-        XCTAssertNil(nest.failEggsHatch)
+        // fail_eggs_hatch and next_inspection_date now exist in the schema, so
+        // neither is dropped in mapping any more.
+        XCTAssertEqual(nest.successEggsHatch, 90)
+        XCTAssertEqual(nest.failEggsHatch, 10)
+        XCTAssertEqual(nest.nextInspectionDate, nextInspection)
+    }
+
+    func testInspectionInsertUsesCurrentColumns() throws {
+        let nestID = UUID()
+        let dto = RecordInspectionInput(
+            nestID: nestID,
+            inspectedOn: Date(),
+            outcome: .complete,
+            eggsHatched: 70,
+            eggsRotten: 30,
+            nextInspectionDate: nil
+        ).toDTO()
+
+        let object = try encodedObject(dto)
+
+        XCTAssertEqual(object["nest_id"] as? String, nestID.uuidString)
+        XCTAssertEqual(object["outcome"] as? String, "complete")
+        XCTAssertEqual(object["eggs_hatched"] as? Int, 70)
+        XCTAssertEqual(object["eggs_rotten"] as? Int, 30)
     }
 
     func testNestInsertIncludesPredictedHatchColumn() {

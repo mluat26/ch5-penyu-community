@@ -10,19 +10,33 @@ import SwiftUI
 struct ContentView: View {
     let hatchery: HatcherySessionState
     let container: AppContainer
+    let onSwitchHatchery: (HatcherySessionState) -> Void
+    let onCreateHatchery: () -> Void
 
     @State private var router = NestRouter()
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
+    @State private var hatcheryListController: HatcheryListController
+    @State private var isShowingHatcheryList = false
 
-    init(hatchery: HatcherySessionState, container: AppContainer) {
+    init(
+        hatchery: HatcherySessionState,
+        container: AppContainer,
+        onSwitchHatchery: @escaping (HatcherySessionState) -> Void = { _ in },
+        onCreateHatchery: @escaping () -> Void = {}
+    ) {
         self.hatchery = hatchery
         self.container = container
+        self.onSwitchHatchery = onSwitchHatchery
+        self.onCreateHatchery = onCreateHatchery
         _hatcheryController = State(
             initialValue: container.makeHatcheryController(sessionState: hatchery)
         )
         _nestController = State(
             initialValue: container.makeNestController(hatcheryID: hatchery.hatchery.id)
+        )
+        _hatcheryListController = State(
+            initialValue: container.makeHatcheryListController()
         )
     }
 
@@ -35,8 +49,28 @@ struct ContentView: View {
                 onAddNest: {
                     nestController.reset()
                     router.push(.identity)
-                }
+                },
+                onSwitchHatchery: { isShowingHatcheryList = true }
             )
+            .sheet(isPresented: $isShowingHatcheryList) {
+                HatcheryListView(
+                    controller: hatcheryListController,
+                    activeHatcheryID: hatchery.hatchery.id,
+                    onSelect: { session in
+                        isShowingHatcheryList = false
+                        guard session.hatchery.id != hatchery.hatchery.id else { return }
+                        onSwitchHatchery(session)
+                    },
+                    onCreateNew: {
+                        isShowingHatcheryList = false
+                        onCreateHatchery()
+                    }
+                )
+                .presentationDetents([.height(707)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: NestRoute.self) { route in
                 switch route {

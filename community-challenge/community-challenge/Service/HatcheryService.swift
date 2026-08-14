@@ -10,6 +10,18 @@ struct CreateHatcheryInput: Hashable, Sendable {
     var organizationID: UUID?
 }
 
+/// Edit payload for the columns currently present in `public.hatchery`.
+///
+/// `shape` is deliberately absent: the setup flow always creates rectangles and
+/// nothing offers a choice, so there is no edit to make.
+struct UpdateHatcheryInput: Hashable, Sendable {
+    var name: String
+    var numberOfRows: Int
+    var numberOfColumns: Int
+    var lengthM: Double
+    var widthM: Double
+}
+
 struct HatcheryService: Sendable {
     private let hatcheryRepository: any HatcheryRepository
     private let nestRepository: any NestRepository
@@ -39,6 +51,59 @@ struct HatcheryService: Sendable {
         }
 
         return try await hatcheryRepository.create(input)
+    }
+
+    func hatcheries() async throws -> [HatcheryEntity] {
+        try await hatcheryRepository.fetchAll()
+    }
+
+    /// Renaming is always safe; resizing is not. Shrinking the grid can leave
+    /// nests on coordinates that no longer exist, which makes them invisible in
+    /// every section while still counting toward the dashboard totals, so that
+    /// case is refused rather than silently accepted.
+    func updateHatchery(
+        id: UUID,
+        _ input: UpdateHatcheryInput
+    ) async throws -> HatcheryEntity {
+        guard !input.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DomainValidationError.emptyName
+        }
+        guard
+            input.numberOfRows > 0,
+            input.numberOfColumns > 0,
+            input.lengthM > 0,
+            input.widthM > 0
+        else {
+            throw DomainValidationError.invalidDimensions
+        }
+
+        let strandedCount = try await nestRepository
+            .fetchAll(hatcheryID: id)
+            .filter { nest in
+                guard let row = nest.placementRow, let column = nest.placementColumn else {
+                    return false
+                }
+                return row >= input.numberOfRows || column >= input.numberOfColumns
+            }
+            .count
+
+        guard strandedCount == 0 else {
+            throw DomainValidationError.resizeWouldStrandNests(count: strandedCount)
+        }
+
+        return try await hatcheryRepository.update(id: id, input)
+    }
+
+    /// `nest_hatchery_id_fkey` would reject this anyway, but a raw foreign key
+    /// violation is not something the UI can explain. Counting first turns it
+    /// into a message naming how many nests are in the way.
+    func deleteHatchery(id: UUID) async throws {
+        let nestCount = try await nestRepository.fetchAll(hatcheryID: id).count
+        guard nestCount == 0 else {
+            throw DomainValidationError.hatcheryNotEmpty(nestCount: nestCount)
+        }
+
+        try await hatcheryRepository.delete(id: id)
     }
 
     func loadDashboard(hatcheryID: UUID) async throws -> HatcheryDashboard {
