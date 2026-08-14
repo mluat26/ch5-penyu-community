@@ -63,6 +63,8 @@ struct HomeView: View {
                     .padding(.leading, 16)
                 }
                 .frame(width: screenWidth, alignment: .leading)
+
+                hatcherySelectorTapTarget(screenWidth: screenWidth)
             }
             .frame(width: screenWidth, height: geometry.size.height, alignment: .top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -84,11 +86,12 @@ struct HomeView: View {
     }
 
     private func header(screenWidth: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            HatcheryPopupMenuButton(
-                hatcheryName: hatchery.hatchery.name,
-                action: onOpenHatcheryMenu
-            )
+        let headerWidth = max(screenWidth - 16, 0)
+        let selectorTapWidth = min(176, max(headerWidth - 156, 0))
+
+        return HStack(spacing: 0) {
+            HatcherySelectorLabel(hatcheryName: hatchery.hatchery.name)
+                .frame(width: selectorTapWidth, height: 48, alignment: .leading)
 
             Spacer(minLength: 0)
 
@@ -97,10 +100,30 @@ struct HomeView: View {
                 toolbarIcon(systemName: "person", label: "Profile")
             }
             .frame(width: 156, height: 48)
-            
         }
-        .frame(width: max(screenWidth - 16, 0), height: 48)
+        .frame(width: headerWidth, height: 48)
         .padding(.leading, 16)
+    }
+
+    /// Kept as a top-level sibling of the dashboard rather than nested inside
+    /// the title artwork. On physical devices this gives the selector one
+    /// straightforward native Button hit-test path across its full target.
+    private func hatcherySelectorTapTarget(screenWidth: CGFloat) -> some View {
+        let headerWidth = max(screenWidth - 16, 0)
+        let tapWidth = min(176, max(headerWidth - 156, 0))
+
+        return Button(action: onOpenHatcheryMenu) {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: tapWidth, height: 56)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("hatchery-menu")
+        .accessibilityLabel("Switch hatchery")
+        .accessibilityHint("Opens the hatchery menu")
+        .padding(.leading, 16)
+        .padding(.top, 83)
     }
 
     private func toolbarIcon(
