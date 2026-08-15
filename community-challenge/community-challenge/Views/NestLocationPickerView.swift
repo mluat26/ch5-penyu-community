@@ -61,6 +61,19 @@ final class UserLocationProvider: NSObject, CLLocationManagerDelegate {
     }
 }
 
+/// `Label`'s default style pins the icon to the title's first-line baseline,
+/// which looks fine for one line but leaves the icon floating above a
+/// wrapped, multi-line title. This centers the icon against the whole title
+/// block instead.
+private struct CenteredLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            configuration.icon
+            configuration.title
+        }
+    }
+}
+
 /// Records where a clutch was found, which is not where it ends up: eggs are
 /// relocated into the hatchery, so the grid placement chosen on the previous
 /// screen says nothing about the origin beach.
@@ -178,13 +191,23 @@ struct NestLocationPickerView: View {
             coordinate == nil
                 ? "Press and hold on the map to set the location pin."
                 : "Press and hold again to move the pin.",
-            systemImage: "hand.tap"
+            systemImage: "hand.tap.fill"
         )
-        .font(.footnote)
+        // Label's default aligns the icon to the first line's text baseline,
+        // which reads as "floating above" once the icon is scaled up and the
+        // title wraps to two lines. Centering against the whole title block
+        // keeps it visually level regardless of line count.
+        .labelStyle(CenteredLabelStyle())
+        .font(.body)
+        .imageScale(.large)
         .foregroundStyle(Color.appNeutralGray1)
+        // The text shortens once a pin exists. Reserving both lines and the
+        // full width keeps the banner one fixed size across that swap.
+        .lineLimit(2, reservesSpace: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.regularMaterial, in: Capsule())
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .padding(.top, 70)
         .padding(.horizontal, 16)
     }
@@ -194,8 +217,8 @@ struct NestLocationPickerView: View {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.appNeutralBlack)
-                .frame(width: 40, height: 40)
-                .background(.regularMaterial, in: Circle())
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular, in: .circle)
         }
         .buttonStyle(.plain)
         .padding(.top, 12)
@@ -419,4 +442,29 @@ struct PinnedLocationSheet: View {
             + [NestLocationPickerView.formattedCoordinates(coordinate)])
             .joined(separator: "\n")
     }
+}
+
+#Preview("Pick nest location", traits: .fixedLayout(width: 402, height: 874)) {
+    NestLocationPickerView(
+        controller: NestController(
+            hatcheryID: UUID(),
+            nestService: NestService(repository: InMemoryNestRepository())
+        ),
+        onCancel: { },
+        onSave: { }
+    )
+}
+
+// The map itself needs a device to render, so the card gets its own preview:
+// it is the part with layout worth checking.
+#Preview("Pinned location card", traits: .fixedLayout(width: 402, height: 874)) {
+    PinnedLocationSheet(
+        coordinate: CLLocationCoordinate2D(latitude: -8.72, longitude: 115.16),
+        placeName: "Kuta Beach",
+        addressLines: ["Jl. Pantai Kuta", "Kuta", "Badung", "Bali 80361"],
+        isResolvingAddress: false,
+        distanceText: "120 m away",
+        onClear: { },
+        onSave: { }
+    )
 }
