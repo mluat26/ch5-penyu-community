@@ -198,7 +198,8 @@ final class HatcherySetupController {
                         from: savedLayout,
                         expectedHatcheryID: existingHatchery.id,
                         shape: existingHatchery.shape,
-                        organizationID: existingHatchery.organizationID
+                        organizationID: existingHatchery.organizationID,
+                        createdAt: existingHatchery.createdAt
                     )
                 } else {
                     hatchery = try await hatcheryService.updateHatchery(
@@ -228,7 +229,8 @@ final class HatcherySetupController {
                         from: savedLayout,
                         expectedHatcheryID: hatcheryID,
                         shape: .rectangle,
-                        organizationID: nil
+                        organizationID: nil,
+                        createdAt: savedLayout.createdAt
                     )
                 } else {
                     hatchery = try await hatcheryService.createHatchery(
@@ -297,7 +299,8 @@ final class HatcherySetupController {
         from layout: HatcheryLayoutRevision,
         expectedHatcheryID: UUID,
         shape: HatcheryShape,
-        organizationID: UUID?
+        organizationID: UUID?,
+        createdAt: Date?
     ) throws -> HatcheryEntity {
         guard
             layout.hatcheryID == expectedHatcheryID,
@@ -315,7 +318,8 @@ final class HatcherySetupController {
             numberOfColumns: layout.grid.columns,
             lengthM: layout.dimension.heightM,
             widthM: layout.dimension.widthM,
-            organizationID: organizationID
+            organizationID: organizationID,
+            createdAt: createdAt
         )
     }
 
