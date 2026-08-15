@@ -1484,7 +1484,8 @@ struct NestSectionPickerView: View {
                 Image(systemName: "xmark")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Color.appNeutralBlack)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Cancel section selection")
@@ -1505,7 +1506,8 @@ struct NestSectionPickerView: View {
                             ? Color.appNeutralGray3
                             : Color.appGreenPrimary
                     )
-                    .frame(width: 32, height: 32)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
             }
             .buttonStyle(.plain)
             .disabled(pendingSection.isEmpty)
@@ -1514,11 +1516,6 @@ struct NestSectionPickerView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(.white)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color(hex: "#EBEBEB"))
-                .frame(height: 1)
-        }
     }
 
     private var infoCard: some View {
