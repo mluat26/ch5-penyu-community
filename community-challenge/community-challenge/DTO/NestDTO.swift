@@ -6,7 +6,11 @@ struct NestDTO: Codable, Sendable {
     let numberOfEggs: Int
     let dateEggsLaid: Date?
     let datePredictedHatch: Date?
-    let placeEggsLaid: Date?
+    let bucketID: String?
+    let nestNumber: String?
+    let latitude: Double?
+    let longitude: Double?
+    let locationAddress: String?
     let successEggsHatch: Int?
     let failEggsHatch: Int?
     let eggsUnhatched: Int?
@@ -21,7 +25,11 @@ struct NestDTO: Codable, Sendable {
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
         case datePredictedHatch = "date_predicted_hatch"
-        case placeEggsLaid = "place_eggs_laid"
+        case bucketID = "bucket_id"
+        case nestNumber = "nest_number"
+        case latitude
+        case longitude
+        case locationAddress = "location_address"
         case successEggsHatch = "success_eggs_hatch"
         case failEggsHatch = "fail_eggs_hatch"
         case eggsUnhatched = "eggs_unhatched"
@@ -38,7 +46,11 @@ struct NestInsertDTO: Encodable, Sendable {
     let numberOfEggs: Int
     let dateEggsLaid: Date?
     let datePredictedHatch: Date?
-    let placeEggsLaid: Date?
+    let bucketID: String?
+    let nestNumber: String?
+    let latitude: Double?
+    let longitude: Double?
+    let locationAddress: String?
     let hatcheryID: UUID
     let placementRow: Int?
     let placementColumn: Int?
@@ -49,7 +61,11 @@ struct NestInsertDTO: Encodable, Sendable {
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
         case datePredictedHatch = "date_predicted_hatch"
-        case placeEggsLaid = "place_eggs_laid"
+        case bucketID = "bucket_id"
+        case nestNumber = "nest_number"
+        case latitude
+        case longitude
+        case locationAddress = "location_address"
         case hatcheryID = "hatchery_id"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
@@ -66,7 +82,11 @@ struct NestUpdateDTO: Encodable, Sendable {
     let numberOfEggs: Int
     let dateEggsLaid: Date?
     let datePredictedHatch: Date?
-    let placeEggsLaid: Date?
+    let bucketID: String?
+    let nestNumber: String?
+    let latitude: Double?
+    let longitude: Double?
+    let locationAddress: String?
     let placementRow: Int?
     let placementColumn: Int?
 
@@ -74,7 +94,11 @@ struct NestUpdateDTO: Encodable, Sendable {
         case numberOfEggs = "number_of_eggs"
         case dateEggsLaid = "date_eggs_laid"
         case datePredictedHatch = "date_predicted_hatch"
-        case placeEggsLaid = "place_eggs_laid"
+        case bucketID = "bucket_id"
+        case nestNumber = "nest_number"
+        case latitude
+        case longitude
+        case locationAddress = "location_address"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
     }
@@ -93,7 +117,11 @@ extension NestDTO {
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
             datePredictedHatch: datePredictedHatch,
-            placeEggsLaid: placeEggsLaid,
+            bucketID: bucketID,
+            nestNumber: nestNumber,
+            latitude: latitude,
+            longitude: longitude,
+            locationAddress: locationAddress,
             successEggsHatch: successEggsHatch,
             failEggsHatch: failEggsHatch,
             eggsUnhatched: eggsUnhatched,
@@ -110,7 +138,11 @@ extension CreateNestInput {
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
             datePredictedHatch: datePredictedHatch,
-            placeEggsLaid: placeEggsLaid,
+            bucketID: bucketID,
+            nestNumber: nestNumber,
+            latitude: latitude,
+            longitude: longitude,
+            locationAddress: locationAddress,
             hatcheryID: hatcheryID,
             placementRow: placementRow,
             placementColumn: placementColumn,
@@ -126,10 +158,13 @@ extension UpdateNestInput {
             numberOfEggs: numberOfEggs,
             dateEggsLaid: dateEggsLaid,
             datePredictedHatch: datePredictedHatch,
-            placeEggsLaid: placeEggsLaid,
+            bucketID: bucketID,
+            nestNumber: nestNumber,
+            latitude: latitude,
+            longitude: longitude,
+            locationAddress: locationAddress,
             placementRow: placementRow,
             placementColumn: placementColumn
         )
     }
 }
-

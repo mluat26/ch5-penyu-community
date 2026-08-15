@@ -70,7 +70,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 42,
                 dateEggsLaid: laid,
                 datePredictedHatch: laid.addingTimeInterval(60 * 60 * 24 * 59),
-                placeEggsLaid: nil,
                 placementRow: 1,
                 placementColumn: 0
             )
@@ -97,7 +96,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 80,
                 dateEggsLaid: laid,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 3,
                 placementColumn: 3
             )
@@ -150,7 +148,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 12,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0
             )
@@ -193,7 +190,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: Date()
@@ -265,7 +261,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: nil
@@ -339,7 +334,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: Date()
@@ -418,7 +412,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 50,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: nil
@@ -482,7 +475,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                     numberOfEggs: 10,
                     dateEggsLaid: nil,
                     datePredictedHatch: nil,
-                    placeEggsLaid: nil,
                     placementRow: 99,
                     placementColumn: 0
                 )
@@ -510,7 +502,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                     numberOfEggs: 10,
                     dateEggsLaid: nil,
                     datePredictedHatch: nil,
-                    placeEggsLaid: nil,
                     placementRow: 0,
                     placementColumn: 0
                 )

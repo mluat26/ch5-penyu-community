@@ -3,24 +3,157 @@ import XCTest
 
 @MainActor
 final class NestFlowTests: XCTestCase {
-    func testEstimatedHatchDateTracksCollectionDateAndOffset() {
-        let controller = makeController()
-        controller.draft.collectionDate = "01.01.2026"
-        controller.draft.daysAfterCollection = "59"
+    /// `.sample` must re-evaluate `Date()` on every access, not bake in
+    /// whatever moment the app first touched it as a cached `static let`.
+    func testSampleCollectionDateIsToday() {
+        let draft = NestFormDraft.sample
+        let parsed = AppDateFormatting.parseNestDraftDate(draft.collectionDate)
 
-        controller.updateEstimatedHatchDate()
-
-        XCTAssertEqual(controller.draft.hatchDate, "01.03.2026")
+        XCTAssertNotNil(parsed)
+        XCTAssertEqual(
+            Calendar.current.startOfDay(for: parsed!),
+            Calendar.current.startOfDay(for: Date())
+        )
     }
 
-    func testInvalidOffsetLeavesCurrentEstimatedHatchDateUntouched() {
+    /// Reproduces the reported bug directly: a brand-new nest, mode already
+    /// defaulted to "after X days", untouched by the user. `inspectionDate`
+    /// used to sit at whatever the sample struct happened to hardcode --
+    /// unrelated to `collectionDate` or `daysAfterCollection` -- until some UI
+    /// trigger fired. A fresh draft that never fires one must still resolve
+    /// correctly once asked to.
+    func testFreshDraftResolvesInspectionDateFromItsOwnDefaults() {
         let controller = makeController()
-        controller.draft.hatchDate = "01.03.2026"
-        controller.draft.daysAfterCollection = "not a number"
+        XCTAssertEqual(controller.draft.inspectionDateMode, .afterCollectionDays)
+
+        controller.refreshDerivedDates()
+
+        let collection = AppDateFormatting.parseNestDraftDate(controller.draft.collectionDate)!
+        let days = Int(controller.draft.daysAfterCollection)!
+        let expected = Calendar.current.date(byAdding: .day, value: days, to: collection)!
+
+        XCTAssertEqual(
+            controller.draft.inspectionDate,
+            AppDateFormatting.nestDraftDateString(expected)
+        )
+    }
+
+    /// The defensive recompute in `save()` is the actual fix: without it, a
+    /// nest saved the instant the timeline screen appears -- before any
+    /// onChange/onAppear trigger has run -- would persist whatever
+    /// `next_inspection_date` the sample happened to carry, not one derived
+    /// from the days the user is looking at on screen.
+    func testSavePersistsInspectionDateDerivedFromDaysEvenWithoutAnyUITrigger() async {
+        let controller = makeController()
+        controller.draft.section = "B2"
+        controller.draft.sectionRow = 1
+        controller.draft.sectionColumn = 1
+        // No updateInspectionDateFromDays(), no onAppear -- exactly the path
+        // that shipped the bug.
+
+        let nest = await controller.save()
+
+        let collection = AppDateFormatting.parseNestDraftDate(controller.draft.collectionDate)!
+        let days = Int(controller.draft.daysAfterCollection)!
+        let expected = Calendar.current.date(byAdding: .day, value: days, to: collection)!
+
+        XCTAssertEqual(
+            nest?.nextInspectionDate.map(Calendar.current.startOfDay),
+            Calendar.current.startOfDay(for: expected)
+        )
+    }
+
+    /// Picking a date directly must resolve back into a day count, or
+    /// switching to "After X days" afterward silently discards the picked
+    /// date and replaces it with whatever stale count was last there.
+    func testPickingAnInspectionDateUpdatesTheDayCount() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .selectDate
+        controller.draft.daysAfterCollection = "5" // stale, must not survive
+        controller.draft.inspectionDate = "10.01.2026" // 9 days after collection
+
+        controller.updateDaysAfterCollectionFromInspectionDate()
+
+        XCTAssertEqual(controller.draft.daysAfterCollection, "9")
+    }
+
+    /// The full round trip the user actually does: pick a date, then flip to
+    /// "After X days". The date just picked must survive the switch, not
+    /// revert to a leftover count from before.
+    func testSwitchingModesAfterPickingADateKeepsThatDate() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .selectDate
+        controller.draft.daysAfterCollection = "5"
+        controller.draft.inspectionDate = "10.01.2026"
+
+        // What the date picker's binding does on a pick.
+        controller.updateDaysAfterCollectionFromInspectionDate()
+        // What the mode buttons do on switching to afterCollectionDays.
+        controller.draft.inspectionDateMode = .afterCollectionDays
+        controller.updateInspectionDateFromDays()
+
+        XCTAssertEqual(controller.draft.inspectionDate, "10.01.2026")
+    }
+
+    /// A picked date earlier than the collection date is not a valid interval;
+    /// it must floor at 0 rather than save a negative day count.
+    func testInspectionDateBeforeCollectionDateFloorsDaysAtZero() {
+        let controller = makeController()
+        controller.draft.collectionDate = "10.01.2026"
+        controller.draft.inspectionDateMode = .selectDate
+        controller.draft.inspectionDate = "01.01.2026"
+
+        controller.updateDaysAfterCollectionFromInspectionDate()
+
+        XCTAssertEqual(controller.draft.daysAfterCollection, "0")
+    }
+
+    /// The reverse guard: while "After X days" is what is actually driving the
+    /// date, a stray call must not clobber it back down from an inspection
+    /// date that is itself only a derived echo.
+    func testDayCountIsUntouchedWhileAfterCollectionDaysModeIsActive() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .afterCollectionDays
+        controller.draft.daysAfterCollection = "5"
+        controller.draft.inspectionDate = "06.01.2026"
+
+        controller.updateDaysAfterCollectionFromInspectionDate()
+
+        XCTAssertEqual(controller.draft.daysAfterCollection, "5")
+    }
+
+    /// The hatch estimate is the collection date plus the incubation period,
+    /// and nothing else. It previously used `daysAfterCollection`, which meant
+    /// choosing to inspect in 5 days also claimed the eggs would hatch in 5.
+    /// The interval is deliberately set to a different value here so the two
+    /// cannot be confused again.
+    func testEstimatedHatchDateFollowsCollectionDateOnly() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.daysAfterCollection = "5"
 
         controller.updateEstimatedHatchDate()
 
+        // 01.01.2026 + 59 days of incubation
         XCTAssertEqual(controller.draft.hatchDate, "01.03.2026")
+        XCTAssertEqual(NestController.estimatedIncubationDays, 59)
+    }
+
+    /// The day count is a free-text numeric field, so a non-number is
+    /// reachable. It must leave the scheduled date alone rather than clear it.
+    func testInvalidDayCountLeavesTheInspectionDateUntouched() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .afterCollectionDays
+        controller.draft.inspectionDate = "06.01.2026"
+        controller.draft.daysAfterCollection = "not a number"
+
+        controller.updateInspectionDateFromDays()
+
+        XCTAssertEqual(controller.draft.inspectionDate, "06.01.2026")
     }
 
     func testReplaceRouteClearsPriorWizardHistory() {
@@ -34,12 +167,15 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(router.path, [.success])
     }
 
-    func testSectionPickerPushAndPopStayInTheTypedNavigationPath() {
+    /// Covers the location step rather than the section grid: the grid is now
+    /// presented as a sheet and deliberately has no route, so the location
+    /// picker is the pushed step this guarantee applies to.
+    func testLocationPickerPushAndPopStayInTheTypedNavigationPath() {
         let router = NestRouter()
         router.push(.identity)
 
-        router.push(.sectionPicker)
-        XCTAssertEqual(router.path, [.identity, .sectionPicker])
+        router.push(.locationPicker)
+        XCTAssertEqual(router.path, [.identity, .locationPicker])
 
         router.pop()
         XCTAssertEqual(router.path, [.identity])
@@ -100,7 +236,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 1,
                 placementColumn: 2
             )
@@ -120,7 +255,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 80,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 3,
                 placementColumn: 4
             )
@@ -140,7 +274,6 @@ final class NestFlowTests: XCTestCase {
                     numberOfEggs: 0,
                     dateEggsLaid: nil,
                     datePredictedHatch: nil,
-                    placeEggsLaid: nil,
                     placementRow: nil,
                     placementColumn: nil
                 )
@@ -188,7 +321,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 42,
                 dateEggsLaid: Date(),
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 1,
                 placementColumn: 0
             )
@@ -226,7 +358,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 10,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0
             )
@@ -268,7 +399,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 10,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 2,
                 placementColumn: 2
             )
@@ -306,7 +436,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 10,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 2,
                 placementColumn: 2
             )
@@ -361,6 +490,57 @@ final class NestFlowTests: XCTestCase {
         } catch {}
     }
 
+    // MARK: - Derived timeline dates
+
+    /// The inspection interval used to be discarded: nothing applied it, so
+    /// every nest saved in this mode carried whatever date the form started
+    /// with, and that column is what schedules the visit.
+    @MainActor
+    func testDaysAfterCollectionResolvesIntoTheInspectionDate() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .afterCollectionDays
+        controller.draft.daysAfterCollection = "5"
+
+        controller.updateInspectionDateFromDays()
+
+        XCTAssertEqual(controller.draft.inspectionDate, "06.01.2026")
+    }
+
+    @MainActor
+    func testInspectionDateIsNotDerivedWhileAnExplicitDateIsChosen() {
+        let controller = makeController()
+        controller.draft.collectionDate = "01.01.2026"
+        controller.draft.inspectionDateMode = .selectDate
+        controller.draft.inspectionDate = "20.04.2026"
+        controller.draft.daysAfterCollection = "5"
+
+        controller.updateInspectionDateFromDays()
+
+        XCTAssertEqual(controller.draft.inspectionDate, "20.04.2026")
+    }
+
+    @MainActor
+    func testDaysUntilHatchIsCountedFromTodayNotHardcoded() {
+        let controller = makeController()
+        let inTenDays = Calendar.current.date(byAdding: .day, value: 10, to: Date())!
+        controller.draft.hatchDate = AppDateFormatting.nestDraftDateString(inTenDays)
+
+        XCTAssertEqual(controller.daysUntilHatchDisplay, "10")
+    }
+
+    /// Position in a list is not identity: the same nest used to be numbered
+    /// differently depending on which screen opened it.
+    func testNestNumberComesFromTheNestNotItsRowPosition() {
+        var nest = makeNestDashboardItem().nest
+        nest.nestNumber = "055"
+
+        XCTAssertEqual(nest.displayNumber(fallbackOrdinal: 1), "055")
+
+        nest.nestNumber = nil
+        XCTAssertEqual(nest.displayNumber(fallbackOrdinal: 1), "001")
+    }
+
     private func makeController() -> NestController {
         NestController(
             hatcheryID: UUID(),
@@ -377,7 +557,6 @@ final class NestFlowTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 successEggsHatch: nil,
                 failEggsHatch: nil,
                 placementRow: 1,

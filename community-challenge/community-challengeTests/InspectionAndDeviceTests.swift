@@ -352,7 +352,6 @@ final class InspectionAndDeviceTests: XCTestCase {
             numberOfEggs: 100,
             dateEggsLaid: nil,
             datePredictedHatch: nil,
-            placeEggsLaid: nil,
             placementRow: 0,
             placementColumn: column
         )
@@ -518,7 +517,6 @@ final class HatchingTests: XCTestCase {
                 numberOfEggs: clutchSize,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: Date()

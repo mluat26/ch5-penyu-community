@@ -28,7 +28,11 @@ actor InMemoryNestRepository: NestRepository {
             numberOfEggs: input.numberOfEggs,
             dateEggsLaid: input.dateEggsLaid,
             datePredictedHatch: input.datePredictedHatch,
-            placeEggsLaid: input.placeEggsLaid,
+            bucketID: input.bucketID,
+            nestNumber: input.nestNumber,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            locationAddress: input.locationAddress,
             successEggsHatch: nil,
             failEggsHatch: nil,
             eggsUnhatched: nil,
@@ -48,7 +52,11 @@ actor InMemoryNestRepository: NestRepository {
         nest.numberOfEggs = input.numberOfEggs
         nest.dateEggsLaid = input.dateEggsLaid
         nest.datePredictedHatch = input.datePredictedHatch
-        nest.placeEggsLaid = input.placeEggsLaid
+        nest.bucketID = input.bucketID
+        nest.nestNumber = input.nestNumber
+        nest.latitude = input.latitude
+        nest.longitude = input.longitude
+        nest.locationAddress = input.locationAddress
         nest.placementRow = input.placementRow
         nest.placementColumn = input.placementColumn
         nests[id] = nest

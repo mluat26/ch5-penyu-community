@@ -77,7 +77,7 @@ enum SupabaseConfig {
 
 private extension JSONDecoder {
     /// Postgres `date` columns (`date_eggs_laid`, `date_predicted_hatch`,
-    /// `place_eggs_laid`) come back from PostgREST as plain `yyyy-MM-dd`
+    /// `next_inspection_date`) come back from PostgREST as plain `yyyy-MM-dd`
     /// strings. The SDK's default decoder only accepts full ISO8601
     /// timestamps, so a bare date fails to decode without this.
     static let postgresDateAware: JSONDecoder = {

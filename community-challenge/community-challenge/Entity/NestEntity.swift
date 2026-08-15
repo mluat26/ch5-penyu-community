@@ -7,7 +7,19 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     var numberOfEggs: Int
     var dateEggsLaid: Date?
     var datePredictedHatch: Date?
-    var placeEggsLaid: Date?
+    /// Written on the bucket in the field, so a nest can be matched to the
+    /// physical container without opening it.
+    var bucketID: String?
+    var nestNumber: String?
+    /// Where the eggs were found, which is not where they now sit: nests are
+    /// relocated into the hatchery, so this is the origin beach, not the grid
+    /// placement.
+    var latitude: Double?
+    var longitude: Double?
+    /// Resolved once at capture time. Reverse geocoding needs the network and
+    /// these screens are read on a beach, so the string is stored rather than
+    /// looked up again.
+    var locationAddress: String?
     var successEggsHatch: Int?
     /// Eggs that spoiled.
     var failEggsHatch: Int?
@@ -65,5 +77,19 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     var sectionKey: String? {
         guard let placementRow, let placementColumn else { return nil }
         return "\(placementRow)-\(placementColumn)"
+    }
+
+    /// The number written on the nest in the field.
+    ///
+    /// Every screen must agree on this. Position in a list is not an identity:
+    /// numbering by row index renamed the same nest depending on which screen
+    /// opened it, and reordering the list silently renumbered all of them.
+    /// `fallbackOrdinal` covers nests recorded before the number was stored.
+    func displayNumber(fallbackOrdinal: Int) -> String {
+        let trimmed = nestNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            return trimmed
+        }
+        return String(format: "%03d", fallbackOrdinal)
     }
 }

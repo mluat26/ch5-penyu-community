@@ -16,6 +16,9 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var router = NestRouter()
+    /// The section grid is a modal choice over the form, not a step in the
+    /// flow, so it is presented rather than pushed.
+    @State private var isPickingSection = false
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
     @State private var hatcheryListController: HatcheryListController
@@ -54,7 +57,7 @@ struct ContentView: View {
                     controller: hatcheryController,
                     onAddNest: {
                         nestController.reset()
-                        router.push(.identity)
+                        router.push(.connectBucket)
                     },
                     onOpenHatcheryMenu: {
                         presentHatcheryMenu()
@@ -81,27 +84,28 @@ struct ContentView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: NestRoute.self) { route in
                     switch route {
+                    case .connectBucket:
+                        AddNestConnectBucketView(
+                            onContinue: { router.push(.identity) },
+                            onCancel: finishAddNestFlow
+                        )
                     case .identity:
                         AddNestIdentityView(
                             controller: nestController,
-                            onSelectSection: { router.push(.sectionPicker) },
+                            onSelectSection: { isPickingSection = true },
+                            onPinLocation: { router.push(.locationPicker) },
                             onNext: { router.push(.eggInformation) },
                             onCancel: finishAddNestFlow
                         )
-                    case .sectionPicker:
-                        NestSectionPickerView(
+                    case .locationPicker:
+                        NestLocationPickerView(
                             controller: nestController,
-                            grid: hatchery.grid,
-                            mapImage: hatchery.rectifiedPhoto,
-                            usesMockMapCrop: hatchery.usesMockImage,
-                            dashboard: hatcheryController.dashboard,
                             onCancel: router.pop,
-                            onConfirm: router.pop
+                            onSave: router.pop
                         )
                     case .eggInformation:
                         AddNestEggInformationView(
                             controller: nestController,
-                            onBack: router.pop,
                             onPreview: { router.push(.preview) },
                             onCancel: finishAddNestFlow
                         )
@@ -146,6 +150,20 @@ struct ContentView: View {
                         )
                         .toolbar(.hidden, for: .navigationBar)
                     }
+                }
+                .sheet(isPresented: $isPickingSection) {
+                    NestSectionPickerView(
+                        controller: nestController,
+                        grid: hatchery.grid,
+                        mapImage: hatchery.rectifiedPhoto,
+                        usesMockMapCrop: hatchery.usesMockImage,
+                        dashboard: hatcheryController.dashboard,
+                        onCancel: { isPickingSection = false },
+                        onConfirm: { isPickingSection = false }
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(34)
                 }
             }
 

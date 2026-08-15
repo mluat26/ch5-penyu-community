@@ -67,7 +67,11 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             numberOfEggs: 100,
             dateEggsLaid: nil,
             datePredictedHatch: nil,
-            placeEggsLaid: nil,
+            bucketID: nil,
+            nestNumber: nil,
+            latitude: nil,
+            longitude: nil,
+            locationAddress: nil,
             successEggsHatch: 90,
             failEggsHatch: 10,
             eggsUnhatched: 5,
@@ -117,7 +121,6 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             numberOfEggs: 100,
             dateEggsLaid: nil,
             datePredictedHatch: predictedHatch,
-            placeEggsLaid: nil,
             placementRow: 1,
             placementColumn: 2
         )
