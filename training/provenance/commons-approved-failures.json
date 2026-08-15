@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-14T03:42:27Z",
+  "failures": [
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Cleaning_sea_turtle_at_Ogasawara_Marine_Center.jpg",
+      "category": "Category:Ogasawara Marine Center",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Cleaning_sea_turtle_at_Ogasawara_Marine_Center.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/c/cc/Cleaning_sea_turtle_at_Ogasawara_Marine_Center.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Cleaning sea turtle at Ogasawara Marine Center.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:52:10Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_01.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_01.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/Lepidochelys_olivacea_turtles_Egg_care_center_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 01.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:47:05Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_02.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_02.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/f/fb/Lepidochelys_olivacea_turtles_Egg_care_center_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 02.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:47:36Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_03.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_03.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Lepidochelys_olivacea_turtles_Egg_care_center_03.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 03.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:48:07Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_04.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_04.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Lepidochelys_olivacea_turtles_Egg_care_center_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 04.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:49:09Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_05.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_05.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/1/16/Lepidochelys_olivacea_turtles_Egg_care_center_05.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 05.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:49:40Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_06.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_06.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/3/32/Lepidochelys_olivacea_turtles_Egg_care_center_06.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 06.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:48:38Z"
+    },
+    {
+      "failure_key": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_07.jpg",
+      "category": "Category:Sea Turtles egg care center, Visakhapatnam",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Lepidochelys_olivacea_turtles_Egg_care_center_07.jpg",
+      "original_url": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Lepidochelys_olivacea_turtles_Egg_care_center_07.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "title": "File:Lepidochelys olivacea turtles Egg care center 07.jpg",
+      "stage": "download",
+      "reason": "original download failed: curl exit 56: curl: (56) The requested URL returned error: 429; thumbnail download failed: curl exit 56: curl: (56) The requested URL returned error: 429",
+      "attempted_at": "2026-08-14T03:50:11Z"
+    }
+  ]
+}

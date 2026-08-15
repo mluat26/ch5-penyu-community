@@ -21,3 +21,21 @@ community-challenge/Config/SupabaseSecrets.xcconfig
 
 # Supabase CLI local state (contains the linked project ref).
 supabase/.temp/
+
+# Local ML-training corpus and generated outputs. Keep provenance and
+# documentation in training/ tracked; do not add a global *.mlmodel ignore.
+training/raw/
+training/curated/
+training/datasets/
+training/exports/
+training/runs/
+training/reviews/
+training/.cache/
+__pycache__/
+training/*.zip
+training/*.tar
+training/*.tar.gz
+
+# Local-only prototype model trained from the ignored testing corpus. Keep it
+# available to Xcode for device trials, but never add it to Git or a release.
+community-challenge/community-challenge/Models/HatcheryDetector.mlmodel

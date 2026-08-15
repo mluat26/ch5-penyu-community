@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-08-14T04:15:00Z",
+  "purpose": "Initial visual triage only. These are not Create ML annotations and must not be used for training until a human confirms the class boundary.",
+  "images": [
+    {
+      "source_id": "kalipur-hatchery",
+      "review_disposition": "positive_candidate",
+      "review_note": "The bamboo-walled sand hatchery is prominent and largely visible; candidate for a hatchery-level bounding box."
+    },
+    {
+      "source_id": "ostional-widecast",
+      "review_disposition": "partial_or_ambiguous",
+      "review_note": "People and a hatchling dominate the foreground; the enclosure is only partial background context. Exclude from the first positive set."
+    },
+    {
+      "source_id": "playa-dos-kraals",
+      "review_disposition": "positive_candidate",
+      "review_note": "A long green-mesh hatchery enclosure is clearly visible; the person is incidental to the target."
+    },
+    {
+      "source_id": "playa-la-barqueta-vivero",
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Coastal beach scene; no distinguishable hatchery enclosure is visible."
+    },
+    {
+      "source_id": "playa-mayorquina",
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Coastal scenic scene; no distinguishable hatchery enclosure is visible."
+    },
+    {
+      "source_id": "rancho-nuevo-kraals",
+      "review_disposition": "positive_candidate",
+      "review_note": "The full fenced, marked-nest sand hatchery is visible from an elevated angle."
+    },
+    {
+      "source_id": "san-san-pond-sak-vivero",
+      "review_disposition": "positive_candidate",
+      "review_note": "The fenced green-net hatchery enclosure occupies a clear portion of the image."
+    },
+    {
+      "source_id": "tlalcoyunque-exterior",
+      "review_disposition": "positive_candidate",
+      "review_note": "A large net-canopy hatchery enclosure is clearly visible from outside."
+    },
+    {
+      "source_id": "tlalcoyunque-interior",
+      "review_disposition": "positive_candidate",
+      "review_note": "The hatchery sand bed, canopy, and markers are clearly visible from inside."
+    },
+    {
+      "source_id": "ventanilla-guarded-nests",
+      "review_disposition": "partial_or_ambiguous",
+      "review_note": "A small protected-nest structure is visible in a wide beach scene; it is too small for the first positive set."
+    }
+  ]
+}
