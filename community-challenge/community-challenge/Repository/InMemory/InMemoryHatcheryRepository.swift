@@ -29,7 +29,8 @@ actor InMemoryHatcheryRepository: HatcheryRepository {
             numberOfColumns: input.numberOfColumns,
             lengthM: input.lengthM,
             widthM: input.widthM,
-            organizationID: input.organizationID
+            organizationID: input.organizationID,
+            createdAt: Date()
         )
         hatcheries[hatchery.id] = hatchery
         return hatchery

@@ -1,0 +1,11 @@
+source_id,review_disposition,review_note
+kalipur-hatchery,positive_candidate,"The bamboo-walled sand hatchery is prominent and largely visible; candidate for a hatchery-level bounding box."
+ostional-widecast,partial_or_ambiguous,"People and a hatchling dominate the foreground; the enclosure is only partial background context. Exclude from the first positive set."
+playa-dos-kraals,positive_candidate,"A long green-mesh hatchery enclosure is clearly visible; the person is incidental to the target."
+playa-la-barqueta-vivero,hard_negative_candidate,"Coastal beach scene; no distinguishable hatchery enclosure is visible."
+playa-mayorquina,hard_negative_candidate,"Coastal scenic scene; no distinguishable hatchery enclosure is visible."
+rancho-nuevo-kraals,positive_candidate,"The full fenced, marked-nest sand hatchery is visible from an elevated angle."
+san-san-pond-sak-vivero,positive_candidate,"The fenced green-net hatchery enclosure occupies a clear portion of the image."
+tlalcoyunque-exterior,positive_candidate,"A large net-canopy hatchery enclosure is clearly visible from outside."
+tlalcoyunque-interior,positive_candidate,"The hatchery sand bed, canopy, and markers are clearly visible from inside."
+ventanilla-guarded-nests,partial_or_ambiguous,"A small protected-nest structure is visible in a wide beach scene; it is too small for the first positive set."

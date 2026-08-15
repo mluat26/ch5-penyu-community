@@ -12,6 +12,7 @@ struct HatcheryDTO: Codable, Sendable {
     let shape: String?
     let lengthM: Double?
     let widthM: Double?
+    let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -21,6 +22,7 @@ struct HatcheryDTO: Codable, Sendable {
         case shape
         case lengthM = "length_m"
         case widthM = "width_m"
+        case createdAt = "created_at"
     }
 }
 
@@ -87,7 +89,8 @@ extension HatcheryDTO {
             lengthM: lengthM,
             widthM: widthM,
             // `organization_id` does not exist in the pulled schema yet.
-            organizationID: nil
+            organizationID: nil,
+            createdAt: createdAt
         )
     }
 }

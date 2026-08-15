@@ -4,6 +4,7 @@ import UIKit
 struct HatcheryGridPreviewView: View {
     let hatchName: String
     let image: UIImage
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let dimension: HatcheryDimension
     let grid: HatcheryGrid
@@ -33,6 +34,7 @@ struct HatcheryGridPreviewView: View {
 
                     HatcheryGridDiagram(
                         image: image,
+                        sandRegion: sandRegion,
                         usesMockImage: usesMockImage,
                         grid: grid
                     )
@@ -191,6 +193,7 @@ private struct HatcheryGridPreviewHeader: View {
 
 private struct HatcheryGridDiagram: View {
     let image: UIImage
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let grid: HatcheryGrid
 
@@ -210,6 +213,7 @@ private struct HatcheryGridDiagram: View {
 
                 HatcheryGridPhoto(
                     image: image,
+                    sandRegion: sandRegion,
                     usesMockImage: usesMockImage,
                     grid: grid
                 )
@@ -267,6 +271,7 @@ private struct HatcheryGridDiagram: View {
 
 private struct HatcheryGridPhoto: View {
     let image: UIImage
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let grid: HatcheryGrid
 
@@ -279,6 +284,12 @@ private struct HatcheryGridPhoto: View {
                 HatcherySetupImage(
                     image: image,
                     usesMockCrop: usesMockImage
+                )
+
+                HatcherySandRegionOverlay(
+                    region: .constant(sandRegion),
+                    imageSize: image.size,
+                    isEditable: false
                 )
 
                 let horizontalGaps = CGFloat(max(columns - 1, 0)) * 2
@@ -341,6 +352,7 @@ private struct HatcheryGridPhoto: View {
     HatcheryGridPreviewView(
         hatchName: "Hatch 01",
         image: UIImage(named: "HatcherySamplePhoto")!,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: true,
         dimension: dimension,
         grid: grid,

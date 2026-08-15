@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "overrides": {
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-002d8b42d1ed.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-0a5e3d1d5f8e.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-0c16969f5675.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-3131c2608c08.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-364f9ed570fe.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-575fa69ef1a8.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-6a7c85790448.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-abf0131489ff.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-dad09d6aa271.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-decfd37450c0.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    },
+    "raw/commons-approved/pawikan-conservation-center/pawikan-conservation-center-e04d8474331b.jpg": {
+      "review_disposition": "hard_negative_candidate",
+      "review_note": "Visual review: indoor/painted turtle display or museum signage; do not use as a hatchery-positive image."
+    }
+  }
+}

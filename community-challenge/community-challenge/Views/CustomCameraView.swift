@@ -12,6 +12,7 @@ struct CustomCameraView: View {
     let onClose: () -> Void
     let onCapture: (UIImage, HatcheryBoundary) -> Void
 
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var camera = CameraController()
     @State private var pickerItem: PhotosPickerItem?
     @State private var previewSize: CGSize = .zero
@@ -64,11 +65,7 @@ struct CustomCameraView: View {
                 invalidatePendingWork()
                 previewSize = geometry.size
                 updateInterfaceOrientation()
-                if camera.capturedImage != nil {
-                    camera.resumeLivePreview()
-                } else {
-                    camera.start()
-                }
+                resumeCameraIfAppropriate()
             }
             .onChange(of: geometry.size) { _, newSize in
                 previewSize = newSize
@@ -83,6 +80,21 @@ struct CustomCameraView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             updateInterfaceOrientation()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                // Returning from Settings or background stops the capture
+                // session. Re-request it only when this screen still owns a
+                // live capture flow.
+                updateInterfaceOrientation()
+                resumeCameraIfAppropriate()
+            case .background:
+                invalidatePendingWork()
+                camera.stop()
+            default:
+                break
+            }
         }
         .onDisappear {
             invalidatePendingWork()
@@ -247,6 +259,21 @@ struct CustomCameraView: View {
             source: .camera(snapshot)
         )
         camera.capturePhoto()
+    }
+
+    private func resumeCameraIfAppropriate() {
+        guard
+            activeRequest == nil,
+            pendingDelivery == nil,
+            !isLoadingPicker,
+            !isDeliveringImage
+        else { return }
+
+        if camera.capturedImage != nil {
+            camera.resumeLivePreview()
+        } else {
+            camera.start()
+        }
     }
 
     private func loadPickerItem(_ item: PhotosPickerItem) {

@@ -4,7 +4,7 @@ import UIKit
 struct HatcheryDimensionView: View {
     let hatchName: String
     let image: UIImage
-    let boundary: HatcheryBoundary
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let showsCapturedImage: Bool
     let onNext: (HatcheryDimension) -> Void
@@ -22,7 +22,7 @@ struct HatcheryDimensionView: View {
     init(
         hatchName: String,
         image: UIImage,
-        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion?,
         usesMockImage: Bool,
         showsCapturedImage: Bool = true,
         initialDimension: HatcheryDimension,
@@ -31,7 +31,7 @@ struct HatcheryDimensionView: View {
     ) {
         self.hatchName = hatchName
         self.image = image
-        self.boundary = boundary
+        self.sandRegion = sandRegion
         self.usesMockImage = usesMockImage
         self.showsCapturedImage = showsCapturedImage
         self.onNext = onNext
@@ -48,6 +48,13 @@ struct HatcheryDimensionView: View {
     var body: some View {
         GeometryReader { geometry in
             let contentWidth = min(370, max(0, geometry.size.width - 32))
+            // A focused field is the reliable, immediate signal for this
+            // screen's compact keyboard layout. It avoids tying the Figma
+            // state to a particular keyboard height or device orientation.
+            let isEditingDimension = focusedField != nil
+            let photoHeight: CGFloat = isEditingDimension ? 95 : 279
+            let headerToPhotoSpacing: CGFloat = isEditingDimension ? 40 : 42
+            let photoToFormSpacing: CGFloat = isEditingDimension ? 40 : 38
 
             ZStack(alignment: .top) {
                 HatcherySetupBackdrop()
@@ -62,12 +69,16 @@ struct HatcheryDimensionView: View {
 
                     // 402 × 874 Figma reference: the photo is anchored at
                     // y=210 after the 66 pt header that begins at y=102.
-                    Spacer().frame(height: 42)
+                    Spacer().frame(height: headerToPhotoSpacing)
 
                     photo
-                        .frame(width: contentWidth, height: 279)
+                        // The keyboard Figma state keeps the image's width
+                        // and crop rules intact; only its visible canvas gets
+                        // shorter. No additional scale effect or altered
+                        // aspect mode is applied to the image.
+                        .frame(width: contentWidth, height: photoHeight)
 
-                    Spacer().frame(height: 38)
+                    Spacer().frame(height: photoToFormSpacing)
 
                     dimensionForm
                         .frame(width: contentWidth, height: 137)
@@ -75,23 +86,23 @@ struct HatcheryDimensionView: View {
                         // screen centre; keeping that reference alignment is
                         // visually important against the photo above.
                         .offset(x: 6)
-
-                    Spacer().frame(height: 46)
-
-                    actionButtons
-                        .frame(width: contentWidth, height: 122)
-
-                    Spacer(minLength: 42)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+                // Keep the CTA stack at its reference y-position. When the
+                // keyboard opens, iOS naturally covers it while the compact
+                // photo and dimension fields remain visible above the keys.
+                actionButtons
+                    .frame(width: contentWidth, height: 122)
+                    .offset(y: 710)
             }
-            // The layout deliberately ignores the keyboard region, so the
-            // decimal pad sits on top of Next. It has no return key, hence the
-            // explicit ways out below.
             .contentShape(Rectangle())
             .onTapGesture { focusedField = nil }
+            .animation(.easeInOut(duration: 0.25), value: isEditingDimension)
         }
-        .ignoresSafeArea()
+        // Keep the reference canvas behind the status/home areas while still
+        // allowing SwiftUI's keyboard-safe layout to shrink and reflow.
+        .ignoresSafeArea(.container)
         .preferredColorScheme(.light)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar {
@@ -112,11 +123,11 @@ struct HatcheryDimensionView: View {
                     usesMockCrop: usesMockImage
                 )
 
-                HatcheryBoundaryOverlay(
+                HatcherySandRegionOverlay(
+                    region: .constant(sandRegion),
                     imageSize: image.size,
-                    boundary: boundary
+                    isEditable: false
                 )
-                .padding(8)
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
@@ -321,43 +332,6 @@ struct HatcherySetupImage: View {
     }
 }
 
-/// Draws a confirmed boundary over an aspect-filled photo, read-only.
-///
-/// Mirrors `HatcheryOverlay`'s fill and stroke so the area the user adjusted
-/// during scanning is recognisable on the screens that follow. Assumes the
-/// photo is rendered with `scaledToFill`, matching `HatcherySetupImage`'s
-/// non-mock path.
-struct HatcheryBoundaryOverlay: View {
-    let imageSize: CGSize
-    let boundary: HatcheryBoundary
-    var color: Color = .appGreenPrimary
-
-    var body: some View {
-        GeometryReader { geometry in
-            let mapper = AspectFillImageMapper(
-                imageSize: imageSize,
-                containerSize: geometry.size
-            )
-            let quad = mapper.viewQuad(for: boundary)
-
-            ZStack {
-                path(for: quad).fill(color.opacity(0.30))
-                path(for: quad).stroke(color, lineWidth: 2)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func path(for quad: QuadPoints) -> Path {
-        var path = Path()
-        path.move(to: quad.topLeft)
-        path.addLine(to: quad.topRight)
-        path.addLine(to: quad.bottomRight)
-        path.addLine(to: quad.bottomLeft)
-        path.closeSubpath()
-        return path
-    }
-}
 
 struct HatcherySetupHeader: View {
     let eyebrow: String
@@ -415,7 +389,7 @@ struct HatcherySetupButton: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: true,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),
         onNext: { _ in },
@@ -427,7 +401,7 @@ struct HatcherySetupButton: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: false,
         showsCapturedImage: false,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),

@@ -286,16 +286,32 @@ nonisolated private final class HatcheryCameraSessionCoordinator: @unchecked Sen
     /// Runs only on `queue`.
     private func configureSession() -> Bool {
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
+        var didConfigure = false
+        defer {
+            if !didConfigure {
+                // A later retry must start from a known session state. Leaving
+                // a partially-added input or output here makes `canAdd…`
+                // fail on the next foreground attempt.
+                videoOutput.setSampleBufferDelegate(nil, queue: nil)
+                let outputs = session.outputs
+                outputs.forEach(session.removeOutput)
+                let inputs = session.inputs
+                inputs.forEach(session.removeInput)
+            }
+            session.commitConfiguration()
+        }
 
+        guard session.canSetSessionPreset(.photo) else { return false }
         session.sessionPreset = .photo
 
+        let device = AVCaptureDevice.default(
+            .builtInWideAngleCamera,
+            for: .video,
+            position: .back
+        ) ?? AVCaptureDevice.default(for: .video)
+
         guard
-            let device = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            ),
+            let device,
             let input = try? AVCaptureDeviceInput(device: device),
             session.canAddInput(input)
         else {
@@ -312,6 +328,7 @@ nonisolated private final class HatcheryCameraSessionCoordinator: @unchecked Sen
         guard session.canAddOutput(videoOutput) else { return false }
         session.addOutput(videoOutput)
 
+        didConfigure = true
         return true
     }
 
@@ -409,6 +426,16 @@ final class CameraController: NSObject, ObservableObject {
     /// Requests authorization (if needed), configures the session once, and
     /// starts it running. Safe to call every time the camera view appears.
     func start() {
+        // SwiftUI can issue repeated active-scene updates while the session is
+        // configuring. Keep the original request alive rather than creating a
+        // new lifecycle generation underneath it.
+        guard !wantsRunning else { return }
+
+        #if targetEnvironment(simulator)
+        status = .failed(
+            "Live camera scanning needs a physical iPhone. Select a hatchery photo below to continue."
+        )
+        #else
         let generation = beginRunningIntent()
 
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -438,6 +465,7 @@ final class CameraController: NSObject, ObservableObject {
             status = .unauthorized
             coordinator.stop(generation: generation)
         }
+        #endif
     }
 
     /// Stops the session and invalidates permission/configuration callbacks that
@@ -548,7 +576,9 @@ final class CameraController: NSObject, ObservableObject {
                     } else {
                         self.wantsRunning = false
                         self.acceptsLiveDetection = false
-                        self.status = .failed("Unable to configure camera.")
+                        self.status = .failed(
+                            "Couldn’t start the camera. Check the device camera and try again, or select a hatchery photo below."
+                        )
                         self.coordinator.stop(generation: generation)
                     }
                 }
