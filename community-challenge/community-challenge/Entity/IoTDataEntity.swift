@@ -13,7 +13,7 @@ enum AlertLevel: String, Sendable {
     case critical
 }
 
-struct HeatReadingEntity: Identifiable, Hashable, Sendable {
+struct IoTDataEntity: Identifiable, Hashable, Sendable {
     let id: UUID
     var nestID: UUID
     var sensorID: UUID?

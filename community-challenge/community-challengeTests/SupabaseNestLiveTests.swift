@@ -70,7 +70,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 42,
                 dateEggsLaid: laid,
                 datePredictedHatch: laid.addingTimeInterval(60 * 60 * 24 * 59),
-                placeEggsLaid: nil,
                 placementRow: 1,
                 placementColumn: 0
             )
@@ -97,7 +96,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 80,
                 dateEggsLaid: laid,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 3,
                 placementColumn: 3
             )
@@ -129,7 +127,7 @@ final class SupabaseNestLiveTests: XCTestCase {
         let hatcheryService = HatcheryService(
             hatcheryRepository: hatcheryRepository,
             nestRepository: nestRepository,
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
 
         let hatchery = try await hatcheryRepository.create(
@@ -150,7 +148,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 12,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0
             )
@@ -193,7 +190,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: Date()
@@ -265,7 +261,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: nil
@@ -339,7 +334,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 100,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: Date()
@@ -418,7 +412,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                 numberOfEggs: 50,
                 dateEggsLaid: nil,
                 datePredictedHatch: nil,
-                placeEggsLaid: nil,
                 placementRow: 0,
                 placementColumn: 0,
                 nextInspectionDate: nil
@@ -430,12 +423,14 @@ final class SupabaseNestLiveTests: XCTestCase {
         )
 
         var secondSucceeded = true
+        var secondError: (any Error)?
         do {
             _ = try await deviceRepository.create(
                 RegisterDeviceInput(name: "Probe B", nestID: nest.id)
             )
         } catch {
             secondSucceeded = false
+            secondError = error
         }
 
         // deleting the nest frees the device rather than destroying it
@@ -446,6 +441,13 @@ final class SupabaseNestLiveTests: XCTestCase {
         try await hatcheryRepository.delete(id: hatchery.id)
 
         XCTAssertFalse(secondSucceeded, "device.nest_id is unique")
+        // ...and it must fail the SAME way the in-memory fake does, or a view
+        // that shows the message will work in tests and break in the app.
+        guard case .nestAlreadyHasDevice = (secondError as? DomainValidationError) else {
+            return XCTFail(
+                "Expected .nestAlreadyHasDevice from Supabase, got \(String(describing: secondError))"
+            )
+        }
         XCTAssertNil(freed.nestID, "ON DELETE SET NULL keeps the hardware record")
     }
 
@@ -473,7 +475,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                     numberOfEggs: 10,
                     dateEggsLaid: nil,
                     datePredictedHatch: nil,
-                    placeEggsLaid: nil,
                     placementRow: 99,
                     placementColumn: 0
                 )
@@ -501,7 +502,6 @@ final class SupabaseNestLiveTests: XCTestCase {
                     numberOfEggs: 10,
                     dateEggsLaid: nil,
                     datePredictedHatch: nil,
-                    placeEggsLaid: nil,
                     placementRow: 0,
                     placementColumn: 0
                 )

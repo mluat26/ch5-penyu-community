@@ -2,16 +2,18 @@ import Foundation
 
 /// The one composition root for dependencies.
 ///
-/// `hatchery` and `nest` are backed by Supabase; telemetry is still in memory
-/// because `public.iotdata` has no read policy and no ingestion path yet, so
-/// nests carry no temperature until a sensor writes one.
+/// Every repository is Supabase-backed. Readings will still be absent until a
+/// sensor actually writes to `public.iotdata`, but that is now an empty table
+/// rather than an in-memory stand-in. `hatchery` and `nest` additionally
+/// require a per-device identity, since ownership is enforced at the database.
 @MainActor
 final class AppContainer {
     private let hatcheryRepository: SupabaseHatcheryRepository
     private let nestRepository: SupabaseNestRepository
-    private let telemetryRepository = InMemoryTelemetryRepository()
+    private let ioTDataRepository: SupabaseIoTDataRepository
     private let inspectionRepository: SupabaseInspectionRepository
     private let deviceRepository: SupabaseDeviceRepository
+    private let hatchingRepository: SupabaseHatchingRepository
     private let layoutService: HatcheryLayoutService
 
     init() {
@@ -36,8 +38,10 @@ final class AppContainer {
         )
         self.hatcheryRepository = hatcheryRepository
         self.nestRepository = nestRepository
+        self.ioTDataRepository = SupabaseIoTDataRepository(client: client)
         self.inspectionRepository = SupabaseInspectionRepository(client: client)
         self.deviceRepository = SupabaseDeviceRepository(client: client)
+        self.hatchingRepository = SupabaseHatchingRepository(client: client)
         self.layoutService = HatcheryLayoutService(
             repository: layoutRepository,
             photoStore: photoStore
@@ -47,7 +51,7 @@ final class AppContainer {
     private lazy var hatcheryService = HatcheryService(
         hatcheryRepository: hatcheryRepository,
         nestRepository: nestRepository,
-        telemetryRepository: telemetryRepository
+        ioTDataRepository: ioTDataRepository
     )
 
     private lazy var nestService = NestService(repository: nestRepository)
@@ -56,10 +60,10 @@ final class AppContainer {
 
     private lazy var deviceService = DeviceService(repository: deviceRepository)
 
-    /// `DemoHatcheryDataSeeder` seeded the 312-nest prototype dashboard into the
-    /// in-memory repositories. It cannot seed Supabase-backed ones, so a
-    /// hatchery now starts genuinely empty and fills up as nests are added.
-    private let demoDataSeeder: (any HatcheryDemoDataSeeding)? = nil
+    private lazy var hatchingService = HatchingService(
+        repository: hatchingRepository,
+        nestRepository: nestRepository
+    )
 
     func makeHatcherySetupController(
         editingHatchery: HatcheryEntity? = nil
@@ -76,8 +80,7 @@ final class AppContainer {
     ) -> HatcheryController {
         HatcheryController(
             sessionState: sessionState,
-            hatcheryService: hatcheryService,
-            demoDataSeeder: demoDataSeeder
+            hatcheryService: hatcheryService
         )
     }
 
@@ -97,4 +100,6 @@ final class AppContainer {
     func makeInspectionService() -> InspectionService { inspectionService }
 
     func makeDeviceService() -> DeviceService { deviceService }
+
+    func makeHatchingService() -> HatchingService { hatchingService }
 }

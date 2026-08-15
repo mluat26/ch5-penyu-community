@@ -1,10 +1,40 @@
+import CoreLocation
+import MapKit
 import SwiftUI
 import UIKit
 
-struct AddNestIdentityView: View {
-    @Bindable var controller: NestController
-    let onSelectSection: () -> Void
-    let onNext: () -> Void
+extension View {
+    /// Dismisses the keyboard when anything outside a field is tapped.
+    ///
+    /// The number pads in this flow have no Return key, so without this there
+    /// is no way to put the keyboard away at all. Added as a *simultaneous*
+    /// gesture so it runs alongside buttons underneath rather than swallowing
+    /// their taps.
+    ///
+    /// Takes the screen's own `@FocusState` rather than reaching for
+    /// `UIResponder.resignFirstResponder()` broadcast to the whole app. That
+    /// call goes to whatever the current first responder is, unscoped -- on a
+    /// screen that also hosts a `.graphical` `DatePicker` (a UIKit
+    /// `UICalendarView` under the hood), firing it on every tap, including
+    /// taps on the calendar's own day cells, is exactly the kind of
+    /// interference that makes an otherwise-working control feel broken.
+    /// Clearing a `FocusState` only ever affects the fields actually bound to
+    /// it, so it cannot touch anything else on screen.
+    func dismissesKeyboardOnTap(_ isFieldFocused: FocusState<Bool>.Binding) -> some View {
+        simultaneousGesture(
+            TapGesture().onEnded {
+                isFieldFocused.wrappedValue = false
+            }
+        )
+    }
+}
+
+/// The one screen ahead of the numbered stepper: prompts scanning the bucket's
+/// NFC tag before the form begins. That scan isn't wired up yet, so nothing
+/// here reads a real tag -- the whole page is a tap target standing in for
+/// what will become an automatic advance once a bucket is detected.
+struct AddNestConnectBucketView: View {
+    let onContinue: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -12,94 +42,142 @@ struct AddNestIdentityView: View {
             AddNestFlowBackground()
 
             ScrollView {
-                VStack(spacing: 0) {
-                    VStack(spacing: 12) {
-                        Text("Create new nest")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.appGreenPrimary)
-                            .frame(width: 321, height: 34)
+                VStack(spacing: 12) {
+                    Text("Connect your bucket")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.appGreenPrimary)
+                        .multilineTextAlignment(.center)
 
-                        Text("Let’s register a new turtle nest\nto start monitoring its journey.")
-                            .font(.body)
-                            .foregroundStyle(Color.appNeutralGray1)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 321, height: 44)
-                    }
-                    .frame(width: 321, height: 90)
+                    Text("Tap your bucket with the tag\nto register it")
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray1)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 100)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity)
 
-                    AddNestProgressIndicator(currentStep: 1, compact: false)
-                        .padding(.top, 20)
-                        .frame(maxWidth: .infinity)
+                Image("AddNestBucketHero")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 68)
+                    .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        AddNestSectionTitle(number: 1, title: "Nest identity")
+                howItWorksCard
+                    .padding(.horizontal, 16)
+                    .padding(.top, 45)
+                    .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+            // Standing in for the real trigger: an NFC read will replace this
+            // once that integration exists. A `simultaneousGesture` so it
+            // doesn't compete with the close button's own tap above it.
+            .simultaneousGesture(TapGesture().onEnded(onContinue))
 
-                        AddNestLabeledTextField(
-                            label: "QR / Bucket ID",
-                            text: $controller.draft.bucketID,
-                            isMuted: true
-                        )
-                        .padding(10)
-                        .frame(height: 92)
+            AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(.light)
+    }
 
-                        AddNestLabeledTextField(
-                            label: "Nest Number",
-                            text: $controller.draft.nestNumber,
-                            isMuted: true,
-                            keyboardType: .numberPad
-                        )
-                        .padding(10)
-                        .frame(height: 92)
+    private var howItWorksCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "iphone.gen2.radiowaves.left.and.right")
+                    .font(.title2)
+                    .foregroundStyle(Color.appGreenPrimary)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("How it works")
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray2)
+
+                    Text("Hold your iPhone near the NFC tag on the bucket until it's detected. Your Bucket ID will show up automatically.")
+                        .font(.footnote)
+                        .foregroundStyle(Color(hex: "#AEAEB2"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background(Color(hex: "#E0E0E0").opacity(0.29), in: RoundedRectangle(cornerRadius: 24))
+    }
+}
+
+struct AddNestIdentityView: View {
+    @Bindable var controller: NestController
+    let onSelectSection: () -> Void
+    let onPinLocation: () -> Void
+    let onNext: () -> Void
+    let onCancel: () -> Void
+
+    @FocusState private var isFieldFocused: Bool
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            AddNestFlowBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    AddNestFlowTopHeader(currentStep: 1, onClose: onCancel)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        AddNestSectionTitle(title: "Nest identity")
+
+                        // Two short identifiers read as one line in the field,
+                        // so they share a row rather than stacking.
+                        HStack(alignment: .top, spacing: 10) {
+                            AddNestLabeledTextField(
+                                label: "Bucket ID",
+                                text: $controller.draft.bucketID,
+                                isMuted: true,
+                                controlHeight: 48,
+                                cornerRadius: 16,
+                                focus: $isFieldFocused
+                            )
+
+                            AddNestLabeledTextField(
+                                label: "Nest Number",
+                                text: $controller.draft.nestNumber,
+                                isMuted: true,
+                                controlHeight: 48,
+                                cornerRadius: 16,
+                                keyboardType: .numberPad,
+                                focus: $isFieldFocused
+                            )
+                        }
 
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Section")
                                 .font(.subheadline)
                                 .foregroundStyle(Color.appNeutralGray2)
 
-                            Button(action: onSelectSection) {
-                                HStack(spacing: 9) {
-                                    Image(systemName: "square.grid.2x2")
-                                        .font(.title)
-                                        .foregroundStyle(Color.appGreenPrimary)
-                                        .frame(width: 33, height: 34)
-
-                                    VStack(alignment: .leading, spacing: 0) {
-                                        Text(sectionTitle)
-                                            .font(.body)
-                                            .foregroundStyle(Color.appNeutralGray2)
-                                            .lineLimit(1)
-
-                                        Text(sectionSubtitle)
-                                            .font(.footnote)
-                                            .foregroundStyle(Color(hex: "#AEAEB2"))
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.85)
-                                    }
-                                    .frame(width: 253, alignment: .leading)
-
-                                    Spacer(minLength: 0)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(Color.appNeutralGray2)
-                                        .frame(width: 17, height: 20)
-                                }
-                                .padding(10)
-                                .frame(maxWidth: .infinity, minHeight: 77, maxHeight: 77, alignment: .leading)
-                                .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity)
-                            .accessibilityHint("Opens a grid to choose the nest location")
+                            AddNestDisclosureRow(
+                                systemImage: "square.grid.2x2",
+                                title: sectionTitle,
+                                subtitle: sectionSubtitle,
+                                isSelected: !controller.draft.section.isEmpty,
+                                action: onSelectSection
+                            )
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.top, 10)
-                        .frame(height: 117, alignment: .top)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            AddNestSectionTitle(title: "Location")
+
+                            AddNestDisclosureRow(
+                                systemImage: isLocationPinned ? nil : "mappin",
+                                title: locationTitle,
+                                subtitle: locationSubtitle,
+                                isSelected: isLocationPinned,
+                                titleLineLimit: isLocationPinned ? 2 : 1,
+                                action: onPinLocation
+                            )
+                        }
 
                         if let errorMessage = controller.errorMessage {
                             Text(errorMessage)
@@ -108,18 +186,16 @@ struct AddNestIdentityView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 10)
-                    .frame(height: 443, alignment: .top)
-                    .padding(.top, 20)
+                    .padding(.top, 30)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .containerRelativeFrame(.horizontal)
-                .padding(.top, 88)
+                .padding(.top, 12)
             }
             .scrollIndicators(.hidden)
-
-            AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
+            .scrollDismissesKeyboard(.interactively)
         }
+        .dismissesKeyboardOnTap($isFieldFocused)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AddNestPrimaryButton(title: "Next") {
                 guard controller.validateIdentity() else { return }
@@ -133,64 +209,89 @@ struct AddNestIdentityView: View {
         .preferredColorScheme(.light)
     }
 
-    private var sectionTitle: String {
-        controller.draft.section.isEmpty
-            ? "Select section on the map"
-            : "Section \(controller.draft.section)"
+    /// The chosen value is emphasized inside the sentence rather than replacing
+    /// it, so the row still reads as the same control once it is filled in.
+    private var sectionTitle: Text {
+        let section = controller.draft.section
+        guard !section.isEmpty else { return Text("Select the section") }
+        // Interpolating a styled `Text` rather than concatenating: `Text + Text`
+        // is deprecated on this SDK.
+        return Text(
+            "Selected \(Text("section \(section)").foregroundStyle(Color.appGreenPrimary).fontWeight(.semibold))"
+        )
     }
 
     private var sectionSubtitle: String {
-        controller.draft.section.isEmpty
-            ? "Tap a grid cell to choose the nest location"
-            : "Tap to change the nest location"
+        "Tap a grid cell to choose the nest location"
+    }
+
+    private var isLocationPinned: Bool {
+        controller.draft.latitude != nil && controller.draft.longitude != nil
+    }
+
+    /// Once pinned the row describes the place itself: the address on top and
+    /// its coordinates beneath, rather than a label saying something was
+    /// chosen. Two lines, because a street address rarely fits in one.
+    private var locationTitle: Text {
+        guard isLocationPinned else { return Text("Pin the location") }
+        if let address = controller.draft.locationAddress, !address.isEmpty {
+            return Text(address)
+        }
+        return Text("Dropped pin")
+    }
+
+    private var locationSubtitle: String {
+        guard
+            isLocationPinned,
+            let latitude = controller.draft.latitude,
+            let longitude = controller.draft.longitude
+        else {
+            return "Record where were eggs found"
+        }
+        return NestLocationPickerView.formattedCoordinates(
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        )
     }
 }
 
 struct AddNestEggInformationView: View {
     @Bindable var controller: NestController
-    let onBack: () -> Void
     let onPreview: () -> Void
     let onCancel: () -> Void
 
     @State private var datePickerTarget: NestDatePickerTarget?
+    @FocusState private var isFieldFocused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
 
             ScrollView {
-                VStack(spacing: 0) {
-                    AddNestProgressIndicator(currentStep: 2, compact: true)
-                        .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 0) {
+                    AddNestFlowTopHeader(currentStep: 2, onClose: onCancel)
 
-                    VStack(alignment: .center, spacing: 0) {
-                        AddNestSectionTitle(number: 2, title: "Egg information")
-                            .frame(width: 370, alignment: .leading)
+                    AddNestBigNumberField(
+                        label: "Total number of eggs",
+                        text: $controller.draft.numberOfEggs,
+                        focus: $isFieldFocused
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 30)
 
-                        AddNestLabeledTextField(
-                            label: "Number of eggs",
-                            text: $controller.draft.numberOfEggs,
-                            isEmphasized: true,
-                            controlHeight: 44,
-                            keyboardType: .numberPad
-                        )
-                        .padding(10)
-                        .frame(width: 370, height: 94)
-                        .padding(.top, 10)
-                    }
-                    .frame(width: 402)
-                    .offset(x: -1)
-                    .padding(.top, 33)
-
-                    VStack(alignment: .center, spacing: 10) {
-                        AddNestSectionTitle(number: 3, title: "Timeline")
-                            .frame(width: 370, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 10) {
+                        AddNestSectionTitle(title: "Timeline")
 
                         AddNestTimelineDateBlock(
                             label: "Egg collection date",
                             value: controller.draft.collectionDate
                         ) {
-                            datePickerTarget = .collection
+                            toggle(.collection)
+                        }
+
+                        if datePickerTarget == .collection {
+                            AddNestInlineDatePicker(
+                                selection: dateBinding(for: .collection)
+                            )
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
@@ -198,59 +299,79 @@ struct AddNestEggInformationView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(Color.appNeutralGray2)
 
-                            HStack(spacing: 10) {
-                                AddNestInspectionModeButton(
-                                    title: "Select date",
-                                    systemImage: "calendar",
-                                    isSelected: controller.draft.inspectionDateMode == .selectDate
-                                ) {
-                                    controller.draft.inspectionDateMode = .selectDate
-                                }
-
-                                AddNestInspectionModeButton(
-                                    title: "After X days",
-                                    systemImage: "calendar.badge.plus",
-                                    isSelected: controller.draft.inspectionDateMode == .afterCollectionDays
-                                ) {
-                                    controller.draft.inspectionDateMode = .afterCollectionDays
-                                    controller.updateEstimatedHatchDate()
-                                }
+                            AddNestInspectionModeControl(
+                                mode: controller.draft.inspectionDateMode
+                            ) { newMode in
+                                controller.draft.inspectionDateMode = newMode
+                                // Switching mode has to apply the interval
+                                // immediately; otherwise the date shown and
+                                // the date saved are whatever the form was
+                                // last left holding. A no-op when switching to
+                                // select-date, which is user-driven instead.
+                                controller.updateInspectionDateFromDays()
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
                         }
-                        .padding(10)
-                        .frame(width: 370, height: 100, alignment: .topLeading)
+
+                        HStack {
+                            Text(inspectionRowLabel)
+                                .font(.footnote)
+                                .foregroundStyle(Color.appNeutralGray2)
+
+                            Spacer(minLength: 8)
+
+                            if controller.draft.inspectionDateMode == .selectDate {
+                                Button {
+                                    toggle(.inspection)
+                                } label: {
+                                    inspectionPill(
+                                        AppDateFormatting.longNestDraftDate(
+                                            controller.draft.inspectionDate
+                                        )
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                inspectionPill(daysPillText)
+                            }
+                        }
+                        .padding(.horizontal, 10)
 
                         if controller.draft.inspectionDateMode == .selectDate {
-                            AddNestTimelineDateBlock(
-                                label: "Inspection date",
-                                value: controller.draft.inspectionDate
-                            ) {
-                                datePickerTarget = .inspection
+                            if datePickerTarget == .inspection {
+                                AddNestInlineDatePicker(
+                                    selection: dateBinding(for: .inspection)
+                                )
                             }
                         } else {
-                            AddNestTimelineDateBlock(
-                                label: "Days after collection",
-                                value: controller.draft.collectionDate
-                            ) {
-                                datePickerTarget = .collection
+                            // The number of days is the input; the row above
+                            // already shows the date it resolves to, so the
+                            // choice is never made blind.
+                            AddNestBigNumberField(
+                                text: $controller.draft.daysAfterCollection,
+                                focus: $isFieldFocused
+                            )
+                            .onChange(of: controller.draft.daysAfterCollection) { _, _ in
+                                controller.updateInspectionDateFromDays()
                             }
                         }
-
-                        AddNestEstimatedHatchCard(date: controller.draft.hatchDate)
-                            .frame(width: 370, height: 93)
                     }
-                    .frame(width: 402)
-                    .offset(x: 2)
+                    .padding(.horizontal, 16)
                     .padding(.top, 28)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .containerRelativeFrame(.horizontal)
-                .padding(.top, 32)
+                .padding(.top, 12)
                 .padding(.bottom, 21)
             }
             .scrollIndicators(.hidden)
-
-            AddNestFlowHeader(style: .backAndClose, onBack: onBack, onClose: onCancel)
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .dismissesKeyboardOnTap($isFieldFocused)
+        .onAppear {
+            // A fresh draft's derived dates are only placeholders until this
+            // runs; a draft returning from further in the flow is already
+            // correct, and recomputing again here is harmless.
+            controller.refreshDerivedDates()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AddNestPrimaryButton(title: "Save & Preview", action: onPreview)
@@ -258,14 +379,36 @@ struct AddNestEggInformationView: View {
                 .padding(.bottom, 12)
                 .background(Color.white)
         }
-        .sheet(item: $datePickerTarget) { target in
-            AddNestDatePickerSheet(
-                title: target.title,
-                selection: dateBinding(for: target)
-            )
-        }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
+    }
+
+    private var inspectionRowLabel: String {
+        controller.draft.inspectionDateMode == .selectDate
+            ? "Inspection date will be on"
+            : "Inspection date will be in"
+    }
+
+    private var daysPillText: String {
+        let days = Int(controller.draft.daysAfterCollection) ?? 0
+        return days == 1 ? "1 day" : "\(days) days"
+    }
+
+    private func inspectionPill(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.black)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(hex: "#F1F1F1").opacity(0.5), in: Capsule())
+    }
+
+    /// The calendar expands under the field it belongs to, so tapping the same
+    /// field again closes it and only one can be open at a time.
+    private func toggle(_ target: NestDatePickerTarget) {
+        withAnimation(.snappy(duration: 0.25)) {
+            datePickerTarget = datePickerTarget == target ? nil : target
+        }
     }
 
     private func dateBinding(for target: NestDatePickerTarget) -> Binding<Date> {
@@ -283,8 +426,19 @@ struct AddNestEggInformationView: View {
                 case .collection:
                     controller.draft.collectionDate = formattedDate
                     controller.updateEstimatedHatchDate()
+                    // Only one of these two does anything, depending on which
+                    // field the user is actually driving in the current
+                    // mode -- moving the collection date has to carry
+                    // whichever one is live along with it.
+                    controller.updateInspectionDateFromDays()
+                    controller.updateDaysAfterCollectionFromInspectionDate()
                 case .inspection:
                     controller.draft.inspectionDate = formattedDate
+                    // The reverse of the "After X days" field driving
+                    // inspectionDate: picking a date here has to update the
+                    // day count too, or switching modes afterward would
+                    // discard what was just picked.
+                    controller.updateDaysAfterCollectionFromInspectionDate()
                 }
             }
         )
@@ -303,9 +457,12 @@ struct AddNestPreviewView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    AddNestProgressIndicator(currentStep: 3, compact: true)
-                        .frame(maxWidth: .infinity)
-
+                    // This screen's own Figma frame has no step indicator --
+                    // just the floating back/close circles (the Accessory Bar
+                    // component) above a centered title, unlike steps 1/2.
+                    // "Back" reruns the same action as "Edit details" below --
+                    // both return to the editable form, so there is no
+                    // separate callback to plumb through.
                     VStack(spacing: 12) {
                         Text("Preview Your Nest")
                             .font(.title)
@@ -319,26 +476,43 @@ struct AddNestPreviewView: View {
                             .multilineTextAlignment(.center)
                             .frame(width: 321, height: 22)
                     }
-                    .padding(.top, 32)
                     .frame(width: 321, height: 100, alignment: .top)
+                    // Outside the sized frame, not inside it: padding applied
+                    // before `.frame(height: 100)` pushes the content down
+                    // within that box instead of moving the box itself, and
+                    // the content had nowhere to go but overflow past its own
+                    // bottom edge into the card below it.
+                    .padding(.top, 78)
 
                     AddNestPreviewCard(
                         nestNumber: controller.draft.nestNumber,
                         eggCount: controller.draft.numberOfEggs,
                         hatchDate: controller.draft.hatchDate,
-                        daysLeft: controller.draft.daysLeftDisplay
+                        daysLeft: controller.daysUntilHatchDisplay
                     )
                     .padding(.top, 10)
                     .padding(.horizontal, 16)
 
-                    Image("AddNestTurtle")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 185, height: 134)
-                        .clipped()
-                        .offset(x: 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 209)
+                    AddNestPreviewDetailRow(
+                        bucketID: controller.draft.bucketID,
+                        section: controller.draft.section,
+                        inspectionDate: controller.draft.inspectionDate
+                    )
+                    .padding(.top, 16)
+                    .padding(.horizontal, 16)
+
+                    // Only shown once the optional map step has been used;
+                    // an empty block would imply the pin was lost.
+                    if let latitude = controller.draft.latitude,
+                       let longitude = controller.draft.longitude {
+                        AddNestFoundLocationCard(
+                            latitude: latitude,
+                            longitude: longitude,
+                            address: controller.draft.locationAddress
+                        )
+                        .padding(.top, 20)
+                        .padding(.horizontal, 16)
+                    }
 
                     if let errorMessage = controller.errorMessage {
                         Text(errorMessage)
@@ -349,12 +523,11 @@ struct AddNestPreviewView: View {
                     }
                 }
                 .containerRelativeFrame(.horizontal)
-                .padding(.top, 32)
                 .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
 
-            AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
+            AddNestFlowHeader(style: .backAndClose, onBack: onEdit, onClose: onCancel)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 12) {
@@ -364,7 +537,11 @@ struct AddNestPreviewView: View {
                     isDisabled: controller.isSaving
                 )
 
-                AddNestTextAction(title: "Edit details", action: onEdit)
+                AddNestPrimaryButton(
+                    title: "Edit details",
+                    action: onEdit,
+                    isSecondary: true
+                )
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -388,63 +565,68 @@ struct NestRegistrationSuccessView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             AddNestFlowBackground(glowColor: temperatureStatus.backgroundGlowColor)
 
+            // TODO: play Resources/success_confetti.lottie here once a
+            // Lottie-rendering package is added -- see conversation. A static
+            // image was tried and removed; the current design has no static
+            // ribbon graphic at rest, only a one-time animation on arrival.
+
             ScrollView {
-                ZStack(alignment: .topLeading) {
-                    ZStack(alignment: .topLeading) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 50, weight: .regular))
-                            .foregroundStyle(temperatureStatus.accentColor.opacity(0.5))
-                            .frame(width: 59, height: 41)
-                            .accessibilityHidden(true)
-                            .offset(x: 131)
+                VStack(spacing: 12) {
+                    // `.fill` already draws its own circular backing (the
+                    // checkmark is a cutout, not a separate white glyph on
+                    // top) -- wrapping it in another background circle drew
+                    // two, a colored ring around a white disc instead of one
+                    // flat colored circle.
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundStyle(temperatureStatus.accentColor)
+                        .accessibilityHidden(true)
 
-                        Text("Nest #\(displayNestNumber) \nregistered!")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundStyle(temperatureStatus.titleColor)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 321, height: 82, alignment: .top)
-                            .offset(y: 53)
+                    Text("Nest #\(displayNestNumber) registered!")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundStyle(temperatureStatus.titleColor)
+                        .multilineTextAlignment(.center)
 
-                        Text("Monitoring is now active.")
-                            .font(.body)
-                            .foregroundStyle(Color.appNeutralGray1)
-                            .frame(width: 321, height: 22)
-                            .offset(y: 147)
-                    }
-                    .frame(width: 321, height: 169, alignment: .topLeading)
-                    .offset(x: 41, y: 158)
+                    Text("Monitoring is now active.")
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray1)
+                }
+                .padding(.top, 96)
+                .frame(maxWidth: .infinity)
 
-                    VStack(spacing: 12) {
-                        AddNestTemperatureCard(
-                            temperatureC: temperatureC,
-                            accentColor: temperatureStatus.accentColor
+                VStack(spacing: 12) {
+                    AddNestTemperatureCard(
+                        temperatureC: temperatureC,
+                        accentColor: temperatureStatus.accentColor
+                    )
+
+                    HStack(spacing: 12) {
+                        AddNestSummaryMetricCard(
+                            title: "Estimated hatch",
+                            value: AppDateFormatting.longNestDraftDate(hatchDate)
                         )
 
-                        HStack(spacing: 12) {
-                            AddNestSummaryMetricCard(
-                                title: "Estimated hatch",
-                                value: AppDateFormatting.longNestDraftDate(hatchDate)
-                            )
-
-                            AddNestSummaryMetricCard(title: "Eggs", value: eggCount)
-                        }
+                        AddNestSummaryMetricCard(title: "Eggs", value: eggCount)
                     }
-                    .frame(width: 370, height: 307, alignment: .top)
-                    .offset(x: 23, y: 376)
                 }
-                .frame(width: 402, height: 683, alignment: .topLeading)
+                .padding(.horizontal, 16)
+                .padding(.top, 48)
+                .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
-            .ignoresSafeArea(.container, edges: .top)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 12) {
                 AddNestPrimaryButton(title: "View nest", action: onViewNest)
-                AddNestTextAction(title: "Back to Hatchery", action: onBackToHatchery)
+                AddNestPrimaryButton(
+                    title: "Back to Hatchery",
+                    action: onBackToHatchery,
+                    isSecondary: true
+                )
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -512,6 +694,49 @@ private struct AddNestFlowHeader: View {
     }
 }
 
+/// Shared top header for every screen in the Add Nest flow: title, subtitle
+/// and a close button on one row, then the full-width step indicator below.
+/// One definition so every step reads identically save for which step is lit.
+private struct AddNestFlowTopHeader: View {
+    let currentStep: Int
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Create new nest")
+                        .font(.system(size: 28, weight: .bold))
+                        .tracking(0.38)
+                        .foregroundStyle(Color.appGreenPrimary)
+
+                    Text("Let’s register a new turtle nest\nto start monitoring its journey.")
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray1.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .frame(width: 48, height: 48)
+                        .glassEffect(.regular, in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel")
+            }
+            .padding(.horizontal, 16)
+
+            AddNestProgressIndicator(currentStep: currentStep, compact: false)
+                .padding(.horizontal, 22)
+                .padding(.top, 24)
+        }
+    }
+}
+
 private struct AddNestFlowBackground: View {
     var glowColor = Color(
         red: 254.0 / 255.0,
@@ -537,11 +762,10 @@ private struct AddNestProgressIndicator: View {
     let currentStep: Int
     let compact: Bool
 
-    private var circleSize: CGFloat { compact ? 24 : 40 }
-    private var connectorWidth: CGFloat { compact ? 48.6 : 81 }
-    private var itemSpacing: CGFloat { compact ? 6 : 10 }
+    private var circleSize: CGFloat { compact ? 24 : 28 }
+    private var itemSpacing: CGFloat { compact ? 6 : 6 }
     private var connectorHeight: CGFloat { compact ? 0.6 : 1 }
-    private var textFont: Font { .system(size: compact ? 9 : 15, weight: .medium) }
+    private var textFont: Font { .system(size: 9, weight: .medium) }
 
     var body: some View {
         HStack(spacing: itemSpacing) {
@@ -549,9 +773,13 @@ private struct AddNestProgressIndicator: View {
                 stepCircle(step)
 
                 if step < 3 {
+                    // The rail stretches to whatever width it is given rather
+                    // than a fixed span, so the row lines up with the fields
+                    // below it on every screen size.
                     Rectangle()
                         .fill(Color(hex: "#AEAEB2"))
-                        .frame(width: connectorWidth, height: connectorHeight)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: connectorHeight)
                 }
             }
         }
@@ -580,14 +808,83 @@ private struct AddNestProgressIndicator: View {
 }
 
 private struct AddNestSectionTitle: View {
-    let number: Int
+    /// Omitted where the design shows a bare heading. The egg-information
+    /// screen still numbers its two sections, so the prefix stays available
+    /// rather than being deleted outright.
+    var number: Int? = nil
     let title: String
 
     var body: some View {
-        Text("\(number). \(title)")
+        Text(number.map { "\($0). \(title)" } ?? title)
             .font(.body)
             .fontWeight(.semibold)
             .foregroundStyle(Color.appGreenPrimary)
+    }
+}
+
+/// A tappable row that opens a further step: an icon, a title over a hint, and
+/// a trailing chevron.
+///
+/// Used by both *Section* and *Location* on the identity screen, which are
+/// visually identical, so the shape lives in one place.
+private struct AddNestDisclosureRow: View {
+    /// Optional: a resolved address needs the full width, so the pinned
+    /// location row drops its icon rather than truncating the street.
+    let systemImage: String?
+    /// A `Text` rather than a `String` so the filled-in part can be emphasized
+    /// inline, as in "Selected **section B1**".
+    let title: Text
+    let subtitle: String
+    /// Tints the row once a value has been chosen. Without it the row looks
+    /// identical before and after, and the only way to tell was to read it.
+    let isSelected: Bool
+    var titleLineLimit: Int = 1
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.title)
+                        .foregroundStyle(Color.appGreenPrimary)
+                        .frame(width: 33, height: 34)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    title
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray2)
+                        .lineLimit(titleLineLimit)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(Color(hex: "#AEAEB2"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.appNeutralGray2)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+            // Grows with a wrapped address instead of clipping it.
+            .frame(maxWidth: .infinity, minHeight: 77, alignment: .leading)
+            .background(
+                isSelected
+                    ? Color.appGreenPrimary.opacity(0.12)
+                    : Color(hex: "#E0E0E0").opacity(0.2),
+                in: RoundedRectangle(cornerRadius: 24)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(subtitle)
     }
 }
 
@@ -595,9 +892,13 @@ private struct AddNestLabeledTextField: View {
     let label: String
     @Binding var text: String
     var isMuted = false
-    var isEmphasized = false
     var controlHeight: CGFloat = 42
+    var cornerRadius: CGFloat = 10
     var keyboardType: UIKeyboardType = .default
+    /// The screen's own focus flag. Binding every field to the same boolean
+    /// is enough to know "is any field active" -- which field specifically
+    /// doesn't matter for dismissing the keyboard on an outside tap.
+    var focus: FocusState<Bool>.Binding? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -605,17 +906,24 @@ private struct AddNestLabeledTextField: View {
                 .font(.subheadline)
                 .foregroundStyle(Color.appNeutralGray2)
 
-            TextField(label, text: $text)
-                .font(fieldFont)
+            Group {
+                if let focus {
+                    TextField(label, text: $text)
+                        .focused(focus)
+                } else {
+                    TextField(label, text: $text)
+                }
+            }
+                .font(isMuted ? .subheadline : .body)
                 .foregroundStyle(.black)
                 .keyboardType(keyboardType)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .padding(10)
                 .frame(maxWidth: .infinity, minHeight: controlHeight, maxHeight: controlHeight, alignment: .leading)
-                .background(fieldBackground, in: RoundedRectangle(cornerRadius: 10))
+                .background(fieldBackground, in: RoundedRectangle(cornerRadius: cornerRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: cornerRadius)
                         .stroke(isMuted ? Color(hex: "#FFFBF7") : Color(hex: "#EBEBEB"), lineWidth: 1)
                 }
         }
@@ -623,14 +931,51 @@ private struct AddNestLabeledTextField: View {
     }
 
     private var fieldBackground: Color {
-        if isMuted { return Color(hex: "#787878").opacity(0.2) }
-        if isEmphasized { return Color(hex: "#F1F1F1").opacity(0.5) }
-        return Color.white
+        isMuted ? Color(hex: "#787878").opacity(0.2) : Color.white
     }
+}
 
-    private var fieldFont: Font {
-        if isEmphasized { return .body.weight(.semibold) }
-        return isMuted ? .subheadline : .body
+/// A large centered numeric readout that doubles as its own text field: the
+/// egg count and the "after X days" count share this exact look in the
+/// design, so it is one component used twice rather than two near-identical
+/// fields.
+private struct AddNestBigNumberField: View {
+    /// Omitted for the days field, which is already introduced by the row
+    /// above it ("Inspection date will be in ...").
+    var label: String? = nil
+    @Binding var text: String
+    /// See `AddNestLabeledTextField.focus`.
+    var focus: FocusState<Bool>.Binding? = nil
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let label {
+                Text(label)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.appGreenPrimary)
+            }
+
+            Group {
+                if let focus {
+                    TextField("", text: $text)
+                        .focused(focus)
+                } else {
+                    TextField("", text: $text)
+                }
+            }
+                .font(.system(size: 34, weight: .semibold))
+                .tracking(-0.86)
+                .multilineTextAlignment(.center)
+                .keyboardType(.numberPad)
+                .foregroundStyle(.black)
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .background(
+                    Color(hex: "#F1F1F1").opacity(0.5),
+                    in: RoundedRectangle(cornerRadius: 24)
+                )
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -690,85 +1035,50 @@ private struct AddNestTimelineDateBlock: View {
     }
 }
 
-private struct AddNestInspectionModeButton: View {
-    let title: String
-    let systemImage: String
-    let isSelected: Bool
-    let action: () -> Void
+/// A real segmented control -- one continuous track, the active segment
+/// carrying a sliding white highlight -- rather than two separate buttons
+/// with a gap between them.
+private struct AddNestInspectionModeControl: View {
+    let mode: NestInspectionDateMode
+    let onSelect: (NestInspectionDateMode) -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: systemImage == "calendar.badge.plus" ? 8 : 5) {
+        HStack(spacing: 0) {
+            segment(.selectDate, title: "Select date", systemImage: "calendar")
+            segment(.afterCollectionDays, title: "After X days", systemImage: "calendar.badge.plus")
+        }
+        .padding(4)
+        .frame(maxWidth: .infinity)
+        .frame(height: 50)
+        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func segment(
+        _ value: NestInspectionDateMode,
+        title: String,
+        systemImage: String
+    ) -> some View {
+        let isSelected = mode == value
+
+        return Button {
+            onSelect(value)
+        } label: {
+            HStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.title2)
-                    .frame(width: 27, height: 28)
+                    .font(.callout)
                 Text(title)
                     .font(.callout)
             }
             .foregroundStyle(Color.appNeutralGray2)
-            .frame(width: 160, height: 50)
-            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 10))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(borderColor, lineWidth: 1)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                isSelected ? Color.white : Color.clear,
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .shadow(color: .black.opacity(isSelected ? 0.08 : 0), radius: 4, y: 1)
         }
         .buttonStyle(.plain)
-    }
-
-    private var backgroundColor: Color {
-        isSelected ? Color.appGreenPrimary.opacity(0.1) : .white
-    }
-
-    private var borderColor: Color {
-        isSelected ? Color.appGreenPrimary.opacity(0.5) : Color(hex: "#EBEBEB")
-    }
-}
-
-private struct AddNestEstimatedHatchCard: View {
-    let date: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text("Estimated hatch date")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.appGreenPrimary)
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 0) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 17, weight: .bold))
-                        .frame(width: 22, height: 24)
-
-                    Text("Auto")
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                        .frame(width: 30, height: 18)
-                }
-                .foregroundStyle(Color.appGreenPrimary)
-                .frame(width: 52, height: 24)
-                .offset(y: -2)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 20)
-
-            HStack {
-                Text(date)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.black)
-
-                Spacer(minLength: 0)
-            }
-            .padding(10)
-            .frame(height: 48, alignment: .topLeading)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 93, maxHeight: 93, alignment: .topLeading)
-        .background(Color.appGreenPrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -779,110 +1089,206 @@ private struct AddNestPreviewCard: View {
     let daysLeft: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(.black)
-                .padding(.leading, 10)
-                .padding(.top, 10)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .frame(height: 39, alignment: .topLeading)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.black)
 
-            HStack(spacing: 12) {
-                AddNestPreviewMetric(
-                    value: eggCount,
-                    label: "Eggs",
-                    valueStyle: .eggCount
-                )
-                .frame(width: 108)
-
-                AddNestPreviewMetric(
-                    value: hatchDate,
-                    label: "Ets. hatch",
-                    systemImage: "sparkles",
-                    valueStyle: .date
-                )
-                .frame(width: 112)
-
-                AddNestPreviewMetric(
-                    value: daysLeft,
-                    label: "Days left",
-                    systemImage: "hourglass",
-                    valueStyle: .daysLeft
-                )
+                Rectangle()
+                    .fill(Color(hex: "#EBEBEB"))
+                    .frame(height: 1)
             }
-            .frame(maxWidth: .infinity, minHeight: 83)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    AddNestPreviewMetric(value: eggCount, label: "Eggs")
+                        .frame(width: 108)
+
+                    // "Month day, year" (Mar 01, 2026), not the field's own
+                    // storage format (dd.MM.yyyy) that the raw draft holds.
+                    AddNestPreviewMetric(
+                        value: AppDateFormatting.longNestDraftDate(hatchDate),
+                        label: "Ets. hatch *"
+                    )
+                    .frame(width: 112)
+
+                    AddNestPreviewMetric(value: daysLeft, label: "Days left")
+                }
+
+                // The "Auto" badge on the hatch-date field already says this
+                // once; the card presenting the whole set says it once more
+                // for all of them, rather than repeating it per field.
+                //
+                // Interpolating a styled `Text` rather than `Text + Text`,
+                // which is deprecated on this SDK.
+                Text(
+                    "* \(Text("Auto, the content auto generate by AI").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
+                )
+                .font(.caption2)
+                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 8)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 7)
-        .frame(maxWidth: .infinity, minHeight: 139, maxHeight: 139, alignment: .topLeading)
-        .background(Color.appGreenPrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(hex: "#939393").opacity(0.1), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
-private struct AddNestPreviewMetric: View {
-    let value: String
-    let label: String
-    var systemImage: String?
-    let valueStyle: ValueStyle
+/// The identifiers that are not part of the headline summary: which bucket the
+/// clutch is in, which grid cell it went to, and when someone is due to look at
+/// it. Confirming these is the point of this screen, so they are shown rather
+/// than trusted.
+private struct AddNestPreviewDetailRow: View {
+    let bucketID: String
+    let section: String
+    let inspectionDate: String
 
-    enum ValueStyle: Equatable {
-        case eggCount
-        case date
-        case daysLeft
-
-        var font: Font {
-            switch self {
-            case .eggCount: .system(size: 20, weight: .bold)
-            case .date, .daysLeft: .title3.weight(.semibold)
-            }
+    var body: some View {
+        HStack(spacing: 0) {
+            item(systemImage: "arrow.up.bin", label: "Bucket ID", value: bucketID)
+            divider
+            item(systemImage: "square.grid.3x3.square", label: "Section", value: section)
+            divider
+            item(systemImage: "dot.circle.viewfinder", label: "Inspection", value: inspectionDate)
         }
+        .frame(maxWidth: .infinity)
+    }
 
-        var color: Color {
-            switch self {
-            case .eggCount: .appNeutralGray2
-            case .date, .daysLeft: .appNeutralGray2
-            }
+    private var divider: some View {
+        Rectangle()
+            .fill(Color(hex: "#EBEBEB"))
+            .frame(width: 1, height: 50)
+    }
+
+    /// Flat -- no card, no shadow, no shared border. The only separation
+    /// between the three identifiers is the thin vertical rule.
+    private func item(
+        systemImage: String,
+        label: String,
+        value: String
+    ) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(Color(hex: "#8E8E93"))
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+
+            Text(value.isEmpty ? "—" : value)
+                .font(.body)
+                .fontWeight(.semibold)
+                .foregroundStyle(.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+    }
+}
+
+/// Where the eggs were found, which the grid placement deliberately does not
+/// record: nests are relocated into the hatchery, so the origin beach is a
+/// separate fact worth confirming before saving.
+private struct AddNestFoundLocationCard: View {
+    let latitude: Double
+    let longitude: Double
+    let address: String?
+
+    private var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: 16)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Nest was found")
+                .font(.caption)
+                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
 
-            Text(value)
-                .font(valueStyle.font)
-                .foregroundStyle(valueStyle.color)
-                .lineLimit(1)
-                .minimumScaleFactor(valueStyle == .date ? 1 : 0.55)
-                .fixedSize(horizontal: valueStyle == .date, vertical: false)
-                .frame(height: 25)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(address ?? "Dropped pin")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color(hex: "#2A2A2A"))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
 
-            Spacer(minLength: 0)
-
-            HStack(spacing: 3) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.appGreenPrimary)
+                    Text(NestLocationPickerView.formattedCoordinates(coordinate))
+                        .font(.body)
+                        .foregroundStyle(Color.appNeutralGray1)
                 }
-                Text(label)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // A still, non-interactive map: this is a confirmation, and a
+                // pannable map here would compete with the page's own scroll.
+                Map(
+                    initialPosition: .region(
+                        MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(
+                                latitudeDelta: 0.004,
+                                longitudeDelta: 0.004
+                            )
+                        )
+                    ),
+                    interactionModes: []
+                ) {
+                    Marker("", coordinate: coordinate)
+                        .tint(Color.appGreenPrimary)
+                }
+                .frame(width: 80, height: 81)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
-            .font(.caption)
-            .foregroundStyle(Color(hex: "#8E8E93"))
-            .opacity(0.8)
-            .lineLimit(1)
-            .frame(height: 16)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.clear, in: RoundedRectangle(cornerRadius: 24))
-        .shadow(color: .black.opacity(0.05), radius: 10)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+        }
+    }
+}
+
+/// All three metrics on the preview card share one text style in the design
+/// (Title3/Emphasized) -- there is no per-metric variation to encode, so
+/// unlike the version this replaced, nothing here picks a different font for
+/// the egg count. That was also the one hardcoded `.system(size:)` on this
+/// screen: fixed points don't grow with the user's text-size setting the way
+/// `.title3` does, so it was the one metric that stayed the same size while
+/// its siblings scaled.
+///
+/// No icon: the design pairs each value with a bare caption, not a glyph.
+private struct AddNestPreviewMetric: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.appNeutralGray2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+                .lineLimit(1)
+                // The value above shrinks rather than truncates; without this
+                // the label didn't, so the one metric with no fixed column
+                // width ("Days left") clipped to "Days l..." instead.
+                .minimumScaleFactor(0.7)
+        }
         .frame(maxWidth: .infinity)
     }
 }
@@ -945,47 +1351,38 @@ private struct AddNestSummaryMetricCard: View {
     }
 }
 
-private struct AddNestPrimaryButton: View {
+/// Not private: the location picker lives in its own file and uses the same
+/// primary action button.
+struct AddNestPrimaryButton: View {
     let title: String
     let action: () -> Void
     var isDisabled = false
+    /// The preview screen's "Edit details" is a real button in the design
+    /// (a light-gray filled pill matching iOS's system gray-6), not a bare
+    /// text link -- it needed the same shape as "Save nest", just muted.
+    var isSecondary = false
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.body)
                 .fontWeight(.semibold)
-                .foregroundStyle(Color(hex: "#FAF8F4"))
+                .foregroundStyle(isSecondary ? Color(hex: "#8E8E93") : Color(hex: "#FAF8F4"))
                 .frame(maxWidth: .infinity, minHeight: 55)
         }
         .buttonStyle(.plain)
-        .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26))
+        .background(
+            isSecondary ? Color(hex: "#F2F2F7") : Color.appGreenPrimary,
+            in: RoundedRectangle(cornerRadius: 26)
+        )
         .opacity(isDisabled ? 0.5 : 1)
         .disabled(isDisabled)
     }
 }
 
-private struct AddNestTextAction: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.body)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.appGreenPrimary)
-                .frame(maxWidth: .infinity, minHeight: 55)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private enum NestDatePickerTarget: Identifiable {
+private enum NestDatePickerTarget {
     case collection
     case inspection
-
-    var id: Self { self }
 
     var title: String {
         switch self {
@@ -995,26 +1392,25 @@ private enum NestDatePickerTarget: Identifiable {
     }
 }
 
-private struct AddNestDatePickerSheet: View {
-    let title: String
+/// The calendar opens in place under its field rather than in a sheet, so the
+/// dates being related to each other stays visible while one is picked.
+private struct AddNestInlineDatePicker: View {
     @Binding var selection: Date
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        NavigationStack {
-            DatePicker(title, selection: $selection, displayedComponents: .date)
-                .datePickerStyle(.graphical)
-                .padding()
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", action: dismiss.callAsFunction)
-                    }
-                }
-        }
-        .presentationDetents([.medium])
+        DatePicker("", selection: $selection, displayedComponents: .date)
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .tint(Color.appGreenPrimary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(width: 370)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
@@ -1049,49 +1445,77 @@ struct NestSectionPickerView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                infoCard
+        VStack(spacing: 0) {
+            // Presented as a sheet over the form, so it carries its own bar
+            // rather than a navigation bar: the choice is confirmed or
+            // abandoned here and does not become a step in the flow's history.
+            sheetBar
 
-                NestSectionMapView(
-                    image: mapImage,
-                    usesMockCrop: usesMockMapCrop,
-                    grid: grid,
-                    selectedSectionID: pendingSection,
-                    onSelect: { section in
-                        guard section.isActive else { return }
-                        pendingSection = section.id
-                    }
-                )
+            ScrollView {
+                VStack(spacing: 10) {
+                    infoCard
 
-                selectionSummary
+                    NestSectionMapView(
+                        image: mapImage,
+                        usesMockCrop: usesMockMapCrop,
+                        grid: grid,
+                        selectedSectionID: pendingSection,
+                        onSelect: { section in
+                            guard section.isActive else { return }
+                            pendingSection = section.id
+                        }
+                    )
+
+                    selectionSummary
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 16)
+                .padding(.bottom, 20)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 20)
-            .padding(.bottom, 20)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
         .background(.white)
-        .navigationTitle("Place the nest")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                }
-                .accessibilityLabel("Cancel section selection")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: confirmSelection) {
-                    Image(systemName: "checkmark")
-                }
-                .disabled(pendingSection.isEmpty)
-                .accessibilityLabel("Confirm section selection")
-            }
-        }
         .preferredColorScheme(.light)
+    }
+
+    private var sheetBar: some View {
+        HStack {
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.appNeutralBlack)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel section selection")
+
+            Spacer()
+
+            Text("Select the section")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.appNeutralBlack)
+
+            Spacer()
+
+            Button(action: confirmSelection) {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(
+                        pendingSection.isEmpty
+                            ? Color.appNeutralGray3
+                            : Color.appGreenPrimary
+                    )
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
+            }
+            .buttonStyle(.plain)
+            .disabled(pendingSection.isEmpty)
+            .accessibilityLabel("Confirm section selection")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.white)
     }
 
     private var infoCard: some View {
@@ -1387,6 +1811,7 @@ private enum NestTemperatureStatus {
     AddNestIdentityView(
         controller: AddNestPreviewFixtures.controller(),
         onSelectSection: { },
+        onPinLocation: { },
         onNext: { },
         onCancel: { }
     )
@@ -1395,7 +1820,6 @@ private enum NestTemperatureStatus {
 #Preview("Add nest egg information", traits: .fixedLayout(width: 402, height: 874)) {
     AddNestEggInformationView(
         controller: AddNestPreviewFixtures.controller(),
-        onBack: { },
         onPreview: { },
         onCancel: { }
     )
@@ -1451,4 +1875,45 @@ private enum AddNestPreviewFixtures {
             nestService: NestService(repository: InMemoryNestRepository())
         )
     }
+
+    /// Matches the 3×4 grid `HatcheryGridPreviewView`'s own preview builds,
+    /// so a section id like "B1" resolves the same way in both.
+    static func grid() -> HatcheryGrid {
+        HatcheryGrid(
+            rows: 3,
+            columns: 4,
+            sections: (0..<3).flatMap { row in
+                (0..<4).map { column in
+                    HatcherySection(
+                        id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
+                        row: row,
+                        column: column,
+                        widthM: 2,
+                        heightM: 2,
+                        boundary: .fullImage.sectionBoundary(
+                            row: row,
+                            column: column,
+                            rowCount: 3,
+                            columnCount: 4
+                        )
+                    )
+                }
+            }
+        )
+    }
+}
+
+#Preview("Add nest: pick section", traits: .fixedLayout(width: 402, height: 874)) {
+    NestSectionPickerView(
+        controller: AddNestPreviewFixtures.controller(),
+        grid: AddNestPreviewFixtures.grid(),
+        mapImage: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
+        usesMockMapCrop: true,
+        // Left nil deliberately: the "—" / "No data yet" states are what a
+        // brand-new hatchery with no readings or nests yet actually looks
+        // like, which is the more useful case to preview here.
+        dashboard: nil,
+        onCancel: { },
+        onConfirm: { }
+    )
 }

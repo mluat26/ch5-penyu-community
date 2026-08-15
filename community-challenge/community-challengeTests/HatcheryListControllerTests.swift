@@ -8,7 +8,7 @@ final class HatcheryListControllerTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: FailingHatcheryRepository(),
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
 
@@ -36,7 +36,7 @@ final class HatcheryListControllerTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: repository,
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
 
@@ -77,7 +77,7 @@ final class HatcheryListControllerTests: XCTestCase {
                     seed: [laterHatchery, firstHatchery]
                 ),
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
 
@@ -117,7 +117,7 @@ final class HatcheryListControllerTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: repository,
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
 

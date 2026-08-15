@@ -25,16 +25,16 @@ struct UpdateHatcheryInput: Hashable, Sendable {
 struct HatcheryService: Sendable {
     private let hatcheryRepository: any HatcheryRepository
     private let nestRepository: any NestRepository
-    private let telemetryRepository: any TelemetryRepository
+    private let ioTDataRepository: any IoTDataRepository
 
     init(
         hatcheryRepository: any HatcheryRepository,
         nestRepository: any NestRepository,
-        telemetryRepository: any TelemetryRepository
+        ioTDataRepository: any IoTDataRepository
     ) {
         self.hatcheryRepository = hatcheryRepository
         self.nestRepository = nestRepository
-        self.telemetryRepository = telemetryRepository
+        self.ioTDataRepository = ioTDataRepository
     }
 
     func createHatchery(_ input: CreateHatcheryInput) async throws -> HatcheryEntity {
@@ -66,7 +66,7 @@ struct HatcheryService: Sendable {
     /// list already has those rows.
     func loadOverview(hatcheryID: UUID) async throws -> HatcheryOverview {
         let loadedNests = try await nestRepository.fetchAll(hatcheryID: hatcheryID)
-        let readings = try await telemetryRepository.fetchReadings(
+        let readings = try await ioTDataRepository.fetchReadings(
             nestIDs: loadedNests.map(\.id),
             in: nil
         )
@@ -135,7 +135,7 @@ struct HatcheryService: Sendable {
         async let nests = nestRepository.fetchAll(hatcheryID: hatcheryID)
 
         let (loadedHatchery, loadedNests) = try await (hatchery, nests)
-        let readings = try await telemetryRepository.fetchReadings(
+        let readings = try await ioTDataRepository.fetchReadings(
             nestIDs: loadedNests.map(\.id),
             in: nil
         )
@@ -170,7 +170,7 @@ struct HatcheryService: Sendable {
     private func makeSections(
         hatchery: HatcheryEntity,
         nests: [NestEntity],
-        latestReadingByNestID: [UUID: HeatReadingEntity]
+        latestReadingByNestID: [UUID: IoTDataEntity]
     ) -> [HatcherySectionDashboard] {
         (0..<max(hatchery.numberOfRows, 0)).flatMap { row in
             (0..<max(hatchery.numberOfColumns, 0)).map { column in
@@ -200,7 +200,7 @@ struct HatcheryService: Sendable {
         }
     }
 
-    private func averageTemperature(in readings: [HeatReadingEntity]) -> Double? {
+    private func averageTemperature(in readings: [IoTDataEntity]) -> Double? {
         guard !readings.isEmpty else { return nil }
         return readings.reduce(0) { $0 + $1.temperatureC } / Double(readings.count)
     }

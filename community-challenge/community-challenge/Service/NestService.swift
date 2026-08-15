@@ -6,7 +6,13 @@ struct CreateNestInput: Hashable, Sendable {
     var numberOfEggs: Int
     var dateEggsLaid: Date?
     var datePredictedHatch: Date?
-    var placeEggsLaid: Date?
+    var bucketID: String? = nil
+    var nestNumber: String? = nil
+    /// Where the eggs were found. Optional: a ranger without a signal must
+    /// still be able to register the nest.
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var locationAddress: String? = nil
     var placementRow: Int?
     var placementColumn: Int?
     /// When the first inspection is expected. Without it the nest is never
@@ -18,7 +24,11 @@ struct UpdateNestInput: Hashable, Sendable {
     var numberOfEggs: Int
     var dateEggsLaid: Date?
     var datePredictedHatch: Date?
-    var placeEggsLaid: Date?
+    var bucketID: String? = nil
+    var nestNumber: String? = nil
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var locationAddress: String? = nil
     var placementRow: Int?
     var placementColumn: Int?
 }

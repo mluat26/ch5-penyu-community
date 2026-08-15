@@ -11,6 +11,30 @@ import Supabase
 /// from Row Level Security. The app exchanges it for a per-device anonymous
 /// Auth session before it accesses owner-scoped hatcheries or private Storage.
 enum SupabaseConfig {
+    /// Ensures there is a session before anything tries to write.
+    ///
+    /// The database requires an authenticated user to create a hatchery, so an
+    /// anonymous request is refused with "An authenticated user is required to
+    /// create a hatchery". Anonymous sign-in is not "no auth": Supabase creates
+    /// a real `auth.users` row and issues a genuine session, so `auth.uid()`
+    /// returns a value and `hatchery.owner_id` gets populated.
+    ///
+    /// Idempotent — a session persists across launches, so this is a no-op on
+    /// every launch after the first.
+    ///
+    /// ponytail: anonymous sign-in unblocks development; replace with the real
+    /// provider once one is enabled on the project. Note that each install
+    /// becomes its own user, so hatcheries created on one device are owned by
+    /// an account no other device can sign into.
+    @discardableResult
+    static func ensureSignedIn() async throws -> UUID {
+        if let existing = client.auth.currentSession {
+            return existing.user.id
+        }
+        let session = try await client.auth.signInAnonymously()
+        return session.user.id
+    }
+
     static let client = SupabaseClient(
         supabaseURL: projectURL,
         supabaseKey: anonKey,
@@ -53,7 +77,7 @@ enum SupabaseConfig {
 
 private extension JSONDecoder {
     /// Postgres `date` columns (`date_eggs_laid`, `date_predicted_hatch`,
-    /// `place_eggs_laid`) come back from PostgREST as plain `yyyy-MM-dd`
+    /// `next_inspection_date`) come back from PostgREST as plain `yyyy-MM-dd`
     /// strings. The SDK's default decoder only accepts full ISO8601
     /// timestamps, so a bare date fails to decode without this.
     static let postgresDateAware: JSONDecoder = {

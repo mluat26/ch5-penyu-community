@@ -346,7 +346,7 @@ final class HatcheryLayoutPersistenceTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: hatcheryRepository,
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             ),
             layoutService: layoutService
         )

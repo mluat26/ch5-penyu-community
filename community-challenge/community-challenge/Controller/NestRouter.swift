@@ -1,8 +1,15 @@
 import Observation
 
 enum NestRoute: Hashable {
+    /// The one screen ahead of the numbered stepper. NFC isn't wired up yet,
+    /// so nothing here actually reads a tag; tapping the page is the
+    /// placeholder for what will become an automatic advance once a bucket
+    /// is detected.
+    case connectBucket
     case identity
-    case sectionPicker
+    /// The section grid is presented as a sheet rather than pushed, so it has
+    /// no route: choosing a cell is a modal decision, not a step to go back to.
+    case locationPicker
     case eggInformation
     case preview
     case success

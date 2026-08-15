@@ -18,7 +18,7 @@ final class HatcheryRescanPersistenceTests: XCTestCase {
         let service = HatcheryService(
             hatcheryRepository: hatcheryRepository,
             nestRepository: InMemoryNestRepository(),
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
         let controller = HatcherySetupController(
             hatcheryService: service,

@@ -7,6 +7,9 @@ struct HatcheryGridPreviewView: View {
     let usesMockImage: Bool
     let dimension: HatcheryDimension
     let grid: HatcheryGrid
+    /// Saving is the first thing in setup that can fail for a reason outside
+    /// the app — no session, no network, a rejected write. Without showing it,
+    /// Done appears to do nothing at all.
     let isSaving: Bool
     let errorMessage: String?
     let onDone: () -> Void

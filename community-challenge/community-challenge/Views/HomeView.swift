@@ -449,27 +449,37 @@ private struct SectionOverviewSheet: View {
     }
 
     private var nestList: some View {
-        let visibleNests = Array(section.nests.prefix(4))
-
-        return VStack(spacing: 0) {
-            ForEach(Array(visibleNests.enumerated()), id: \.element.id) { index, nest in
-                Button {
-                    selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
-                } label: {
-                    nestRow(nest, ordinal: index + 1)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .frame(height: 116)
-                .overlay(alignment: .bottom) {
-                    if index < visibleNests.count - 1 {
-                        Rectangle()
-                            .fill(Color(hex: "#EEEEEE"))
-                            .frame(height: 1)
+        // The card stays 464pt because the sheet is a fixed 707 and this list
+        // starts 167 down; what changed is that its contents scroll.
+        //
+        // It used to render `section.nests.prefix(4)` into exactly four 116pt
+        // rows with no scroll view, so a section's fifth nest was counted in
+        // the header above and then had nowhere to appear -- which reads as the
+        // nest never having been saved.
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(Array(section.nests.enumerated()), id: \.element.id) { index, nest in
+                    Button {
+                        selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
+                    } label: {
+                        nestRow(nest, ordinal: index + 1)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .frame(height: 116)
+                    .overlay(alignment: .bottom) {
+                        if index < section.nests.count - 1 {
+                            Rectangle()
+                                .fill(Color(hex: "#EEEEEE"))
+                                .frame(height: 1)
+                        }
                     }
                 }
             }
         }
+        // Four or fewer nests fill the card exactly, so leave those sections
+        // feeling fixed rather than springy.
+        .scrollBounceBehavior(.basedOnSize)
         .frame(width: 371, height: 464)
         .background(.white, in: RoundedRectangle(cornerRadius: 26))
         .clipShape(RoundedRectangle(cornerRadius: 26))
@@ -483,7 +493,7 @@ private struct SectionOverviewSheet: View {
 
         return ZStack(alignment: .topLeading) {
             HStack(spacing: 4) {
-                Text("Nest #\(String(format: "%03d", ordinal))")
+                Text("Nest #\(item.nest.displayNumber(fallbackOrdinal: ordinal))")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "#2B2B2B"))
 

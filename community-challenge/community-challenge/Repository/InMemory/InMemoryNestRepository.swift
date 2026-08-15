@@ -28,9 +28,14 @@ actor InMemoryNestRepository: NestRepository {
             numberOfEggs: input.numberOfEggs,
             dateEggsLaid: input.dateEggsLaid,
             datePredictedHatch: input.datePredictedHatch,
-            placeEggsLaid: input.placeEggsLaid,
+            bucketID: input.bucketID,
+            nestNumber: input.nestNumber,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            locationAddress: input.locationAddress,
             successEggsHatch: nil,
             failEggsHatch: nil,
+            eggsUnhatched: nil,
             placementRow: input.placementRow,
             placementColumn: input.placementColumn,
             nextInspectionDate: input.nextInspectionDate
@@ -47,7 +52,11 @@ actor InMemoryNestRepository: NestRepository {
         nest.numberOfEggs = input.numberOfEggs
         nest.dateEggsLaid = input.dateEggsLaid
         nest.datePredictedHatch = input.datePredictedHatch
-        nest.placeEggsLaid = input.placeEggsLaid
+        nest.bucketID = input.bucketID
+        nest.nestNumber = input.nestNumber
+        nest.latitude = input.latitude
+        nest.longitude = input.longitude
+        nest.locationAddress = input.locationAddress
         nest.placementRow = input.placementRow
         nest.placementColumn = input.placementColumn
         nests[id] = nest
@@ -80,6 +89,23 @@ actor InMemoryNestRepository: NestRepository {
         nest.successEggsHatch = eggsHatched
         nest.failEggsHatch = eggsRotten
         nest.nextInspectionDate = nextInspectionDate
+        nests[nestID] = nest
+    }
+
+    /// Mirrors the hatching branch of `refresh_nest_summary`: a final tally
+    /// overwrites the summary outright and ends the inspection schedule.
+    func applyHatching(
+        nestID: UUID,
+        eggsHatched: Int,
+        eggsRotten: Int,
+        eggsUnhatched: Int
+    ) {
+        guard var nest = nests[nestID] else { return }
+
+        nest.successEggsHatch = eggsHatched
+        nest.failEggsHatch = eggsRotten
+        nest.eggsUnhatched = eggsUnhatched
+        nest.nextInspectionDate = nil
         nests[nestID] = nest
     }
 }
