@@ -2,6 +2,7 @@ import Foundation
 
 enum DomainValidationError: Error, LocalizedError, Sendable {
     case emptyName
+    case duplicateHatcheryName
     case invalidDimensions
     case invalidEggCount
     case hatcheryNotEmpty(nestCount: Int)
@@ -18,6 +19,8 @@ enum DomainValidationError: Error, LocalizedError, Sendable {
         switch self {
         case .emptyName:
             "A name is required."
+        case .duplicateHatcheryName:
+            "Name already exists"
         case .invalidDimensions:
             "Hatchery dimensions and grid counts must be positive."
         case .invalidEggCount:
@@ -43,5 +46,18 @@ enum DomainValidationError: Error, LocalizedError, Sendable {
         case let .hatchingExceedsClutch(counted, clutchSize):
             "That totals \(counted) eggs, but the nest holds \(clutchSize)."
         }
+    }
+}
+
+/// Keeps the client-side preflight aligned with the database's
+/// `lower(btrim(name))` comparison while preserving the person's spelling for
+/// display and storage.
+nonisolated enum HatcheryName {
+    static func trimmed(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func normalized(_ name: String) -> String {
+        trimmed(name).lowercased()
     }
 }

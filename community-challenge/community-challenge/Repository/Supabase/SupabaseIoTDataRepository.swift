@@ -3,9 +3,19 @@ import Supabase
 
 actor SupabaseIoTDataRepository: IoTDataRepository {
     private let client: SupabaseClient
+    private let identity: any SupabaseIdentityProviding
+
+    init(
+        client: SupabaseClient,
+        identity: any SupabaseIdentityProviding
+    ) {
+        self.client = client
+        self.identity = identity
+    }
 
     init(client: SupabaseClient) {
         self.client = client
+        self.identity = SupabaseAuthenticationService(client: client)
     }
 
     func fetchReadings(
@@ -13,6 +23,7 @@ actor SupabaseIoTDataRepository: IoTDataRepository {
         in interval: DateInterval?
     ) async throws -> [IoTDataEntity] {
         guard !nestIDs.isEmpty else { return [] }
+        _ = try await identity.ensureAuthenticatedUserID()
 
         var query = client
             .from("iotdata")

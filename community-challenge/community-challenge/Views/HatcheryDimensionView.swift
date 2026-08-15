@@ -131,13 +131,33 @@ struct HatcheryDimensionView: View {
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
+            } else if let skippedScanGrid {
+                // Skipping a camera scan should not leave the hatchery area
+                // visually empty. Show the same section geometry that Next
+                // will save, but deliberately omit every image layer.
+                HatcherySkippedScanGrid(
+                    rows: skippedScanGrid.rows,
+                    columns: skippedScanGrid.columns
+                )
+                .padding(8)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityLabel(
             showsCapturedImage
                 ? "Captured hatchery area"
-                : "Hatchery area awaiting a scan"
+                : "Hatchery grid without a scan image"
+        )
+    }
+
+    /// The skipped-scan state still has a valid full-image boundary. Build a
+    /// lightweight visual preview from the dimensions currently in the form;
+    /// the persisted grid is still generated only when the user taps Next.
+    private var skippedScanGrid: HatcheryGrid? {
+        guard let enteredDimension else { return nil }
+        return HatcheryGridGenerator.generate(
+            dimension: enteredDimension,
+            boundary: boundary
         )
     }
 
@@ -278,147 +298,35 @@ struct HatcheryDimensionView: View {
     }
 }
 
-enum HatcherySetupPalette {
-    static let warmGlow = Color(hex: "#FEF6ED")
-    static let buttonForeground = Color(hex: "#FAF8F4")
-    static let surface = Color(hex: "#F1F1F1")
-    static let border = Color(hex: "#EBEBEB")
-    static let gridOverlay = Color(hex: "#003C22")
-}
-
-struct HatcherySetupBackdrop: View {
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                Color.white
-
-                Circle()
-                    .fill(HatcherySetupPalette.warmGlow)
-                    .frame(width: 621, height: 621)
-                    .blur(radius: 100)
-                    .position(x: geometry.size.width / 2, y: -67.5)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-struct HatcherySetupImage: View {
-    let image: UIImage
-    let usesMockCrop: Bool
+/// A photo-free grid for the "Skip for now" dimension screen. `Canvas` keeps
+/// the live preview smooth even for a large, valid hatchery grid.
+private struct HatcherySkippedScanGrid: View {
+    let rows: Int
+    let columns: Int
 
     var body: some View {
-        GeometryReader { geometry in
-            if usesMockCrop {
-                // Figma's mock photo uses a fixed zoom and offset.
-                Image(uiImage: image)
-                    .resizable()
-                    .frame(
-                        width: geometry.size.width * 1.5821,
-                        height: geometry.size.height * 1.6213
+        Canvas { context, size in
+            let gap: CGFloat = 2
+            let horizontalGaps = CGFloat(max(columns - 1, 0)) * gap
+            let verticalGaps = CGFloat(max(rows - 1, 0)) * gap
+            let cellWidth = max(0, (size.width - horizontalGaps) / CGFloat(max(columns, 1)))
+            let cellHeight = max(0, (size.height - verticalGaps) / CGFloat(max(rows, 1)))
+            let cellColor = HatcherySetupPalette.gridOverlay.opacity(0.34)
+
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let rect = CGRect(
+                        x: CGFloat(column) * (cellWidth + gap),
+                        y: CGFloat(row) * (cellHeight + gap),
+                        width: cellWidth,
+                        height: cellHeight
                     )
-                    .offset(
-                        x: -geometry.size.width * 0.2767,
-                        y: -geometry.size.height * 0.4283
-                    )
-            } else {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    context.fill(Path(rect), with: .color(cellColor))
+                }
             }
         }
-        .clipped()
-    }
-}
-
-/// Draws a confirmed boundary over an aspect-filled photo, read-only.
-///
-/// Mirrors `HatcheryOverlay`'s fill and stroke so the area the user adjusted
-/// during scanning is recognisable on the screens that follow. Assumes the
-/// photo is rendered with `scaledToFill`, matching `HatcherySetupImage`'s
-/// non-mock path.
-struct HatcheryBoundaryOverlay: View {
-    let imageSize: CGSize
-    let boundary: HatcheryBoundary
-    var color: Color = .appGreenPrimary
-
-    var body: some View {
-        GeometryReader { geometry in
-            let mapper = AspectFillImageMapper(
-                imageSize: imageSize,
-                containerSize: geometry.size
-            )
-            let quad = mapper.viewQuad(for: boundary)
-
-            ZStack {
-                path(for: quad).fill(color.opacity(0.30))
-                path(for: quad).stroke(color, lineWidth: 2)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func path(for quad: QuadPoints) -> Path {
-        var path = Path()
-        path.move(to: quad.topLeft)
-        path.addLine(to: quad.topRight)
-        path.addLine(to: quad.bottomRight)
-        path.addLine(to: quad.bottomLeft)
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct HatcherySetupHeader: View {
-    let eyebrow: String
-    let hatchName: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(eyebrow)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(Color(uiColor: .systemGray))
-                .frame(height: 25)
-
-            Text(hatchName)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(Color.appGreenPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(height: 41)
-        }
-        .multilineTextAlignment(.center)
-        .frame(width: 321, height: 66)
-    }
-}
-
-struct HatcherySetupButton: View {
-    let title: String
-    let isPrimary: Bool
-    let action: () -> Void
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-    }
-
-    var body: some View {
-        Button(action: action) {
-            // The pill has to be drawn *inside* the label, and the content
-            // shape stated explicitly. With `.plain`, a bare Text only accepts
-            // taps on its glyphs, and a background applied outside the Button
-            // is decoration the hit test never sees — which left most of this
-            // 370 pt-wide button dead.
-            Text(title)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isPrimary ? HatcherySetupPalette.buttonForeground : .black)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(isPrimary ? Color.appGreenPrimary : Color(uiColor: .systemGray6))
-                .clipShape(shape)
-                .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .frame(height: 55)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 

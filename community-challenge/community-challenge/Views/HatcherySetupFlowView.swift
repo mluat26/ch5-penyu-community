@@ -48,16 +48,14 @@ struct HatcherySetupFlowView: View {
         switch entryPoint {
         case .firstHatch:
             CreateFirstHatchView { name in
-                controller.setName(name)
-                router.push(.scan)
+                await continueWithNewHatchery(named: name, router: router)
             }
 
         case .additionalHatch:
             CreateFirstHatchView(
                 style: .additionalHatch,
                 onCreate: { name in
-                    controller.setName(name)
-                    router.push(.scan)
+                    await continueWithNewHatchery(named: name, router: router)
                 },
                 onBack: onCancel
             )
@@ -157,6 +155,22 @@ struct HatcherySetupFlowView: View {
             },
             onCancel: entryPoint == .rescan ? onCancel : nil
         )
+    }
+
+    @MainActor
+    private func continueWithNewHatchery(
+        named name: String,
+        router: HatcherySetupRouter
+    ) async -> String? {
+        do {
+            try await controller.validateNewHatcheryName(name)
+            try Task.checkCancellation()
+            controller.setName(name)
+            router.push(.scan)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     private func saveHatchery() {

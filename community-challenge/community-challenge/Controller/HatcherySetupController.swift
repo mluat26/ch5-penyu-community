@@ -58,8 +58,16 @@ final class HatcherySetupController {
     }
 
     func setName(_ name: String) {
-        draft.name = name
+        draft.name = HatcheryName.trimmed(name)
         errorMessage = nil
+    }
+
+    /// Checks the current owner's hatcheries before we leave the Figma name
+    /// screen. The database repeats this check atomically at save time, so a
+    /// stale list or second device cannot create a duplicate.
+    func validateNewHatcheryName(_ name: String) async throws {
+        guard existingHatchery == nil else { return }
+        try await hatcheryService.validateAvailableHatcheryName(name)
     }
 
     func skipScanning() {

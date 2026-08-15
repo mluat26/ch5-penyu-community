@@ -72,11 +72,12 @@ struct AppRootView: View {
                     }
                 )
             } else if hatcheryListController.hatcheries.isEmpty {
-                // No saved hatcheries means the first-hatch flow is the only
-                // useful destination.
-                HatcherySetupFlowView(
-                    controller: hatcherySetupController,
-                    onSave: finishHatcheryCreation
+                // The introductory pair of Figma screens is only for a
+                // genuinely empty account. Its Create action preserves the
+                // established setup controller and routing below.
+                PreFirstHatchOnboardingView(
+                    onCreateHatchery: startNewHatchery,
+                    onSignInWithApple: signInWithApple
                 )
             } else if let firstHatchery = hatcheryListController.hatcheries.first {
                 if initialHatcheryOpeningState == .failed {
@@ -115,6 +116,24 @@ struct AppRootView: View {
         hatcherySetupController = container.makeHatcherySetupController()
         session.startNewHatchery()
         isCreatingHatchery = true
+    }
+
+    /// Apple may resolve to a returning account with hatcheries on another
+    /// device. Reload after the token exchange so the root immediately opens
+    /// that account's first hatchery instead of continuing the empty setup.
+    private func signInWithApple(
+        identityToken: String,
+        nonce: String
+    ) async throws {
+        try await container.signInWithApple(
+            identityToken: identityToken,
+            nonce: nonce
+        )
+        await hatcheryListController.load()
+
+        guard hatcheryListController.hasSuccessfulLoad else {
+            throw AppleSignInFlowError.hatcheriesCouldNotLoad
+        }
     }
 
     private func finishHatcheryCreation(_ hatchery: HatcherySessionState) {
@@ -198,6 +217,14 @@ struct AppRootView: View {
         Task { @MainActor in
             await hatcheryListController.loadManagement(refreshHatcheries: true)
         }
+    }
+}
+
+private enum AppleSignInFlowError: LocalizedError {
+    case hatcheriesCouldNotLoad
+
+    var errorDescription: String? {
+        "Your account was signed in, but your hatcheries could not be loaded. Please try again."
     }
 }
 

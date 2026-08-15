@@ -39,4 +39,23 @@ actor SupabaseAuthenticationService: SupabaseIdentityProviding {
         defer { anonymousSignInTask = nil }
         return try await task.value
     }
+
+    /// Exchanges the native Apple identity token for the app's Supabase
+    /// session. The caller only reaches this from the empty-account welcome
+    /// flow, so replacing the temporary anonymous identity cannot hide an
+    /// existing hatchery from this device.
+    @discardableResult
+    func signInWithApple(
+        identityToken: String,
+        nonce: String
+    ) async throws -> UUID {
+        let session = try await client.auth.signInWithIdToken(
+            credentials: OpenIDConnectCredentials(
+                provider: .apple,
+                idToken: identityToken,
+                nonce: nonce
+            )
+        )
+        return session.user.id
+    }
 }

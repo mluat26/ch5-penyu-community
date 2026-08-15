@@ -59,17 +59,21 @@ actor SupabaseHatcheryLayoutRepository: HatcheryLayoutRepository {
         _ request: HatcheryLayoutSaveRequest,
         rpc: String
     ) async throws -> HatcheryLayoutRevision {
-        _ = try await identity.ensureAuthenticatedUserID()
+        do {
+            _ = try await identity.ensureAuthenticatedUserID()
 
-        let rows: [HatcheryLayoutDTO] = try await client
-            .rpc(rpc, params: HatcheryLayoutBeginDTO(request: request))
-            .execute()
-            .value
+            let rows: [HatcheryLayoutDTO] = try await client
+                .rpc(rpc, params: HatcheryLayoutBeginDTO(request: request))
+                .execute()
+                .value
 
-        guard let layout = try rows.first?.toEntity() else {
-            throw DataMappingError.missingRequiredValue(field: "\(rpc) response")
+            guard let layout = try rows.first?.toEntity() else {
+                throw DataMappingError.missingRequiredValue(field: "\(rpc) response")
+            }
+            return layout
+        } catch {
+            throw HatcheryPersistenceErrorMapper.map(error)
         }
-        return layout
     }
 
     func finalize(

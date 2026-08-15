@@ -38,19 +38,40 @@ struct HatcheryService: Sendable {
     }
 
     func createHatchery(_ input: CreateHatcheryInput) async throws -> HatcheryEntity {
-        guard !input.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw DomainValidationError.emptyName
-        }
+        var sanitizedInput = input
+        sanitizedInput.name = HatcheryName.trimmed(input.name)
+        try await validateAvailableHatcheryName(sanitizedInput.name)
         guard
-            input.numberOfRows > 0,
-            input.numberOfColumns > 0,
-            input.lengthM > 0,
-            input.widthM > 0
+            sanitizedInput.numberOfRows > 0,
+            sanitizedInput.numberOfColumns > 0,
+            sanitizedInput.lengthM > 0,
+            sanitizedInput.widthM > 0
         else {
             throw DomainValidationError.invalidDimensions
         }
 
-        return try await hatcheryRepository.create(input)
+        return try await hatcheryRepository.create(sanitizedInput)
+    }
+
+    /// Fast, owner-scoped feedback for the name-entry screen. The database
+    /// still enforces this atomically when saving, because this list can become
+    /// stale while another device is creating a hatchery.
+    func validateAvailableHatcheryName(
+        _ name: String,
+        excludingHatcheryID: UUID? = nil
+    ) async throws {
+        let normalizedName = HatcheryName.normalized(name)
+        guard !normalizedName.isEmpty else {
+            throw DomainValidationError.emptyName
+        }
+
+        let existingHatcheries = try await hatcheryRepository.fetchAll()
+        guard !existingHatcheries.contains(where: {
+            $0.id != excludingHatcheryID
+                && HatcheryName.normalized($0.name) == normalizedName
+        }) else {
+            throw DomainValidationError.duplicateHatcheryName
+        }
     }
 
     func hatcheries() async throws -> [HatcheryEntity] {
@@ -89,14 +110,16 @@ struct HatcheryService: Sendable {
         id: UUID,
         _ input: UpdateHatcheryInput
     ) async throws -> HatcheryEntity {
-        guard !input.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        var sanitizedInput = input
+        sanitizedInput.name = HatcheryName.trimmed(input.name)
+        guard !sanitizedInput.name.isEmpty else {
             throw DomainValidationError.emptyName
         }
         guard
-            input.numberOfRows > 0,
-            input.numberOfColumns > 0,
-            input.lengthM > 0,
-            input.widthM > 0
+            sanitizedInput.numberOfRows > 0,
+            sanitizedInput.numberOfColumns > 0,
+            sanitizedInput.lengthM > 0,
+            sanitizedInput.widthM > 0
         else {
             throw DomainValidationError.invalidDimensions
         }
@@ -107,7 +130,7 @@ struct HatcheryService: Sendable {
                 guard let row = nest.placementRow, let column = nest.placementColumn else {
                     return false
                 }
-                return row >= input.numberOfRows || column >= input.numberOfColumns
+                return row >= sanitizedInput.numberOfRows || column >= sanitizedInput.numberOfColumns
             }
             .count
 
@@ -115,7 +138,7 @@ struct HatcheryService: Sendable {
             throw DomainValidationError.resizeWouldStrandNests(count: strandedCount)
         }
 
-        return try await hatcheryRepository.update(id: id, input)
+        return try await hatcheryRepository.update(id: id, sanitizedInput)
     }
 
     /// `nest_hatchery_id_fkey` would reject this anyway, but a raw foreign key

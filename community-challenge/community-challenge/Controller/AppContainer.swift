@@ -8,6 +8,7 @@ import Foundation
 /// require a per-device identity, since ownership is enforced at the database.
 @MainActor
 final class AppContainer {
+    private let authenticationService: SupabaseAuthenticationService
     private let hatcheryRepository: SupabaseHatcheryRepository
     private let nestRepository: SupabaseNestRepository
     private let ioTDataRepository: SupabaseIoTDataRepository
@@ -19,6 +20,8 @@ final class AppContainer {
     init() {
         let client = SupabaseConfig.client
         let identity = SupabaseAuthenticationService(client: client)
+
+        self.authenticationService = identity
 
         let hatcheryRepository = SupabaseHatcheryRepository(
             client: client,
@@ -38,9 +41,15 @@ final class AppContainer {
         )
         self.hatcheryRepository = hatcheryRepository
         self.nestRepository = nestRepository
-        self.ioTDataRepository = SupabaseIoTDataRepository(client: client)
+        self.ioTDataRepository = SupabaseIoTDataRepository(
+            client: client,
+            identity: identity
+        )
         self.inspectionRepository = SupabaseInspectionRepository(client: client)
-        self.deviceRepository = SupabaseDeviceRepository(client: client)
+        self.deviceRepository = SupabaseDeviceRepository(
+            client: client,
+            identity: identity
+        )
         self.hatchingRepository = SupabaseHatchingRepository(client: client)
         self.layoutService = HatcheryLayoutService(
             repository: layoutRepository,
@@ -92,6 +101,18 @@ final class AppContainer {
         HatcheryListController(
             hatcheryService: hatcheryService,
             layoutService: layoutService
+        )
+    }
+
+    /// Completes the native Sign in with Apple flow using the same Supabase
+    /// client and identity coordinator shared by all repositories.
+    func signInWithApple(
+        identityToken: String,
+        nonce: String
+    ) async throws {
+        _ = try await authenticationService.signInWithApple(
+            identityToken: identityToken,
+            nonce: nonce
         )
     }
 

@@ -26,15 +26,7 @@ struct HomeView: View {
             let gridHeight = gridWidth * 279 / 349
 
             ZStack(alignment: .topLeading) {
-                Color.white
-                    .overlay(alignment: .topLeading) {
-                        Circle()
-                            .fill(Color(hex: "#FEF6ED"))
-                            .frame(width: 621, height: 621)
-                            .blur(radius: 50)
-                            .offset(x: -110, y: -378)
-                            .allowsHitTesting(false)
-                    }
+                HatcheryWarmBackdrop()
 
                 VStack(alignment: .leading, spacing: 0) {
                     header(screenWidth: screenWidth)
@@ -46,18 +38,7 @@ struct HomeView: View {
                     overview(width: contentWidth)
                         .padding(.top, 25)
 
-                    Button {
-                        onAddNest()
-                    } label: {
-                        Text("Add new nest")
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .tracking(-0.43)
-                            .foregroundStyle(Color(hex: "#FAF8F4"))
-                            .frame(maxWidth: .infinity, minHeight: 55)
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color(hex: "#2E7D5B"), in: RoundedRectangle(cornerRadius: 26))
+                    HatcheryPrimaryButton(title: "Add new nest", action: onAddNest)
                     .frame(width: contentWidth, height: 55)
                     .padding(.top, 36)
                     .padding(.leading, 16)
@@ -95,11 +76,7 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 12) {
-                toolbarIcon(systemName: "bell", label: "Notifications")
-                toolbarIcon(systemName: "person", label: "Profile")
-            }
-            .frame(width: 156, height: 48)
+            HatcheryToolbarAccessories()
         }
         .frame(width: headerWidth, height: 48)
         .padding(.leading, 16)
@@ -126,17 +103,6 @@ struct HomeView: View {
         .padding(.top, 83)
     }
 
-    private func toolbarIcon(
-            systemName: String,
-            label: String
-        ) -> some View {
-            Image(systemName: systemName)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.black)
-                .frame(width: 48, height: 48)
-                .glassEffect(.regular, in: .circle)
-                .accessibilityLabel(label)
-        }
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 0) {
