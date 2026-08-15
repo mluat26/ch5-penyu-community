@@ -9,7 +9,7 @@ final class HatcherySetupFlowTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: InMemoryHatcheryRepository(),
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
 
@@ -34,7 +34,7 @@ final class HatcherySetupFlowTests: XCTestCase {
             hatcheryService: HatcheryService(
                 hatcheryRepository: hatcheryRepository,
                 nestRepository: InMemoryNestRepository(),
-                telemetryRepository: InMemoryTelemetryRepository()
+                ioTDataRepository: InMemoryIoTDataRepository()
             )
         )
         controller.setName("Hatch_01")

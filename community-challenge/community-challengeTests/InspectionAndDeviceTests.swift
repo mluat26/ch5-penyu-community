@@ -352,7 +352,6 @@ final class InspectionAndDeviceTests: XCTestCase {
             numberOfEggs: 100,
             dateEggsLaid: nil,
             datePredictedHatch: nil,
-            placeEggsLaid: nil,
             placementRow: 0,
             placementColumn: column
         )
@@ -367,5 +366,166 @@ final class InspectionAndDeviceTests: XCTestCase {
             _ = try await expression()
             XCTFail("Expected an error but none was thrown", file: file, line: line)
         } catch {}
+    }
+}
+
+// MARK: - Hatching result
+
+final class HatchingTests: XCTestCase {
+
+    /// The screen's own example: 225 eggs, 90 rotten, 12 unhatched, 123 hatched.
+    func testHatchingRecordsThreeCategoriesOnTheNest() async throws {
+        let (service, nestRepository, nest) = try await makeStack(clutchSize: 225)
+
+        _ = try await service.recordHatching(
+            RecordHatchingInput(
+                nestID: nest.id,
+                hatchedOn: Date(),
+                eggsHatched: 123,
+                eggsRotten: 90,
+                eggsUnhatched: 12
+            )
+        )
+
+        let updated = try await nestRepository.fetch(id: nest.id)
+        XCTAssertEqual(updated.successEggsHatch, 123)
+        XCTAssertEqual(updated.failEggsHatch, 90)
+        XCTAssertEqual(updated.eggsUnhatched, 12)
+        XCTAssertEqual(updated.eggsRemaining, 0, "225 = 123 + 90 + 12")
+        XCTAssertNil(updated.nextInspectionDate, "Hatching ends the schedule")
+        XCTAssertTrue(updated.isComplete)
+    }
+
+    /// What the Hatchling details screen pre-fills into the hatched field.
+    func testSuggestedHatchedCountIsTheRemainder() async throws {
+        let (service, _, _) = try await makeStack(clutchSize: 225)
+
+        XCTAssertEqual(
+            service.suggestedHatchedCount(clutchSize: 225, eggsRotten: 90, eggsUnhatched: 12),
+            123
+        )
+        // never negative, however wrong the other two are
+        XCTAssertEqual(
+            service.suggestedHatchedCount(clutchSize: 10, eggsRotten: 9, eggsUnhatched: 9),
+            0
+        )
+    }
+
+    /// The inspector may override the suggestion, so the three need not sum to
+    /// the clutch — eggs can simply be unaccounted for.
+    func testCountsMayFallShortOfTheClutch() async throws {
+        let (service, nestRepository, nest) = try await makeStack(clutchSize: 225)
+
+        _ = try await service.recordHatching(
+            RecordHatchingInput(
+                nestID: nest.id,
+                hatchedOn: Date(),
+                eggsHatched: 120,
+                eggsRotten: 90,
+                eggsUnhatched: 12
+            )
+        )
+
+        let updated = try await nestRepository.fetch(id: nest.id)
+        XCTAssertEqual(updated.eggsRemaining, 3, "222 accounted for out of 225")
+    }
+
+    /// Mirrors the hatching_within_clutch trigger.
+    func testCountsCannotExceedTheClutch() async throws {
+        let (service, _, nest) = try await makeStack(clutchSize: 225)
+
+        do {
+            _ = try await service.recordHatching(
+                RecordHatchingInput(
+                    nestID: nest.id,
+                    hatchedOn: Date(),
+                    eggsHatched: 200,
+                    eggsRotten: 90,
+                    eggsUnhatched: 12
+                )
+            )
+            XCTFail("Expected the tally to be refused")
+        } catch let error as DomainValidationError {
+            guard case let .hatchingExceedsClutch(counted, clutchSize) = error else {
+                return XCTFail("Expected .hatchingExceedsClutch, got \(error)")
+            }
+            XCTAssertEqual(counted, 302)
+            XCTAssertEqual(clutchSize, 225)
+        }
+    }
+
+    /// Mirrors the unique constraint on hatching.nest_id: one tally per nest.
+    func testANestCannotHatchTwice() async throws {
+        let (service, _, nest) = try await makeStack(clutchSize: 225)
+        let input = RecordHatchingInput(
+            nestID: nest.id,
+            hatchedOn: Date(),
+            eggsHatched: 123,
+            eggsRotten: 90,
+            eggsUnhatched: 12
+        )
+
+        _ = try await service.recordHatching(input)
+
+        do {
+            _ = try await service.recordHatching(input)
+            XCTFail("Expected the second tally to be refused")
+        } catch let error as DomainValidationError {
+            guard case .nestAlreadyHatched = error else {
+                return XCTFail("Expected .nestAlreadyHatched, got \(error)")
+            }
+        }
+    }
+
+    /// A correction replaces the tally rather than adding to it.
+    func testCorrectingAHatchingReplacesTheCounts() async throws {
+        let (service, nestRepository, nest) = try await makeStack(clutchSize: 225)
+
+        let recorded = try await service.recordHatching(
+            RecordHatchingInput(
+                nestID: nest.id,
+                hatchedOn: Date(),
+                eggsHatched: 123,
+                eggsRotten: 90,
+                eggsUnhatched: 12
+            )
+        )
+
+        _ = try await service.correctHatching(
+            id: recorded.id,
+            nestID: nest.id,
+            CorrectHatchingInput(
+                hatchedOn: recorded.hatchedOn,
+                eggsHatched: 125,
+                eggsRotten: 88,
+                eggsUnhatched: 12
+            )
+        )
+
+        let updated = try await nestRepository.fetch(id: nest.id)
+        XCTAssertEqual(updated.successEggsHatch, 125, "replaced, not 123 + 125")
+        XCTAssertEqual(updated.failEggsHatch, 88)
+    }
+
+    private func makeStack(clutchSize: Int) async throws
+        -> (HatchingService, InMemoryNestRepository, NestEntity) {
+        let nestRepository = InMemoryNestRepository()
+        let nest = try await NestService(repository: nestRepository).createNest(
+            CreateNestInput(
+                hatcheryID: UUID(),
+                founderID: nil,
+                numberOfEggs: clutchSize,
+                dateEggsLaid: nil,
+                datePredictedHatch: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: Date()
+            )
+        )
+        let service = HatchingService(
+            repository: InMemoryHatchingRepository(nestRepository: nestRepository),
+            nestRepository: nestRepository
+        )
+        return (service, nestRepository, nest)
     }
 }

@@ -12,16 +12,13 @@ final class HatcheryController {
     var selectedSectionID: String?
 
     private let hatcheryService: HatcheryService
-    private let demoDataSeeder: (any HatcheryDemoDataSeeding)?
 
     init(
         sessionState: HatcherySessionState,
-        hatcheryService: HatcheryService,
-        demoDataSeeder: (any HatcheryDemoDataSeeding)? = nil
+        hatcheryService: HatcheryService
     ) {
         self.sessionState = sessionState
         self.hatcheryService = hatcheryService
-        self.demoDataSeeder = demoDataSeeder
     }
 
     func load() async {
@@ -29,10 +26,6 @@ final class HatcheryController {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
-
-        if let demoDataSeeder {
-            await demoDataSeeder.seedDashboard(for: sessionState.hatchery)
-        }
 
         do {
             dashboard = try await hatcheryService.loadDashboard(

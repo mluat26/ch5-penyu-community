@@ -1,8 +1,8 @@
 import Foundation
 
-protocol TelemetryRepository: Sendable {
+protocol IoTDataRepository: Sendable {
     func fetchReadings(
         nestIDs: [UUID],
         in interval: DateInterval?
-    ) async throws -> [HeatReadingEntity]
+    ) async throws -> [IoTDataEntity]
 }

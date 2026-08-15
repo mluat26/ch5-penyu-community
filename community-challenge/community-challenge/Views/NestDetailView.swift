@@ -11,7 +11,9 @@ struct NestDetailView: View {
     let sectionID: String
 
     var body: some View {
-        SheetChrome(title: "Nest #\(String(format: "%03d", ordinal))") { sheetWidth in
+        SheetChrome(
+            title: "Nest #\(item.nest.displayNumber(fallbackOrdinal: ordinal))"
+        ) { sheetWidth in
             Image("NestImage")
                 .resizable()
                 .scaledToFill()
