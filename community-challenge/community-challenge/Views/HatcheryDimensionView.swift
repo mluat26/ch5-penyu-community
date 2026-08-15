@@ -4,7 +4,7 @@ import UIKit
 struct HatcheryDimensionView: View {
     let hatchName: String
     let image: UIImage
-    let boundary: HatcheryBoundary
+    let sandRegion: HatcherySandRegion?
     let usesMockImage: Bool
     let showsCapturedImage: Bool
     let onNext: (HatcheryDimension) -> Void
@@ -22,7 +22,7 @@ struct HatcheryDimensionView: View {
     init(
         hatchName: String,
         image: UIImage,
-        boundary: HatcheryBoundary,
+        sandRegion: HatcherySandRegion?,
         usesMockImage: Bool,
         showsCapturedImage: Bool = true,
         initialDimension: HatcheryDimension,
@@ -31,7 +31,7 @@ struct HatcheryDimensionView: View {
     ) {
         self.hatchName = hatchName
         self.image = image
-        self.boundary = boundary
+        self.sandRegion = sandRegion
         self.usesMockImage = usesMockImage
         self.showsCapturedImage = showsCapturedImage
         self.onNext = onNext
@@ -123,11 +123,11 @@ struct HatcheryDimensionView: View {
                     usesMockCrop: usesMockImage
                 )
 
-                HatcheryBoundaryOverlay(
+                HatcherySandRegionOverlay(
+                    region: .constant(sandRegion),
                     imageSize: image.size,
-                    boundary: boundary
+                    isEditable: false
                 )
-                .padding(8)
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
@@ -157,7 +157,8 @@ struct HatcheryDimensionView: View {
         guard let enteredDimension else { return nil }
         return HatcheryGridGenerator.generate(
             dimension: enteredDimension,
-            boundary: boundary
+            boundary: .fullImage,
+            sandRegion: sandRegion
         )
     }
 
@@ -334,7 +335,7 @@ private struct HatcherySkippedScanGrid: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(named: "HatcherySamplePhoto") ?? UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: true,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),
         onNext: { _ in },
@@ -346,7 +347,7 @@ private struct HatcherySkippedScanGrid: View {
     HatcheryDimensionView(
         hatchName: "Hatch 01",
         image: UIImage(),
-        boundary: .fullImage,
+        sandRegion: .default(from: .fullImage),
         usesMockImage: false,
         showsCapturedImage: false,
         initialDimension: HatcheryDimension(widthM: 4, heightM: 5),

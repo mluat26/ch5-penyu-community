@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-08-14",
+  "purpose": "Human-review suggestions only. These are not Create ML annotations and must not be used for training until a reviewer verifies or redraws each box.",
+  "source_manifest": "usfws-public-domain-images.json",
+  "coordinate_system": {
+    "origin": "top-left",
+    "units": "pixels",
+    "box_format": "x, y, width, height",
+    "target": "The usable sand bed inside the hatchery enclosure. Exclude the roof/canopy, surrounding beach, people, tools, and exterior mesh where possible."
+  },
+  "candidates": [
+    {
+      "source_id": "usfws-turtle-nest-hatchery",
+      "local_filename": "raw/usfws-public-domain/usfws-turtle-nest-hatchery.jpg",
+      "image_width": 3504,
+      "image_height": 2336,
+      "suggested_box": {
+        "x": 970,
+        "y": 930,
+        "width": 2220,
+        "height": 550
+      },
+      "review_confidence": 0.78,
+      "review_needed": true,
+      "recommended_use": "positive-candidate-after-human-review",
+      "rationale": "The full hatchery is visible. The suggested box follows the interior sand plane between the rear and front rails while excluding the person, tools, and most exterior beach.",
+      "uncertainty": "The near rail and mesh obscure the lower sand edge; a reviewer should decide whether the rail itself belongs in the target or tighten the lower edge slightly."
+    },
+    {
+      "source_id": "usfws-turtle-nest-hatchery-0",
+      "local_filename": "raw/usfws-public-domain/usfws-turtle-nest-hatchery-0.jpg",
+      "image_width": 3504,
+      "image_height": 2336,
+      "suggested_box": {
+        "x": 1400,
+        "y": 1600,
+        "width": 1300,
+        "height": 600
+      },
+      "review_confidence": 0.23,
+      "review_needed": true,
+      "recommended_use": "exclude-from-initial-training-unless-reframed",
+      "rationale": "Only a central, unobstructed portion of the hatchery sand is usable without including the volunteers or canopy. The suggested box intentionally marks that bare sand patch rather than the whole scene.",
+      "uncertainty": "This is not a complete hatchery view and the outer enclosure boundary is hidden by people and framing. It should not become a final object-detection label without a human decision to crop/reframe or exclude it."
+    },
+    {
+      "source_id": "usfws-turtle-nest-hatchery-1",
+      "local_filename": "raw/usfws-public-domain/usfws-turtle-nest-hatchery-1.jpg",
+      "image_width": 3504,
+      "image_height": 2336,
+      "suggested_box": {
+        "x": 800,
+        "y": 970,
+        "width": 1800,
+        "height": 750
+      },
+      "review_confidence": 0.68,
+      "review_needed": true,
+      "recommended_use": "positive-candidate-after-human-review",
+      "rationale": "The box isolates the interior sand bed of the enclosure and leaves out the people at the far left and right, roof frame, tools, and bucket.",
+      "uncertainty": "The rear and near limits are perspective-distorted and partly covered by rails. A reviewer should redraw against the actual sand boundary rather than preserve the axis-aligned estimate."
+    },
+    {
+      "source_id": "usfws-turtle-nest-hatchery-2",
+      "local_filename": "raw/usfws-public-domain/usfws-turtle-nest-hatchery-2.jpg",
+      "image_width": 3504,
+      "image_height": 2336,
+      "suggested_box": {
+        "x": 0,
+        "y": 1150,
+        "width": 2050,
+        "height": 650
+      },
+      "review_confidence": 0.55,
+      "review_needed": true,
+      "recommended_use": "hard-positive-after-human-review",
+      "rationale": "The visible left-side hatchery sand bed is separated from the ocean, sky, and sandbags. It is useful as a difficult partial view after review.",
+      "uncertainty": "The enclosure continues beyond the left image edge and netting crosses the sand. This is not appropriate as a clean full-hatchery example and should remain grouped with the other Cape Romain images."
+    },
+    {
+      "source_id": "usfws-turtle-nest-hatchery-3",
+      "local_filename": "raw/usfws-public-domain/usfws-turtle-nest-hatchery-3.jpg",
+      "image_width": 3504,
+      "image_height": 2336,
+      "suggested_box": {
+        "x": 0,
+        "y": 1140,
+        "width": 2050,
+        "height": 600
+      },
+      "review_confidence": 0.58,
+      "review_needed": true,
+      "recommended_use": "hard-positive-after-human-review",
+      "rationale": "The suggested region contains the visible sand bed while avoiding the speaking person, most sky, and the surrounding beach.",
+      "uncertainty": "The enclosure is cropped at the left edge and its lower boundary is partially hidden by mesh, so this needs a human redraw before it could be a final annotation."
+    }
+  ]
+}

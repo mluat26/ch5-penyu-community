@@ -106,12 +106,11 @@ struct HatcherySetupFlowView: View {
             }
 
         case .dimensions:
-            if let image = controller.draft.rectifiedImage ?? controller.draft.image,
-               let boundary = controller.draft.boundary {
+            if let image = controller.draft.rectifiedImage ?? controller.draft.image {
                 HatcheryDimensionView(
                     hatchName: controller.draft.name,
                     image: image,
-                    boundary: boundary,
+                    sandRegion: controller.draft.rectifiedSandRegion,
                     usesMockImage: controller.draft.usesMockImage,
                     showsCapturedImage: !controller.draft.isAwaitingScan,
                     initialDimension: controller.draft.dimension,
@@ -133,6 +132,7 @@ struct HatcherySetupFlowView: View {
                 HatcheryGridPreviewView(
                     hatchName: controller.draft.name,
                     image: image,
+                    sandRegion: controller.draft.rectifiedSandRegion,
                     usesMockImage: controller.draft.usesMockImage,
                     dimension: controller.draft.dimension,
                     grid: grid,

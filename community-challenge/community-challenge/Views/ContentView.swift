@@ -278,6 +278,7 @@ struct ContentView: View {
                 usesMockImage: hatchery.usesMockImage,
                 boundary: hatchery.boundary,
                 sandRegion: hatchery.sandRegion,
+                rectifiedSandRegion: hatchery.rectifiedSandRegion,
                 grid: hatchery.grid
             )
         )

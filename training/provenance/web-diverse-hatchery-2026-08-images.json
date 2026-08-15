@@ -1,0 +1,58 @@
+[
+  {
+    "source_id": "kosgoda-egg-garden",
+    "local_filename": "raw/web-diverse-hatchery-2026-08/kosgoda-sri-lanka-egg-garden.jpg",
+    "source_page_url": "https://commons.wikimedia.org/wiki/File:Turtle_Egg_Garden,_Kosgoda_(9824567464).jpg",
+    "image_url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Turtle_Egg_Garden%2C_Kosgoda_%289824567464%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "title": "Turtle Egg Garden, Kosgoda (9824567464)",
+    "facility": "Kosgoda Turtle Hatchery",
+    "country": "Sri Lanka",
+    "scene_group": "kosgoda-egg-garden",
+    "license": "CC BY-SA 2.0",
+    "annotation_status": "unlabeled_manual_box_review_required",
+    "sha256": "611a1461e54f8b282515be4031bbc538caf5877b81a45e96b9ae8a567c8f6ba2",
+    "dimensions": [5184, 3456]
+  },
+  {
+    "source_id": "boca-del-cielo-incubation-area",
+    "local_filename": "raw/web-diverse-hatchery-2026-08/boca-del-cielo-mexico-incubation-area.jpg",
+    "source_page_url": "https://commons.wikimedia.org/wiki/File:TurtleSancBoca17.JPG",
+    "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/TurtleSancBoca17.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "title": "TurtleSancBoca17.JPG",
+    "facility": "Turtle sanctuary incubation area, Boca del Cielo",
+    "country": "Mexico",
+    "scene_group": "boca-del-cielo-incubation-area",
+    "license": "CC BY-SA 3.0",
+    "annotation_status": "unlabeled_manual_box_review_required",
+    "sha256": "d59f415cd12640a451a0102a95e17e1ec0f5a090b4de8776fec66abb33e9fb5f",
+    "dimensions": [3872, 2592]
+  },
+  {
+    "source_id": "sea-turtle-incubation-kraal",
+    "local_filename": "raw/web-diverse-hatchery-2026-08/sea-turtle-incubation-kraal-location-unconfirmed.jpg",
+    "source_page_url": "https://commons.wikimedia.org/wiki/File:Sea_turtle_incubation_kraal.jpg",
+    "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/d0/Sea_turtle_incubation_kraal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "title": "Sea turtle incubation kraal",
+    "facility": "Location not stated on the source page",
+    "country": "Unconfirmed",
+    "scene_group": "sea-turtle-incubation-kraal-unconfirmed-location",
+    "license": "CC BY-SA 2.0",
+    "annotation_status": "unlabeled_manual_box_review_required",
+    "sha256": "5c4bd4b8d04e95f9703585e52a800618eee77df9645cce5d1f9f60aacec307e1",
+    "dimensions": [2048, 1536]
+  },
+  {
+    "source_id": "bajulmati-incubation-site",
+    "local_filename": "raw/web-diverse-hatchery-2026-08/bajulmati-indonesia-incubation-site.jpg",
+    "source_page_url": "https://travel.kompas.com/read/2022/08/22/192700027/bajulmati-sea-turtle-conservation-kawasan-konservasi-penyu-di-malang?page=all",
+    "image_url": "https://asset.kompas.com/crops/L48w5Zr3HNHBhLsDw6YAmcLhcLo%3D/0x0%3A0x0/750x500/data/photo/2022/08/22/630355b5de5f2.jpg",
+    "title": "Bajulmati Sea Turtle Conservation incubation site",
+    "facility": "Bajulmati Sea Turtle Conservation, Malang",
+    "country": "Indonesia",
+    "scene_group": "bajulmati-incubation-site",
+    "license": "Not verified; local testing only",
+    "annotation_status": "unlabeled_manual_box_review_required",
+    "sha256": "a4c6aff0a44cd36c1a78b4994ba3f437b9d4b23901126918b561061a32bac8e2",
+    "dimensions": [750, 500]
+  }
+]

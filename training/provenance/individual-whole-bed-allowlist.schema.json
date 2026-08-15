@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://penyu-community.local/training/provenance/individual-whole-bed-allowlist.schema.json",
+  "title": "Individual whole-bed hatchery image provenance manifest",
+  "description": "Schema for the manifest emitted by collect_individual_whole_bed_allowlist.sh. The collector has not been run when this schema is added.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "collection_status",
+    "raw_root",
+    "source",
+    "images"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "collection_status": {
+      "enum": [
+        "metadata_verified_only",
+        "downloaded"
+      ]
+    },
+    "raw_root": {
+      "type": "string"
+    },
+    "source": {
+      "const": "Individually reviewed Wikimedia Commons file allowlist"
+    },
+    "images": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/image"
+      }
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "source_page_url",
+        "original_url",
+        "title",
+        "facility",
+        "country",
+        "scene_group",
+        "visual_review",
+        "expected_license",
+        "license",
+        "license_url",
+        "author",
+        "credit",
+        "credit_verification",
+        "expected_mime",
+        "remote_mime",
+        "local_filename",
+        "local_mime",
+        "sha256",
+        "width",
+        "height",
+        "source_page_id",
+        "source_timestamp",
+        "verified_at"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "source_page_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://commons\\.wikimedia\\.org/wiki/File:"
+        },
+        "original_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://upload\\.wikimedia\\.org/"
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^File:"
+        },
+        "facility": {
+          "type": "string",
+          "minLength": 1
+        },
+        "country": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scene_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visual_review": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "author": {
+          "type": "string"
+        },
+        "credit": {
+          "type": "string"
+        },
+        "credit_verification": {
+          "enum": [
+            "matched",
+            "not_discoverable"
+          ]
+        },
+        "expected_mime": {
+          "const": "image/jpeg"
+        },
+        "remote_mime": {
+          "const": "image/jpeg"
+        },
+        "local_filename": {
+          "type": "string"
+        },
+        "local_mime": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^(|[a-f0-9]{64})$"
+        },
+        "width": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "height": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "source_page_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "source_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

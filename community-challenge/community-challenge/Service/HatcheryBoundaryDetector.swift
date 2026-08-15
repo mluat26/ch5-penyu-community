@@ -22,8 +22,10 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
     private static let retainedMissCount = 4
     private static let minimumArea = 0.08
     private static let maximumArea = 0.92
+    private static let objectAnalysisInterval: TimeInterval = 0.20
+    private static let objectAnalysisTimingTolerance: TimeInterval = 0.000_001
 
-    private struct Candidate {
+    struct Candidate {
         let boundary: HatcheryBoundary
         let confidence: Float
         let score: Double
@@ -42,6 +44,8 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
         var generation = 0
         var orientation: CGImagePropertyOrientation?
         var orientedImageSize: CGSize?
+        var latestObjectDetection: HatcheryObjectDetection?
+        var lastObjectAnalysisAt: TimeInterval?
     }
 
     private struct Analysis {
@@ -53,13 +57,35 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
         subsystem: Bundle.main.bundleIdentifier ?? "community-challenge",
         category: "HatcheryBoundaryDetector"
     )
+    /// An explicitly injected provider is primarily used by tests and keeps
+    /// callers able to opt out of Core ML completely with an explicit `nil`.
+    private let injectedObjectCandidateProvider: (any HatcheryObjectCandidateProviding)?
+    private let loadsBundledObjectCandidateProvider: Bool
     private let stateLock = NSLock()
     private var liveState = LiveState()
+    // Accessed under `stateLock`. Loading the compiled model happens only from
+    // an analysis call, never while the SwiftUI camera view is being created.
+    private var bundledObjectCandidateProvider: (any HatcheryObjectCandidateProviding)?
+    private var didAttemptBundledObjectCandidateProviderLoad = false
+
+    init() {
+        injectedObjectCandidateProvider = nil
+        loadsBundledObjectCandidateProvider = true
+    }
+
+    init(objectCandidateProvider: (any HatcheryObjectCandidateProviding)?) {
+        injectedObjectCandidateProvider = objectCandidateProvider
+        loadsBundledObjectCandidateProvider = false
+    }
 
     func processLive(
         pixelBuffer: CVPixelBuffer,
         orientation: CGImagePropertyOrientation
     ) -> HatcheryBoundaryDetection? {
+        // `HatcheryVideoAnalyzer` invokes this from its dedicated serial
+        // analyzer queue, so any bundled Core ML model is loaded off the main
+        // actor and only when live analysis actually begins.
+        let objectCandidateProvider = objectCandidateProviderForAnalysis()
         let imageSize = Self.orientedSize(
             width: CVPixelBufferGetWidth(pixelBuffer),
             height: CVPixelBufferGetHeight(pixelBuffer),
@@ -73,12 +99,38 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
             liveState.missedAnalyses = 0
             liveState.orientation = orientation
             liveState.orientedImageSize = imageSize
+            // Bounding boxes are normalized in the oriented image's coordinate
+            // space, so a cached result cannot survive a rotation or size swap.
+            liveState.latestObjectDetection = nil
+            liveState.lastObjectAnalysisAt = nil
         }
         let generation = liveState.generation
         let referenceBoundary = liveState.stable?.boundary ?? liveState.pending?.boundary
+        let cachedObjectDetection = liveState.latestObjectDetection
+        let shouldAnalyzeObject = objectCandidateProvider != nil
+            && Self.shouldRefreshObjectDetection(
+                lastAnalyzedAt: liveState.lastObjectAnalysisAt,
+                now: ProcessInfo.processInfo.systemUptime
+            )
         stateLock.unlock()
 
         let startedAt = ProcessInfo.processInfo.systemUptime
+        var objectDetection = cachedObjectDetection
+        if shouldAnalyzeObject {
+            let refreshedObjectDetection = objectCandidateProvider?.detect(
+                pixelBuffer: pixelBuffer,
+                orientation: orientation
+            )
+            stateLock.lock()
+            guard liveState.generation == generation else {
+                stateLock.unlock()
+                return nil
+            }
+            liveState.latestObjectDetection = refreshedObjectDetection
+            liveState.lastObjectAnalysisAt = startedAt
+            objectDetection = refreshedObjectDetection
+            stateLock.unlock()
+        }
         let analysis: Analysis
         do {
             let request = Self.rectangleRequest()
@@ -99,7 +151,11 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
             stateLock.unlock()
             return nil
         }
-        let update = updateLiveState(with: analysis.candidates.first, imageSize: imageSize)
+        let candidate = Self.resolvedCandidate(
+            objectDetection: objectDetection,
+            rectangleCandidates: analysis.candidates
+        )
+        let update = updateLiveState(with: candidate, imageSize: imageSize)
         stateLock.unlock()
 
         let elapsedMilliseconds = Int(
@@ -116,12 +172,17 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
         orientation: CGImagePropertyOrientation
     ) -> HatcheryBoundaryDetection? {
         let startedAt = ProcessInfo.processInfo.systemUptime
+        let objectCandidateProvider = objectCandidateProviderForAnalysis()
         let imageSize = Self.orientedSize(
             width: cgImage.width,
             height: cgImage.height,
             orientation: orientation
         )
 
+        let objectDetection = objectCandidateProvider?.detect(
+            cgImage: cgImage,
+            orientation: orientation
+        )
         let analysis: Analysis
         do {
             let request = Self.rectangleRequest()
@@ -137,7 +198,10 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
             analysis = Analysis(candidates: [], observationCount: 0)
         }
 
-        let candidate = analysis.candidates.first
+        let candidate = Self.resolvedCandidate(
+            objectDetection: objectDetection,
+            rectangleCandidates: analysis.candidates
+        )
         let elapsedMilliseconds = Int(
             (ProcessInfo.processInfo.systemUptime - startedAt) * 1_000
         )
@@ -310,6 +374,156 @@ nonisolated final class HatcheryBoundaryDetector: @unchecked Sendable {
             confidence: observation.confidence,
             score: score
         )
+    }
+
+    /// A detected object identifies *which* region is likely to be the
+    /// hatchery. A strongly aligned rectangle remains preferable because it
+    /// carries the perspective corners used by later image rectification.
+    static func resolvedCandidate(
+        objectDetection: HatcheryObjectDetection?,
+        rectangleCandidates: [Candidate]
+    ) -> Candidate? {
+        guard let objectDetection else {
+            return rectangleCandidates.first
+        }
+
+        guard
+            objectDetection.boundary.isValid,
+            let objectScore = score(
+                boundary: objectDetection.boundary,
+                confidence: objectDetection.confidence,
+                reference: nil
+            )
+        else {
+            return rectangleCandidates.first
+        }
+
+        let strongestPerspectiveCandidate = rectangleCandidates
+            .compactMap { candidate -> (candidate: Candidate, alignment: Double)? in
+                guard let alignment = objectAlignmentScore(
+                    candidate.boundary,
+                    withObjectBoundary: objectDetection.boundary
+                ) else {
+                    return nil
+                }
+                return (candidate, alignment)
+            }
+            .max { lhs, rhs in
+                if lhs.alignment == rhs.alignment {
+                    return lhs.candidate.score < rhs.candidate.score
+                }
+                return lhs.alignment < rhs.alignment
+            }
+
+        if let strongestPerspectiveCandidate {
+            return strongestPerspectiveCandidate.candidate
+        }
+
+        // Object observations are axis-aligned, but they still provide a valid
+        // four-corner conservative guide when rectangle detection fails. Page
+        // 8 remains the authoritative place for the user to refine the sand
+        // outline before perspective correction and grid generation.
+        return Candidate(
+            boundary: objectDetection.boundary,
+            confidence: objectDetection.confidence,
+            score: objectScore
+        )
+    }
+
+    /// Returns a score only for a perspective rectangle that plausibly describes
+    /// the model's hatchery box. In particular, a tiny sign or label fully
+    /// inside a large predicted hatchery is not a usable perspective plane.
+    private static func objectAlignmentScore(
+        _ rectangle: HatcheryBoundary,
+        withObjectBoundary objectBoundary: HatcheryBoundary
+    ) -> Double? {
+        let rectangleBounds = boundingBox(of: rectangle)
+        let objectBounds = boundingBox(of: objectBoundary)
+        let intersection = rectangleBounds.intersection(objectBounds)
+        guard !intersection.isNull, !intersection.isEmpty else { return nil }
+
+        let rectangleArea = rectangleBounds.width * rectangleBounds.height
+        let objectArea = objectBounds.width * objectBounds.height
+        let intersectionArea = intersection.width * intersection.height
+        guard rectangleArea > 0, objectArea > 0 else { return nil }
+
+        let unionArea = rectangleArea + objectArea - intersectionArea
+        let intersectionOverUnion = intersectionArea / unionArea
+        let areaSimilarity = min(rectangleArea / objectArea, objectArea / rectangleArea)
+        let rectangleCenter = CGPoint(x: rectangleBounds.midX, y: rectangleBounds.midY)
+        let objectCenter = CGPoint(x: objectBounds.midX, y: objectBounds.midY)
+        let centerDistance = hypot(
+            rectangleCenter.x - objectCenter.x,
+            rectangleCenter.y - objectCenter.y
+        )
+        let objectDiagonal = hypot(objectBounds.width, objectBounds.height)
+        guard objectDiagonal > 0 else { return nil }
+        let normalizedCenterDistance = centerDistance / objectDiagonal
+
+        guard
+            intersectionOverUnion >= 0.25,
+            areaSimilarity >= 0.45,
+            normalizedCenterDistance <= 0.25
+        else {
+            return nil
+        }
+
+        let centerAlignment = 1 - min(normalizedCenterDistance / 0.25, 1)
+        return intersectionOverUnion * 0.55
+            + areaSimilarity * 0.30
+            + centerAlignment * 0.15
+    }
+
+    private static func boundingBox(of boundary: HatcheryBoundary) -> CGRect {
+        let points = boundary.ordered
+        let minimumX = points.map(\.x).min() ?? 0
+        let maximumX = points.map(\.x).max() ?? 0
+        let minimumY = points.map(\.y).min() ?? 0
+        let maximumY = points.map(\.y).max() ?? 0
+        return CGRect(
+            x: minimumX,
+            y: minimumY,
+            width: maximumX - minimumX,
+            height: maximumY - minimumY
+        )
+    }
+
+    static func shouldRefreshObjectDetection(
+        lastAnalyzedAt: TimeInterval?,
+        now: TimeInterval
+    ) -> Bool {
+        guard now.isFinite else { return false }
+        guard let lastAnalyzedAt else { return true }
+        guard lastAnalyzedAt.isFinite else { return true }
+        return now - lastAnalyzedAt
+            >= objectAnalysisInterval - objectAnalysisTimingTolerance
+    }
+
+    /// Resolves an injected provider immediately, while a bundled model is
+    /// loaded lazily from the caller's analysis path. Calls from the live
+    /// scanner are serialized by `HatcheryVideoAnalyzer`; the lock keeps
+    /// teardown and still-image work from observing partial state.
+    private func objectCandidateProviderForAnalysis() -> (any HatcheryObjectCandidateProviding)? {
+        if let injectedObjectCandidateProvider {
+            return injectedObjectCandidateProvider
+        }
+        guard loadsBundledObjectCandidateProvider else { return nil }
+
+        stateLock.lock()
+        if didAttemptBundledObjectCandidateProviderLoad {
+            let provider = bundledObjectCandidateProvider
+            stateLock.unlock()
+            return provider
+        }
+        didAttemptBundledObjectCandidateProviderLoad = true
+        stateLock.unlock()
+
+        let provider = HatcheryCoreMLObjectCandidateProvider.bundled()
+
+        stateLock.lock()
+        bundledObjectCandidateProvider = provider
+        stateLock.unlock()
+        return provider
     }
 
     static func score(

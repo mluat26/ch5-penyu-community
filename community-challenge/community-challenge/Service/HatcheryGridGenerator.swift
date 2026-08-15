@@ -14,6 +14,25 @@ nonisolated enum HatcheryGridGenerator {
         let rows = Int(floor(dimension.heightM / targetSectionSizeM))
         guard columns > 0, rows > 0 else { return nil }
 
+        // The sand polygon is edited in the original photo's coordinate
+        // space. Perspective correction, however, creates the rectangular
+        // image that the grid is drawn on. Classify each logical cell in that
+        // same corrected space so its active state agrees with the visible
+        // segmented image rather than a similar-but-not-identical bilinear
+        // projection.
+        let rectifiedSandRegion: HatcherySandRegion?
+        if let sandRegion {
+            guard
+                let mapper = HatcheryPerspectiveMapper(boundary: boundary),
+                let mappedRegion = mapper.rectifiedRegion(for: sandRegion)
+            else {
+                return nil
+            }
+            rectifiedSandRegion = mappedRegion
+        } else {
+            rectifiedSandRegion = nil
+        }
+
         var sections: [HatcherySection] = []
         sections.reserveCapacity(rows * columns)
 
@@ -25,7 +44,10 @@ nonisolated enum HatcheryGridGenerator {
                     rowCount: rows,
                     columnCount: columns
                 )
-                let projectedCenter = sectionBoundary.point(columnFraction: 0.5, rowFraction: 0.5)
+                let rectifiedCenter = NormalizedPoint(
+                    x: (Double(column) + 0.5) / Double(columns),
+                    y: (Double(row) + 0.5) / Double(rows)
+                )
                 sections.append(
                     HatcherySection(
                         id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
@@ -34,7 +56,7 @@ nonisolated enum HatcheryGridGenerator {
                         widthM: targetSectionSizeM,
                         heightM: targetSectionSizeM,
                         boundary: sectionBoundary,
-                        isActive: sandRegion?.contains(projectedCenter) ?? true
+                        isActive: rectifiedSandRegion?.contains(rectifiedCenter) ?? true
                     )
                 )
             }
