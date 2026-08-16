@@ -9,8 +9,10 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var controller: HatcheryController
+    let container: AppContainer
     let onAddNest: () -> Void
     let onOpenHatcheryMenu: () -> Void
+    var onOpenProfile: (() -> Void)?
 
     @State private var presentedSection: HatcherySectionDashboard?
 
@@ -53,7 +55,14 @@ struct HomeView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.light)
         .sheet(item: $presentedSection) { section in
-            SectionOverviewSheet(section: section)
+            SectionOverviewSheet(
+                section: section,
+                container: container,
+                onNestDeleted: {
+                    presentedSection = nil
+                    await controller.load()
+                }
+            )
                 .presentationDetents([.height(707)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(34)
@@ -76,7 +85,7 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
 
-            HatcheryToolbarAccessories()
+            HatcheryToolbarAccessories(onProfile: onOpenProfile)
         }
         .frame(width: headerWidth, height: 48)
         .padding(.leading, 16)
@@ -369,6 +378,8 @@ struct HomeView: View {
 
 private struct SectionOverviewSheet: View {
     let section: HatcherySectionDashboard
+    let container: AppContainer
+    let onNestDeleted: () async -> Void
 
     @State private var selectedNest: NestDetailSelection?
 
@@ -382,10 +393,19 @@ private struct SectionOverviewSheet: View {
                 .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
         }
         .sheet(item: $selectedNest) { selection in
-            NestDetailView(
+            NestDetailSheet(
                 item: selection.item,
                 ordinal: selection.ordinal,
-                sectionID: section.id
+                sectionLabel: section.id,
+                controller: container.makeNestDetailController(nestID: selection.item.id),
+                onClose: { selectedNest = nil },
+                onDelete: {
+                    Task {
+                        try? await container.makeNestService().deleteNest(id: selection.item.id)
+                        selectedNest = nil
+                        await onNestDeleted()
+                    }
+                }
             )
             .presentationDetents([.height(707)])
             .presentationDragIndicator(.visible)
@@ -422,8 +442,10 @@ private struct SectionOverviewSheet: View {
         // rows with no scroll view, so a section's fifth nest was counted in
         // the header above and then had nowhere to appear -- which reads as the
         // nest never having been saved.
+        // Figma 166:2957 draws each nest as its own white card on the grouped
+        // background, rather than divider-separated rows inside one card.
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(spacing: 12) {
                 ForEach(Array(section.nests.enumerated()), id: \.element.id) { index, nest in
                     Button {
                         selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
@@ -431,78 +453,60 @@ private struct SectionOverviewSheet: View {
                         nestRow(nest, ordinal: index + 1)
                     }
                     .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .frame(height: 116)
-                    .overlay(alignment: .bottom) {
-                        if index < section.nests.count - 1 {
-                            Rectangle()
-                                .fill(Color(hex: "#EEEEEE"))
-                                .frame(height: 1)
-                        }
-                    }
                 }
             }
+            .padding(.vertical, 2)
         }
         // Four or fewer nests fill the card exactly, so leave those sections
         // feeling fixed rather than springy.
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: 371, height: 464)
-        .background(.white, in: RoundedRectangle(cornerRadius: 26))
-        .clipShape(RoundedRectangle(cornerRadius: 26))
     }
 
     private func nestRow(
         _ item: NestDashboardItem,
         ordinal: Int
     ) -> some View {
-        let temperature = temperaturePresentation(for: item.latestTemperatureC)
-
-        return ZStack(alignment: .topLeading) {
-            HStack(spacing: 4) {
+        VStack(spacing: 20) {
+            HStack {
                 Text("Nest #\(item.nest.displayNumber(fallbackOrdinal: ordinal))")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "#2B2B2B"))
 
-                Text("· \(item.nest.numberOfEggs) eggs")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(hex: "#4A4A4A"))
-
                 Spacer(minLength: 0)
 
-                Image(systemName: "timer")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
+                NestStatusPill.battery(level: item.batteryLevel)
 
-                Text(hatchCountdown(for: item.nest))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
-            }
-            .frame(width: 339, height: 22)
-            .offset(x: 16, y: 16)
-
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: temperature.systemName)
-                        .font(.system(size: 12, weight: .regular))
-
-                    Text(temperature.text)
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(.white)
-                .frame(width: temperature.chipWidth, height: 36)
-                .background(temperature.tint, in: RoundedRectangle(cornerRadius: 16))
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
+                // A logger with no battery reading needs servicing rather than
+                // opening, so Figma swaps the chevron for a wrench.
+                Image(systemName: item.batteryLevel == nil ? "wrench.and.screwdriver" : "chevron.right")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
                     .accessibilityHidden(true)
             }
-            .frame(width: 339, height: 36)
-            .offset(x: 16, y: 64)
+            .frame(height: 36)
+
+            HStack(spacing: 12) {
+                NestStatusPill.temperature(item.latestTemperatureC)
+                NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("\(item.nest.numberOfEggs)")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.black)
+                    Text(" eggs")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                }
+            }
+            .frame(height: 30)
         }
-        .frame(width: 371, height: 116, alignment: .topLeading)
+        .padding(16)
+        .frame(width: 371, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 24))
+        .contentShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
     }
 
@@ -570,10 +574,11 @@ private struct SectionOverviewSheet: View {
 }
 
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
+    let container = AppContainer()
+
     HomeView(
-        controller: AppContainer().makeHatcheryController(
-            sessionState: .previewSample
-        ),
+        controller: container.makeHatcheryController(sessionState: .previewSample),
+        container: container,
         onAddNest: { },
         onOpenHatcheryMenu: { }
     )

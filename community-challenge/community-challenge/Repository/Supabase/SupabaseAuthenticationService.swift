@@ -40,6 +40,13 @@ actor SupabaseAuthenticationService: SupabaseIdentityProviding {
         return try await task.value
     }
 
+    /// Ends the current session and clears it from the Keychain. The next
+    /// backend call mints a fresh anonymous identity, which is what returns
+    /// the app to its empty-account onboarding.
+    func signOut() async throws {
+        try await client.auth.signOut()
+    }
+
     /// Exchanges the native Apple identity token for the app's Supabase
     /// session. The caller only reaches this from the empty-account welcome
     /// flow, so replacing the temporary anonymous identity cannot hide an

@@ -5,6 +5,10 @@ import SwiftUI
 /// to own any navigation or menu interaction.
 struct HatcheryToolbarAccessories: View {
     var scale: CGFloat = 1
+    /// Supplied by screens that can open the profile sheet. Left `nil`
+    /// elsewhere so the icon stays decorative, as it was for every caller
+    /// before the profile screen existed.
+    var onProfile: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12 * scale) {
@@ -13,11 +17,24 @@ struct HatcheryToolbarAccessories: View {
                 accessibilityLabel: "Notifications",
                 scale: scale
             )
-            HatcheryToolbarAccessoryIcon(
-                systemName: "person",
-                accessibilityLabel: "Profile",
-                scale: scale
-            )
+
+            if let onProfile {
+                Button(action: onProfile) {
+                    HatcheryToolbarAccessoryIcon(
+                        systemName: "person",
+                        accessibilityLabel: "Profile",
+                        scale: scale
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens your profile and organization")
+            } else {
+                HatcheryToolbarAccessoryIcon(
+                    systemName: "person",
+                    accessibilityLabel: "Profile",
+                    scale: scale
+                )
+            }
         }
         .frame(width: 156 * scale, height: 48 * scale)
     }

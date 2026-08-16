@@ -11,6 +11,9 @@ struct ContentView: View {
     let hatchery: HatcherySessionState
     let container: AppContainer
     let onSwitchHatchery: (HatcherySessionState) -> Void
+    /// Called after signing out or deleting the account, so the root can leave
+    /// this dashboard — the session it was built on no longer exists.
+    var onAccountEnded: () -> Void = {}
     let onCreateHatchery: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -24,19 +27,35 @@ struct ContentView: View {
     @State private var hatcheryListController: HatcheryListController
     @State private var isShowingHatcheryMenu = false
     @State private var isShowingHatcheryManagement = false
-    @State private var rescanningHatchery: HatcheryEntity?
-    @State private var rescanSetupController: HatcherySetupController?
+    @State private var rescanRequest: RescanRequest?
+    /// Held while the management cover dismisses.
+    ///
+    /// Every exit from that cover has to wait for it to actually be gone.
+    /// Switching or creating a hatchery changes `activeSessionRevision`, which
+    /// rebuilds this whole view; doing that mid-dismissal leaves a presentation
+    /// in flight on a view that no longer exists, and the next sheet — the
+    /// profile button — then silently refuses to open.
+    @State private var pendingManagementAction: PendingManagementAction?
+    @State private var isShowingProfile = false
+    @State private var profileController: ProfileController
+    /// Held while the profile sheet dismisses, then promoted to
+    /// `presentedInvite` — the same wait-for-dismissal rule every other
+    /// presentation here follows.
+    @State private var pendingInvite: OrganizationInviteEntity?
+    @State private var presentedInvite: OrganizationInviteEntity?
 
     init(
         hatchery: HatcherySessionState,
         container: AppContainer,
         onSwitchHatchery: @escaping (HatcherySessionState) -> Void = { _ in },
-        onCreateHatchery: @escaping () -> Void = {}
+        onCreateHatchery: @escaping () -> Void = {},
+        onAccountEnded: @escaping () -> Void = {}
     ) {
         self.hatchery = hatchery
         self.container = container
         self.onSwitchHatchery = onSwitchHatchery
         self.onCreateHatchery = onCreateHatchery
+        self.onAccountEnded = onAccountEnded
         _hatcheryController = State(
             initialValue: container.makeHatcheryController(sessionState: hatchery)
         )
@@ -45,6 +64,9 @@ struct ContentView: View {
         )
         _hatcheryListController = State(
             initialValue: container.makeHatcheryListController()
+        )
+        _profileController = State(
+            initialValue: container.makeProfileController()
         )
     }
 
@@ -55,25 +77,76 @@ struct ContentView: View {
             NavigationStack(path: $router.path) {
                 HomeView(
                     controller: hatcheryController,
+                    container: container,
                     onAddNest: {
                         nestController.reset()
                         router.push(.connectBucket)
                     },
                     onOpenHatcheryMenu: {
                         presentHatcheryMenu()
-                    }
+                    },
+                    onOpenProfile: { isShowingProfile = true }
                 )
-                .fullScreenCover(isPresented: $isShowingHatcheryManagement) {
+                .sheet(
+                    isPresented: $isShowingProfile,
+                    onDismiss: presentPendingInvite
+                ) {
+                    ProfileSheetView(
+                        controller: profileController,
+                        onClose: { isShowingProfile = false },
+                        onSignOut: {
+                            isShowingProfile = false
+                            Task { await signOut() }
+                        },
+                        onShowInvite: { invite in
+                            // The invite screen is a full page, so the sheet
+                            // has to be gone before it can be presented.
+                            pendingInvite = invite
+                            isShowingProfile = false
+                        },
+                        onDeleteAccount: {
+                            try await container.deleteAccount()
+                            isShowingProfile = false
+                            // The account is gone; the next request mints a
+                            // fresh anonymous identity, so send the app back
+                            // to the empty-account route.
+                            onAccountEnded()
+                        }
+                    )
+                    // Figma 158:2283 draws an 801pt sheet; iOS adds the 34pt
+                    // bottom safe area to a fixed detent, so the content is 767.
+                    .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(34)
+                    .presentationSizing(.page)
+                }
+                .fullScreenCover(item: $presentedInvite) { invite in
+                    InvitationCodeView(
+                        invite: invite,
+                        onBack: { presentedInvite = nil },
+                        onRegenerate: {
+                            await profileController.generateInvite()
+                            if let refreshed = profileController.invite {
+                                presentedInvite = refreshed
+                            }
+                        }
+                    )
+                }
+                .fullScreenCover(
+                    isPresented: $isShowingHatcheryManagement,
+                    onDismiss: performPendingManagementAction
+                ) {
                     HatcheryManagementView(
                         controller: hatcheryListController,
                         onSelect: { session in
+                            if session.hatchery.id != hatchery.hatchery.id {
+                                pendingManagementAction = .switchHatchery(session)
+                            }
                             isShowingHatcheryManagement = false
-                            guard session.hatchery.id != hatchery.hatchery.id else { return }
-                            onSwitchHatchery(session)
                         },
                         onCreateNew: {
+                            pendingManagementAction = .createHatchery
                             isShowingHatcheryManagement = false
-                            onCreateHatchery()
                         },
                         onRescan: beginRescan,
                         onRename: updateActiveHatchery
@@ -131,7 +204,8 @@ struct ContentView: View {
                                     .nestDetail(
                                         item: NestDashboardItem(
                                             nest: nest,
-                                            latestTemperatureC: hatcheryController.overview?.averageTemperatureC
+                                            latestTemperatureC: hatcheryController.overview?.averageTemperatureC,
+                                            latestBatteryVoltage: nil
                                         ),
                                         ordinal: Int(nestController.draft.nestNumber) ?? 0,
                                         sectionID: nestController.draft.section
@@ -192,17 +266,16 @@ struct ContentView: View {
         // Prime the popup list while the dashboard is visible, so opening the
         // hatchery menu never waits on its first list request.
         .task { await hatcheryListController.load() }
-        .fullScreenCover(item: $rescanningHatchery) { _ in
-            if let rescanSetupController {
-                HatcherySetupFlowView(
-                    controller: rescanSetupController,
-                    onSave: finishRescan,
-                    entryPoint: .rescan,
-                    onCancel: cancelRescan
-                )
-            } else {
-                Color.clear
-            }
+        // The controller travels inside the presentation item. Reading it from
+        // a sibling `@State` here returned the stale value cached in this
+        // closure's captured view copy, which rendered an empty cover.
+        .fullScreenCover(item: $rescanRequest) { request in
+            HatcherySetupFlowView(
+                controller: request.controller,
+                onSave: finishRescan,
+                entryPoint: .rescan,
+                onCancel: cancelRescan
+            )
         }
     }
 
@@ -241,30 +314,62 @@ struct ContentView: View {
         return AppDateFormatting.nestDraftDateString(date)
     }
 
+    /// Two presentations have to come down first — the edit sheet, then the
+    /// management cover — and only the second one's `onDismiss` says when that
+    /// is genuinely finished. Presenting the scanner on a fixed delay instead
+    /// raced that teardown and left an empty cover on screen.
     private func beginRescan(_ hatchery: HatcheryEntity) {
-        isShowingHatcheryManagement = false
-        rescanSetupController = container.makeHatcherySetupController(
-            editingHatchery: hatchery
+        pendingManagementAction = .rescan(
+            RescanRequest(
+                hatchery: hatchery,
+                controller: container.makeHatcherySetupController(
+                    editingHatchery: hatchery
+                )
+            )
         )
+        isShowingHatcheryManagement = false
+    }
 
-        // Let the management sheet and full-screen cover complete their
-        // dismissal/presentation handoff before opening the scanner.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard rescanSetupController != nil else { return }
-            rescanningHatchery = hatchery
+    /// Runs once the profile sheet is genuinely gone. Closing it without
+    /// generating a code leaves nothing pending, so this is a no-op.
+    private func signOut() async {
+        do {
+            try await container.signOut()
+            onAccountEnded()
+        } catch {
+            profileController.setErrorMessage(error.localizedDescription)
+        }
+    }
+
+    private func presentPendingInvite() {
+        guard let invite = pendingInvite else { return }
+        pendingInvite = nil
+        presentedInvite = invite
+    }
+
+    /// Runs once the management cover is genuinely gone. Closing it without
+    /// choosing anything leaves no pending action, so this is a no-op.
+    private func performPendingManagementAction() {
+        guard let action = pendingManagementAction else { return }
+        pendingManagementAction = nil
+
+        switch action {
+        case .switchHatchery(let session):
+            onSwitchHatchery(session)
+        case .createHatchery:
+            onCreateHatchery()
+        case .rescan(let request):
+            rescanRequest = request
         }
     }
 
     private func finishRescan(_ session: HatcherySessionState) {
-        rescanningHatchery = nil
-        rescanSetupController = nil
+        rescanRequest = nil
         onSwitchHatchery(session)
     }
 
     private func cancelRescan() {
-        rescanningHatchery = nil
-        rescanSetupController = nil
+        rescanRequest = nil
     }
 
     private func updateActiveHatchery(_ updated: HatcheryEntity) {
@@ -283,6 +388,25 @@ struct ContentView: View {
             )
         )
     }
+}
+
+/// What to do once the hatchery management cover has finished dismissing.
+/// Every one of these either rebuilds this view or presents something else,
+/// and neither is safe while a presentation is still animating away.
+private enum PendingManagementAction {
+    case switchHatchery(HatcherySessionState)
+    case createHatchery
+    case rescan(RescanRequest)
+}
+
+/// A rescan needs both the hatchery and a setup controller bound to it.
+/// Carrying them together as the presentation item means the cover physically
+/// cannot appear without a controller, so there is no empty-state to render.
+struct RescanRequest: Identifiable {
+    let hatchery: HatcheryEntity
+    let controller: HatcherySetupController
+
+    var id: UUID { hatchery.id }
 }
 
 #Preview {

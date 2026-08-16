@@ -19,10 +19,16 @@ struct PreFirstHatchOnboardingView: View {
 
     let onCreateHatchery: () -> Void
     let onSignInWithApple: (String, String) async throws -> Void
+    /// Redeems an invite code and joins that organization. Throws so the join
+    /// screen can show the database's own reason for refusing a code.
+    var onJoinWithCode: ((String) async throws -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step = Step.welcome
-    @State private var isShowingJoinWithCodeAlert = false
+    @State private var isShowingJoinWithCode = false
+    /// Only reachable when no join handler was supplied, so the button still
+    /// explains itself rather than doing nothing.
+    @State private var isShowingJoinUnavailableAlert = false
     @State private var appleSignIn = AppleSignInCoordinator()
     @State private var rawAppleNonce: String?
     @State private var isSigningInWithApple = false
@@ -68,7 +74,18 @@ struct PreFirstHatchOnboardingView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .alert("Join with code", isPresented: $isShowingJoinWithCodeAlert) {
+        .fullScreenCover(isPresented: $isShowingJoinWithCode) {
+            if let onJoinWithCode {
+                JoinWithCodeView(
+                    onJoin: { code in
+                        try await onJoinWithCode(code)
+                        isShowingJoinWithCode = false
+                    },
+                    onBack: { isShowingJoinWithCode = false }
+                )
+            }
+        }
+        .alert("Join with code", isPresented: $isShowingJoinUnavailableAlert) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Joining an existing hatchery with an invite code is not available yet.")
@@ -183,7 +200,13 @@ struct PreFirstHatchOnboardingView: View {
                     title: "Join with code",
                     subtitle: "Enter invite code to join",
                     scale: scale,
-                    action: { isShowingJoinWithCodeAlert = true }
+                    action: {
+                        if onJoinWithCode == nil {
+                            isShowingJoinUnavailableAlert = true
+                        } else {
+                            isShowingJoinWithCode = true
+                        }
+                    }
                 )
             }
             .offset(x: 16 * scale, y: 596 * scale)

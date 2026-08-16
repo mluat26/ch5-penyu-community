@@ -203,7 +203,8 @@ struct HatcheryService: Sendable {
                 let items = sectionNests.map { nest in
                     NestDashboardItem(
                         nest: nest,
-                        latestTemperatureC: latestReadingByNestID[nest.id]?.temperatureC
+                        latestTemperatureC: latestReadingByNestID[nest.id]?.temperatureC,
+                        latestBatteryVoltage: latestReadingByNestID[nest.id]?.batteryVoltage
                     )
                 }
 

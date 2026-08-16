@@ -100,7 +100,7 @@ struct HatcherySetupFlowView: View {
                             boundary: boundary,
                             sandRegion: sandRegion
                         ) else { return }
-                        router.push(.dimensions)
+                        advanceAfterBoundary(router: router)
                     }
                 )
             }
@@ -155,6 +155,27 @@ struct HatcherySetupFlowView: View {
             },
             onCancel: entryPoint == .rescan ? onCancel : nil
         )
+    }
+
+    /// A rescan is only re-photographing a hatchery that already exists, so it
+    /// keeps the dimensions already saved and goes straight to the preview.
+    /// Re-entering them would be busywork, and any change would move the grid
+    /// out from under nests that are stored against it.
+    @MainActor
+    private func advanceAfterBoundary(router: HatcherySetupRouter) {
+        guard entryPoint == .rescan else {
+            router.push(.dimensions)
+            return
+        }
+
+        guard controller.generateGrid(for: controller.draft.dimension) else {
+            // `generateGrid` has already put the reason on the controller, and
+            // the dimension screen is where it can be corrected.
+            router.push(.dimensions)
+            return
+        }
+
+        router.push(.preview)
     }
 
     @MainActor

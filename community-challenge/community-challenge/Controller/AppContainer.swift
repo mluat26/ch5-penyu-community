@@ -15,6 +15,7 @@ final class AppContainer {
     private let inspectionRepository: SupabaseInspectionRepository
     private let deviceRepository: SupabaseDeviceRepository
     private let hatchingRepository: SupabaseHatchingRepository
+    private let profileRepository: SupabaseProfileRepository
     private let layoutService: HatcheryLayoutService
 
     init() {
@@ -51,6 +52,10 @@ final class AppContainer {
             identity: identity
         )
         self.hatchingRepository = SupabaseHatchingRepository(client: client)
+        self.profileRepository = SupabaseProfileRepository(
+            client: client,
+            identity: identity
+        )
         self.layoutService = HatcheryLayoutService(
             repository: layoutRepository,
             photoStore: photoStore
@@ -93,8 +98,40 @@ final class AppContainer {
         )
     }
 
+    func makeNestService() -> NestService { nestService }
+
+    func makeNestDetailController(nestID: UUID) -> NestDetailController {
+        NestDetailController(
+            nestID: nestID,
+            ioTDataRepository: ioTDataRepository,
+            inspectionService: inspectionService
+        )
+    }
+
     func makeNestController(hatcheryID: UUID) -> NestController {
         NestController(hatcheryID: hatcheryID, nestService: nestService)
+    }
+
+    /// Joins the organization the code belongs to. The database owns every
+    /// rule here — expiry, single use, and who the code was issued by — so a
+    /// refusal propagates rather than being interpreted client-side.
+    func redeemInvite(code: String) async throws {
+        try await profileRepository.redeemInvite(code: code)
+    }
+
+    /// Deletes the signed-in account, then drops the local session so the app
+    /// cannot keep using a token whose user no longer exists.
+    func deleteAccount() async throws {
+        try await profileRepository.deleteAccount()
+        try await authenticationService.signOut()
+    }
+
+    func signOut() async throws {
+        try await authenticationService.signOut()
+    }
+
+    func makeProfileController() -> ProfileController {
+        ProfileController(repository: profileRepository)
     }
 
     func makeHatcheryListController() -> HatcheryListController {
