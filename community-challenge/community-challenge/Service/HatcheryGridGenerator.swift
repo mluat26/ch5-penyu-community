@@ -53,8 +53,8 @@ nonisolated enum HatcheryGridGenerator {
                         id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
                         row: row,
                         column: column,
-                        widthM: targetSectionSizeM,
-                        heightM: targetSectionSizeM,
+                        widthM: layout.sectionWidthM,
+                        heightM: layout.sectionLengthM,
                         boundary: sectionBoundary,
                         isActive: rectifiedSandRegion?.contains(rectifiedCenter) ?? true
                     )

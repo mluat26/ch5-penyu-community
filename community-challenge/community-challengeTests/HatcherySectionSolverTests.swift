@@ -109,6 +109,36 @@ final class HatcherySectionSolverTests: XCTestCase {
         )
     }
 
+    /// Regression: the generator took only the solver's row/column counts and
+    /// stamped every section with the 2 m target, so `HatcheryGridSnapshot`
+    /// persisted "2.0 x 2.0" for cells that are nothing of the sort.
+    func testGeneratedSectionsCarryTheSolvedSizeIntoTheSnapshot() throws {
+        let dimension = HatcheryDimension(widthM: 15, heightM: 7)
+        let grid = try XCTUnwrap(
+            HatcheryGridGenerator.generate(dimension: dimension, boundary: .fullImage)
+        )
+        let section = try XCTUnwrap(grid.sections.first)
+
+        XCTAssertEqual(section.widthM, 15.0 / 9.0, accuracy: 0.000_001)
+        XCTAssertEqual(section.heightM, 7.0 / 3.0, accuracy: 0.000_001)
+
+        let snapshot = HatcheryGridSnapshot(grid: grid)
+        XCTAssertEqual(snapshot.sectionWidthM, 15.0 / 9.0, accuracy: 0.000_001)
+        XCTAssertEqual(snapshot.sectionHeightM, 7.0 / 3.0, accuracy: 0.000_001)
+
+        // The persisted cell size must tile the bed its counts describe.
+        XCTAssertEqual(
+            snapshot.sectionWidthM * Double(snapshot.columns),
+            dimension.widthM,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            snapshot.sectionHeightM * Double(snapshot.rows),
+            dimension.heightM,
+            accuracy: 0.000_001
+        )
+    }
+
     func testBedsWithinTheSupportedSizeStayValid() {
         XCTAssertNil(HatcheryDimension(widthM: 6, heightM: 8).validationMessage)
         XCTAssertNil(HatcheryDimension(widthM: 15, heightM: 7).validationMessage)
