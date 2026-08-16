@@ -9,10 +9,10 @@ nonisolated enum HatcheryGridGenerator {
         sandRegion: HatcherySandRegion? = nil
     ) -> HatcheryGrid? {
         guard dimension.isValid, boundary.isValid, sandRegion?.isValid ?? true else { return nil }
+        guard let layout = HatcherySectionSolver.solve(dimension: dimension) else { return nil }
 
-        let columns = Int(floor(dimension.widthM / targetSectionSizeM))
-        let rows = Int(floor(dimension.heightM / targetSectionSizeM))
-        guard columns > 0, rows > 0 else { return nil }
+        let columns = layout.columns
+        let rows = layout.rows
 
         // The sand polygon is edited in the original photo's coordinate
         // space. Perspective correction, however, creates the rectangular

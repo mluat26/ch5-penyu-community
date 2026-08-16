@@ -325,9 +325,17 @@ nonisolated struct HatcheryDimension: Codable, Hashable, Sendable {
             return "Each side needs at least 2 m so one section fits."
         }
 
-        let columns = floor(widthM / sectionSize)
-        let rows = floor(heightM / sectionSize)
-        guard columns <= 100, rows <= 100, columns * rows <= 2_500 else {
+        // Bound the bed by the grid a target-sized section *would* need, not by
+        // what the solver returns: the solver already clamps itself to these
+        // caps, so asking it would always say yes and silently hand back
+        // oversized sections instead of rejecting the bed.
+        let idealColumns = widthM / sectionSize
+        let idealRows = heightM / sectionSize
+        guard
+            idealColumns <= Double(HatcheryGridSnapshot.maximumRowsOrColumns),
+            idealRows <= Double(HatcheryGridSnapshot.maximumRowsOrColumns),
+            idealColumns * idealRows <= Double(HatcheryGridSnapshot.maximumCellCount)
+        else {
             return "That area is too large to divide into sections."
         }
 
