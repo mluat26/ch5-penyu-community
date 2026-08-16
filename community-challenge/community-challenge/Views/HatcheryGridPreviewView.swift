@@ -251,21 +251,22 @@ private struct HatcheryGridDiagram: View {
         }
     }
 
+    /// Mirrors `HatcheryGridPhoto`'s own row layout (photo offset y=26, 8 pt
+    /// content padding, 2 pt row spacing, 279 pt photo height) so labels land
+    /// on the real cell centers for any row count, not just the 3-row mock
+    /// this was originally tuned against.
     private func rowLabelCenter(for row: Int) -> CGFloat {
-        // Figma's 9 pt-wide label rail begins at the photo's top edge
-        // (diagram y=26) and distributes 16 pt labels through 199 pt.
-        // Keeping the same reference rail lets arbitrary row counts remain
-        // centered while the 3-row design lands at 34, 125.5, and 217.
-        let labelRailTop: CGFloat = 26
-        let labelHeight: CGFloat = 16
-        let labelRailHeight: CGFloat = 199
+        let photoTop: CGFloat = 26
+        let photoHeight: CGFloat = 279
+        let contentPadding: CGFloat = 8
+        let rowSpacing: CGFloat = 2
 
-        guard rowCount > 1 else {
-            return labelRailTop + labelRailHeight / 2
-        }
+        let innerHeight = max(0, photoHeight - contentPadding * 2)
+        let rowGaps = CGFloat(max(rowCount - 1, 0)) * rowSpacing
+        let cellHeight = max(0, (innerHeight - rowGaps) / CGFloat(rowCount))
+        let rowTop = photoTop + contentPadding + CGFloat(row) * (cellHeight + rowSpacing)
 
-        let step = (labelRailHeight - labelHeight) / CGFloat(rowCount - 1)
-        return labelRailTop + labelHeight / 2 + CGFloat(row) * step
+        return rowTop + cellHeight / 2
     }
 }
 
