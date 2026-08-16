@@ -346,13 +346,10 @@ struct AddNestEggInformationView: View {
                             // The number of days is the input; the row above
                             // already shows the date it resolves to, so the
                             // choice is never made blind.
-                            AddNestBigNumberField(
-                                text: $controller.draft.daysAfterCollection,
-                                focus: $isFieldFocused
-                            )
-                            .onChange(of: controller.draft.daysAfterCollection) { _, _ in
-                                controller.updateInspectionDateFromDays()
-                            }
+                            AddNestDaysPicker(text: $controller.draft.daysAfterCollection)
+                                .onChange(of: controller.draft.daysAfterCollection) { _, _ in
+                                    controller.updateInspectionDateFromDays()
+                                }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -976,6 +973,47 @@ private struct AddNestBigNumberField: View {
                 )
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// The "after X days" count. A wheel rather than a keypad: the value is a small
+/// bounded number, and a picker cannot hand the controller the empty or
+/// non-numeric string a text field can.
+///
+/// Stays a `String` binding because that is what the draft stores, so the
+/// existing day/date round-tripping is untouched.
+private struct AddNestDaysPicker: View {
+    @Binding var text: String
+
+    private var days: Int { Int(text) ?? 0 }
+
+    /// Never shorter than the value it has to display: switching over from a
+    /// hand-picked date can leave a count past the usual range, and a wheel
+    /// whose selection matches no row renders blank.
+    private var options: [Int] { Array(0...max(60, days)) }
+
+    var body: some View {
+        Picker(
+            "",
+            selection: Binding(
+                get: { days },
+                set: { text = String($0) }
+            )
+        ) {
+            ForEach(options, id: \.self) { day in
+                Text("\(day)")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.black)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.wheel)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24)
+                .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+        )
     }
 }
 
