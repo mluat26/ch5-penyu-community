@@ -6,6 +6,9 @@ import SwiftUI
 /// only in whether the keyboard is up and whether the code is complete enough
 /// to enable the button.
 struct JoinWithCodeView: View {
+    /// Pre-filled only by the Figma measurement harness, so the complete
+    /// state (165:2791) can be rendered without driving the keyboard.
+    var initialCode: String = ""
     let onJoin: (String) async throws -> Void
     let onBack: () -> Void
 
@@ -63,7 +66,10 @@ struct JoinWithCodeView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .onAppear { isCodeFieldFocused = true }
+        .onAppear {
+            if code.isEmpty { code = Self.sanitize(initialCode) }
+            isCodeFieldFocused = true
+        }
     }
 
     private func backButton(scale: CGFloat) -> some View {

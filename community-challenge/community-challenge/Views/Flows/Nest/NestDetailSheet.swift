@@ -83,11 +83,13 @@ struct NestDetailSheet: View {
             .offset(x: 16 * scale)
             .accessibilityLabel("Close")
 
+            // Centred full-width rather than pinned to Figma's text-node
+            // width, which truncates a longer nest number.
             Text("Nest-\(nest.displayNumber(fallbackOrdinal: ordinal))")
                 .font(.system(size: 17 * scale, weight: .semibold))
                 .foregroundStyle(.black)
-                .frame(width: 120 * scale, height: 22 * scale)
-                .offset(x: 135 * scale, y: 13 * scale)
+                .frame(width: Layout.sheetWidth * scale, height: 22 * scale)
+                .offset(y: 13 * scale)
 
             Button {} label: {
                 Image(systemName: "pencil")

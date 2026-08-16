@@ -20,6 +20,9 @@ struct ProfileSheetView: View {
     /// Deletes the account and everything it owns. Throws so the database's
     /// own refusal — an organization with other members — reaches the person.
     let onDeleteAccount: () async throws -> Void
+    /// Set only by the Figma measurement harness, so the edit frames
+    /// (158:2307 / 158:2335) can be rendered directly.
+    var startsEditing = false
 
     /// Figma's sheet frame. Every offset below is relative to it.
     enum Layout {
@@ -54,7 +57,10 @@ struct ProfileSheetView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .task { await controller.load() }
+        .task {
+            isEditing = startsEditing
+            await controller.load()
+        }
         .confirmationDialog(
             "Delete your account?",
             isPresented: $isConfirmingDelete,
@@ -91,11 +97,14 @@ struct ProfileSheetView: View {
             .offset(x: 16 * scale)
             .accessibilityLabel(isEditing ? "Discard changes" : "Close")
 
+            // Figma's title node is 36pt wide because that is what "Profile"
+            // measures there; constraining to it truncates under SwiftUI's
+            // metrics. Centre a full-width label at the same y instead.
             Text("Profile")
                 .font(.system(size: 17 * scale, weight: .semibold))
                 .foregroundStyle(.black)
-                .frame(width: 36 * scale, height: 22 * scale)
-                .offset(x: 177 * scale, y: 13 * scale)
+                .frame(width: Layout.sheetWidth * scale, height: 22 * scale)
+                .offset(y: 13 * scale)
 
             Button {
                 if isEditing {
