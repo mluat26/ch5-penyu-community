@@ -407,7 +407,8 @@ private struct SectionOverviewSheet: View {
                     }
                 }
             )
-            .presentationDetents([.height(707)])
+            // Figma 166:3244 draws the same 801pt sheet frame as the profile.
+            .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(34)
             .presentationSizing(.page)

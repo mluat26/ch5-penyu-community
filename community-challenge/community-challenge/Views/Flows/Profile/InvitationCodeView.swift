@@ -1,8 +1,11 @@
 import SwiftUI
 
 /// Figma 158:2371. Shows a freshly issued invite code as one box per
-/// character, with the remaining lifetime made explicit — the code is only
-/// valid for minutes, so a screen that hid that would be misleading.
+/// character.
+///
+/// Every element is placed by the node's own coordinates on the 402pt canvas:
+/// header at y163, boxes 78 × 99 on an 88pt pitch from x30/y332, button at
+/// x16/y795.
 struct InvitationCodeView: View {
     let invite: OrganizationInviteEntity
     let onBack: () -> Void
@@ -10,131 +13,117 @@ struct InvitationCodeView: View {
 
     private enum Layout {
         static let referenceWidth: CGFloat = 402
+        static let boxWidth: CGFloat = 78
+        static let boxHeight: CGFloat = 99
+        static let boxPitch: CGFloat = 88
     }
 
     @State private var didCopy = false
-    @State private var minutesRemaining: Int
-
-    init(
-        invite: OrganizationInviteEntity,
-        onBack: @escaping () -> Void,
-        onRegenerate: @escaping () async -> Void
-    ) {
-        self.invite = invite
-        self.onBack = onBack
-        self.onRegenerate = onRegenerate
-        _minutesRemaining = State(initialValue: invite.minutesRemaining)
-    }
-
-    private var hasExpired: Bool { minutesRemaining <= 0 }
+    @State private var hasExpired = false
 
     var body: some View {
         GeometryReader { geometry in
             let scale = min(1, geometry.size.width / Layout.referenceWidth)
+            let canvasX = max((geometry.size.width - Layout.referenceWidth * scale) / 2, 0)
 
             ZStack(alignment: .topLeading) {
                 Color.white
                 HatcheryWarmEllipse(scale: scale)
                     .offset(x: -110 * scale, y: -378 * scale)
 
-                VStack(spacing: 0) {
-                    header(scale: scale)
+                ZStack(alignment: .topLeading) {
+                    backButton(scale: scale)
+                        .offset(x: 16 * scale, y: 82 * scale)
 
-                    Spacer(minLength: 0)
+                    header(scale: scale)
+                        .offset(x: 40.5 * scale, y: 163 * scale)
+
+                    codeBoxes(scale: scale)
+                        .offset(x: 30 * scale, y: 332 * scale)
 
                     copyButton(scale: scale)
-                        .padding(.bottom, 34 * scale)
+                        .offset(x: 16 * scale, y: 795 * scale)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                .offset(x: canvasX)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .task { await trackRemainingTime() }
+        .task { await trackExpiry() }
     }
 
+    /// 158:2379 — a 72 × 48 accessory bar, not a circular button.
+    private func backButton(scale: CGFloat) -> some View {
+        Button(action: onBack) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17 * scale, weight: .semibold))
+                .foregroundStyle(.black)
+                .frame(width: 72 * scale, height: 48 * scale)
+                .glassEffect(.regular, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back")
+    }
+
+    /// 158:2374 — icon (34), title at y46 (34), subtitle at y92 (44), all 321 wide.
     private func header(scale: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17 * scale, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .frame(width: 44 * scale, height: 44 * scale)
-                        .glassEffect(.regular, in: .circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16 * scale)
-            .padding(.top, 62 * scale)
-
+        ZStack(alignment: .topLeading) {
             Image(systemName: "person.badge.key")
                 .font(.system(size: 28 * scale, weight: .regular))
                 .foregroundStyle(Color.appGreenPrimary)
-                .padding(.top, 22 * scale)
+                .frame(width: 321 * scale, height: 34 * scale)
                 .accessibilityHidden(true)
 
             Text("Invitation Code")
                 .font(.system(size: 28 * scale, weight: .bold))
                 .foregroundStyle(Color.appGreenPrimary)
-                .padding(.top, 12 * scale)
+                .frame(width: 321 * scale, height: 34 * scale)
+                .offset(y: 46 * scale)
 
-            Text("Share the invite code to join your\norganization’s hatchery.")
+            Text("Share the invite code to join your organization’s hatchery.")
                 .font(.system(size: 17 * scale, weight: .regular))
                 .foregroundStyle(Color.appNeutralGray1)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2 * scale)
-                .padding(.top, 8 * scale)
-
-            codeBoxes(scale: scale)
-                .padding(.top, 28 * scale)
-
-            expiryLabel(scale: scale)
-                .padding(.top, 16 * scale)
+                .frame(width: 321 * scale, height: 44 * scale)
+                .offset(y: 92 * scale)
         }
+        .multilineTextAlignment(.center)
+        .frame(width: 321 * scale, height: 136 * scale, alignment: .topLeading)
     }
 
+    /// 158:2381 — four 78 × 99 boxes on an 88pt pitch, digit 55pt.
     private func codeBoxes(scale: CGFloat) -> some View {
-        HStack(spacing: 12 * scale) {
-            ForEach(Array(invite.characters.enumerated()), id: \.offset) { _, character in
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(invite.characters.enumerated()), id: \.offset) { index, character in
                 Text(character)
-                    .font(.system(size: 40 * scale, weight: .bold))
+                    .font(.system(size: 55 * scale, weight: .bold))
+                    .tracking(0.4 * scale)
                     .foregroundStyle(
-                        hasExpired
-                            ? Color.appNeutralGray1.opacity(0.4)
-                            : Color.appGreenPrimary.opacity(0.45)
+                        Color(hex: "#0C7C4D").opacity(hasExpired ? 0.2 : 1)
                     )
-                    .frame(width: 74 * scale, height: 96 * scale)
+                    .frame(width: Layout.boxWidth * scale, height: Layout.boxHeight * scale)
                     .background(
                         Color(hex: "#F1F1F1"),
-                        in: RoundedRectangle(cornerRadius: 18 * scale)
+                        in: RoundedRectangle(cornerRadius: 16 * scale)
                     )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16 * scale)
+                            .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+                    }
+                    .offset(x: Layout.boxPitch * CGFloat(index) * scale)
             }
         }
         // One label for the whole code: four separate characters would be read
         // out as unrelated letters.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Invite code \(invite.characters.joined(separator: " "))")
-    }
-
-    @ViewBuilder
-    private func expiryLabel(scale: CGFloat) -> some View {
-        if hasExpired {
-            Text("This code has expired")
-                .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(.red)
-        } else {
-            Text(
-                minutesRemaining == 1
-                    ? "Expires in 1 minute"
-                    : "Expires in \(minutesRemaining) minutes"
-            )
-            .font(.system(size: 15 * scale, weight: .regular))
-            .foregroundStyle(Color.appNeutralGray1)
-        }
+        .frame(
+            width: (Layout.boxPitch * 3 + Layout.boxWidth) * scale,
+            height: Layout.boxHeight * scale,
+            alignment: .topLeading
+        )
     }
 
     private func copyButton(scale: CGFloat) -> some View {
@@ -148,7 +137,7 @@ struct InvitationCodeView: View {
         } label: {
             Text(hasExpired ? "Generate a new code" : (didCopy ? "Copied" : "Copy code"))
                 .font(.system(size: 17 * scale, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(hex: "#FAF8F4"))
                 .frame(width: 370 * scale, height: 55 * scale)
                 .background(
                     Color.appGreenPrimary,
@@ -159,12 +148,13 @@ struct InvitationCodeView: View {
         .buttonStyle(.plain)
     }
 
-    /// The code dies in minutes, so the countdown has to keep moving while the
-    /// screen is open rather than freeze at whatever it said on appear.
-    private func trackRemainingTime() async {
+    /// The code dies in ten minutes. Figma has no countdown, so the screen
+    /// stays as drawn until it lapses and the button becomes the way to get a
+    /// fresh one — rather than adding chrome the design does not have.
+    private func trackExpiry() async {
         while !Task.isCancelled {
-            minutesRemaining = invite.minutesRemaining
-            if minutesRemaining <= 0 { return }
+            hasExpired = invite.hasExpired
+            if hasExpired { return }
             try? await Task.sleep(for: .seconds(15))
         }
     }
@@ -173,7 +163,7 @@ struct InvitationCodeView: View {
 #Preview("Invitation Code · Figma 158:2371", traits: .fixedLayout(width: 402, height: 874)) {
     InvitationCodeView(
         invite: OrganizationInviteEntity(
-            code: "K7P2",
+            code: "3333",
             expiresAt: Date().addingTimeInterval(600)
         ),
         onBack: {},
