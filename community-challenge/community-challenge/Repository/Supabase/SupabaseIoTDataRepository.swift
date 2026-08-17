@@ -18,6 +18,32 @@ actor SupabaseIoTDataRepository: IoTDataRepository {
         self.identity = SupabaseAuthenticationService(client: client)
     }
 
+    func fetch(id: UUID) async throws -> IoTDataEntity {
+        let rows: [IoTDataDTO] = try await client
+            .from("iotdata")
+            .select()
+            .eq("id", value: id)
+            .execute()
+            .value
+
+        guard let dto = rows.first else {
+            throw RepositoryError.notFound(resource: "IoTData", id: id)
+        }
+        return try dto.toEntity()
+    }
+
+    func fetchAll(nestID: UUID) async throws -> [IoTDataEntity] {
+        let rows: [IoTDataDTO] = try await client
+            .from("iotdata")
+            .select()
+            .eq("nest_id", value: nestID)
+            .order("timestamp", ascending: false)
+            .execute()
+            .value
+
+        return rows.compactMap { try? $0.toEntity() }
+    }
+
     func fetchReadings(
         nestIDs: [UUID],
         in interval: DateInterval?

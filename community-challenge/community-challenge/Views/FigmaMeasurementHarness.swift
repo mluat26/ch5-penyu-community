@@ -186,6 +186,17 @@ private struct StubIoTDataRepository: IoTDataRepository {
             )
         }
     }
+
+    func fetchAll(nestID: UUID) async throws -> [IoTDataEntity] {
+        try await fetchReadings(nestIDs: [nestID], in: nil)
+    }
+
+    /// The harness renders charts, which read whole series. Nothing here asks
+    /// for a reading by ID, so this throws rather than inventing one — a
+    /// fabricated row would quietly corrupt a measurement run.
+    func fetch(id: UUID) async throws -> IoTDataEntity {
+        throw RepositoryError.notFound(resource: "IoTData", id: id)
+    }
 }
 
 private struct StubInspectionRepository: InspectionRepository {
