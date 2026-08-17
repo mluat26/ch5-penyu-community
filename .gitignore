@@ -39,3 +39,7 @@ training/*.tar.gz
 # Local-only prototype model trained from the ignored testing corpus. Keep it
 # available to Xcode for device trials, but never add it to Git or a release.
 community-challenge/community-challenge/Models/HatcheryDetector.mlmodel
+
+# Xcode/git merge-conflict leftovers ("file.swift~Stashed changes", "~Updated upstream").
+*~Stashed changes*
+*~Updated upstream*
