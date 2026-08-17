@@ -283,7 +283,7 @@ final class InspectionAndDeviceTests: XCTestCase {
 
     // MARK: - Devices
 
-    /// Mirrors the unique constraint on device.nest_id.
+    /// Mirrors the active device-assignment constraint.
     func testANestCannotHoldTwoDevices() async throws {
         let service = DeviceService(repository: InMemoryDeviceRepository())
         let nestID = UUID()

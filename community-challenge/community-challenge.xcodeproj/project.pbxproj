@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		628A495F9A0876B9A620E74E /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DA64574A4B33E1F3B7315863 /* Supabase */; };
+		E63D48E73032721600DA2434 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D40000000000000012 /* Lottie */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +47,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E63D48E73032721600DA2434 /* Lottie in Frameworks */,
 				628A495F9A0876B9A620E74E /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -110,6 +112,7 @@
 			name = "community-challenge";
 			packageProductDependencies = (
 				DA64574A4B33E1F3B7315863 /* Supabase */,
+				A1B2C3D40000000000000012 /* Lottie */,
 			);
 			productName = "community-challenge";
 			productReference = C5CB68E3302956C10077B52E /* community-challenge.app */;
@@ -150,6 +153,11 @@
 				TargetAttributes = {
 					C5CB68E2302956C10077B52E = {
 						CreatedOnToolsVersion = 26.6;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 					C5CB6900302A00010077B52E = {
 						CreatedOnToolsVersion = 26.6;
@@ -168,6 +176,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				63F34389543C49536E225216 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				E63D48E43032719400DA2434 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C5CB68E4302956C10077B52E /* Products */;
@@ -350,9 +359,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "community-challenge/community-challenge.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z7A2NU72PN;
+				DEVELOPMENT_TEAM = NA9CXGVRMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
@@ -370,7 +380,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jason2";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.andrian.community-challenge";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -388,9 +398,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "community-challenge/community-challenge.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z7A2NU72PN;
+				DEVELOPMENT_TEAM = NA9CXGVRMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
@@ -408,7 +419,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "luat.community-challenge-jason2";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.andrian.community-challenge";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -513,9 +524,22 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		E63D48E43032719400DA2434 /* XCRemoteSwiftPackageReference "lottie-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-spm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.6.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A1B2C3D40000000000000012 /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E63D48E43032719400DA2434 /* XCRemoteSwiftPackageReference "lottie-spm" */;
+			productName = Lottie;
+		};
 		DA64574A4B33E1F3B7315863 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 63F34389543C49536E225216 /* XCRemoteSwiftPackageReference "supabase-swift" */;

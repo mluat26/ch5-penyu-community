@@ -15,6 +15,12 @@ struct HatcherySessionState: Identifiable {
     /// Sand outline in the coordinate space of `rectifiedPhoto`.
     let rectifiedSandRegion: HatcherySandRegion?
     let grid: HatcheryGrid
+    /// Whether this hatchery was ever photographed. A skipped scan still has a
+    /// valid grid, so only this distinguishes it from a real capture — the
+    /// dashboard shows its scan prompt rather than a blank photo.
+    let captureMode: HatcheryCaptureMode
+
+    var hasBeenScanned: Bool { captureMode == .captured }
 
     var id: UUID { hatchery.id }
 
@@ -26,7 +32,8 @@ struct HatcherySessionState: Identifiable {
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion? = nil,
         rectifiedSandRegion: HatcherySandRegion? = nil,
-        grid: HatcheryGrid
+        grid: HatcheryGrid,
+        captureMode: HatcheryCaptureMode = .captured
     ) {
         self.hatchery = hatchery
         self.photo = photo
@@ -36,6 +43,7 @@ struct HatcherySessionState: Identifiable {
         self.sandRegion = sandRegion
         self.rectifiedSandRegion = rectifiedSandRegion
         self.grid = grid
+        self.captureMode = captureMode
     }
 
     /// Rebuilds a session for a legacy hatchery loaded from the database.
@@ -116,7 +124,8 @@ struct HatcherySessionState: Identifiable {
             boundary: layout.boundary,
             sandRegion: layout.sandRegion,
             rectifiedSandRegion: images.rectifiedSandRegion,
-            grid: grid
+            grid: grid,
+            captureMode: layout.captureMode
         )
     }
 }

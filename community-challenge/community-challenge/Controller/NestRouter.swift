@@ -13,11 +13,8 @@ enum NestRoute: Hashable {
     case eggInformation
     case preview
     case success
-    case nestDetail(
-        item: NestDashboardItem,
-        ordinal: Int,
-        sectionID: String
-    )
+    // Nest detail has no route: it is a sheet presented after this flow
+    // closes, not another page pushed on top of it.
 }
 
 /// Typed SwiftUI navigation for the Add Nest flow.

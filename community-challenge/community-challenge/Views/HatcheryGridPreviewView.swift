@@ -150,13 +150,9 @@ private struct HatcheryGridPreviewBackdrop: View {
             ZStack {
                 Color.white
 
-                // The Figma asset is a 621 pt circle with a 50 pt Gaussian
-                // blur. Rendering that SVG through an asset catalog drops its
-                // SVG filter, so this is the equivalent native SwiftUI render.
-                Circle()
-                    .fill(HatcherySetupPalette.warmGlow)
-                    .frame(width: 621, height: 621)
-                    .blur(radius: 50)
+                // Reuse the same Figma ellipse as the other hatchery screens
+                // so preview does not drift in color, size, or blur strength.
+                HatcheryWarmEllipse(fill: HatcherySetupPalette.warmGlow)
                     .position(
                         x: (geometry.size.width - 1) / 2,
                         y: -67.5

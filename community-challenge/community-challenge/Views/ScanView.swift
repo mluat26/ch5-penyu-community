@@ -62,17 +62,8 @@ struct ScanView: View {
                 .offset(x: xOffset + 41, y: 158)
 
                 VStack(spacing: 16) {
-                    Button(action: onScan) {
-                        Text("Scan now")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#FAF8F4"))
-                            .frame(width: 370, height: 55)
-                            .background(
-                                Color.appGreenPrimary,
-                                in: RoundedRectangle(cornerRadius: 26)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    HatcheryPrimaryButton(title: "Scan now", action: onScan)
+                        .frame(width: 370, height: 55)
 
                     Button(action: onSkip) {
                         Text("Skip for now")

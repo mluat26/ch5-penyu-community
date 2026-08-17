@@ -73,15 +73,19 @@ struct CreateFirstHatchView: View {
     }
 
     let style: HatcheryNameEntryStyle
-    let onCreate: (String) -> Void
+    let onCreate: (String) async -> String?
     let onBack: (() -> Void)?
 
     @State private var hatchName: String
+    @State private var nameValidationMessage: String?
+    @State private var isValidatingName = false
+    @State private var nameValidationTask: Task<Void, Never>?
+    @State private var nameValidationRequestID: UUID?
     @FocusState private var isNameFocused: Bool
 
     init(
         style: HatcheryNameEntryStyle = .firstHatch,
-        onCreate: @escaping (String) -> Void = { _ in },
+        onCreate: @escaping (String) async -> String? = { _ in nil },
         onBack: (() -> Void)? = nil
     ) {
         self.style = style
@@ -161,6 +165,11 @@ struct CreateFirstHatchView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { isNameFocused = false }
+        .onChange(of: hatchName) { _, _ in
+            cancelNameValidation()
+            nameValidationMessage = nil
+        }
+        .onDisappear(perform: cancelNameValidation)
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
     }
@@ -219,6 +228,7 @@ struct CreateFirstHatchView: View {
     ) -> some View {
         HStack(spacing: 0) {
             Button {
+                cancelNameValidation()
                 isNameFocused = false
                 onBack?()
             } label: {
@@ -237,11 +247,7 @@ struct CreateFirstHatchView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 12 * scale) {
-                chromeIcon(systemName: "bell", label: "Notifications", scale: scale)
-                chromeIcon(systemName: "person", label: "Profile", scale: scale)
-            }
-            .frame(width: 156 * scale, height: 48 * scale)
+            HatcheryToolbarAccessories(scale: scale)
         }
         .frame(
             width: max(0, contentWidth - 16 * scale),
@@ -251,31 +257,26 @@ struct CreateFirstHatchView: View {
         .padding(.top, 87 * scale)
     }
 
-    private func chromeIcon(
-        systemName: String,
-        label: String,
-        scale: CGFloat
-    ) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 20 * scale, weight: .regular))
-            .foregroundStyle(.black)
-            .frame(width: 48 * scale, height: 48 * scale)
-            .glassEffect(.regular, in: .circle)
-            .accessibilityLabel(label)
-    }
-
     private var hatchNameField: some View {
-        VStack(spacing: 6) {
+        let hasValidationError = nameValidationMessage != nil
+        let textColor = hasValidationError ? Color(hex: "FF383C") : Color.black
+
+        return VStack(spacing: 6) {
             TextField("", text: $hatchName, prompt: Text(configuration.defaultName))
                 .font(.system(size: 28, weight: .bold))
                 .tracking(0.38)
-                .foregroundStyle(.black)
+                .foregroundStyle(textColor)
                 .multilineTextAlignment(.center)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .focused($isNameFocused)
                 .onSubmit { isNameFocused = false }
+                .disabled(isValidatingName)
+                .accessibilityLabel("Hatchery name")
+                .accessibilityHint(
+                    nameValidationMessage ?? "Enter a unique name for this hatchery"
+                )
                 .frame(maxWidth: .infinity)
                 .frame(height: 34)
 
@@ -284,9 +285,11 @@ struct CreateFirstHatchView: View {
                     .fill(Color(hex: "E6E6E6"))
                     .frame(height: 1)
 
-                Text("Naming your hatch")
+                Text(nameValidationMessage ?? "Naming your hatch")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color.appNeutralGray3)
+                    .foregroundStyle(
+                        hasValidationError ? Color(hex: "FF383C") : Color.appNeutralGray3
+                    )
                     .frame(maxWidth: .infinity)
                     .padding(.top, 18)
             }
@@ -296,22 +299,56 @@ struct CreateFirstHatchView: View {
     }
 
     private var createButton: some View {
-        Button {
-            onCreate(hatchName.trimmingCharacters(in: .whitespacesAndNewlines))
-        } label: {
-            Text(configuration.buttonTitle)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(hex: "FAF8F4"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.appGreenPrimary, in: Capsule())
-                .contentShape(Capsule())
+        HatcheryPrimaryButton(
+            title: configuration.buttonTitle,
+            isDisabled: !canContinue || isValidatingName
+        ) {
+            validateAndContinue()
         }
-        .buttonStyle(.plain)
-        .disabled(!canContinue)
-        .opacity(canContinue ? 1 : 0.5)
-        .accessibilityHint(
-            canContinue ? "Continues to hatchery scanning" : "Enter a hatch name to continue"
-        )
+        .accessibilityHint(createButtonAccessibilityHint)
+    }
+
+    private var createButtonAccessibilityHint: String {
+        if let nameValidationMessage {
+            return nameValidationMessage
+        }
+        return canContinue
+            ? "Continues to hatchery scanning"
+            : "Enter a hatch name to continue"
+    }
+
+    private func validateAndContinue() {
+        let name = HatcheryName.trimmed(hatchName)
+        guard !name.isEmpty, !isValidatingName else { return }
+
+        isValidatingName = true
+        nameValidationMessage = nil
+        let requestID = UUID()
+        nameValidationRequestID = requestID
+
+        nameValidationTask = Task {
+            let validationMessage = await onCreate(name)
+            guard !Task.isCancelled,
+                  nameValidationRequestID == requestID,
+                  HatcheryName.trimmed(hatchName) == name else {
+                return
+            }
+
+            isValidatingName = false
+            nameValidationTask = nil
+            nameValidationRequestID = nil
+            if let validationMessage {
+                nameValidationMessage = validationMessage
+                isNameFocused = true
+            }
+        }
+    }
+
+    private func cancelNameValidation() {
+        nameValidationTask?.cancel()
+        nameValidationTask = nil
+        nameValidationRequestID = nil
+        isValidatingName = false
     }
 }
 

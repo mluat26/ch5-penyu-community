@@ -49,7 +49,7 @@ actor InMemoryDeviceRepository: DeviceRepository {
         }
     }
 
-    /// Mirrors the unique constraint on `device.nest_id`: a nest holds at most
+    /// Mirrors the active device-assignment constraint: a nest holds at most
     /// one device, while any number may sit unassigned.
     private func assignmentIsFree(nestID: UUID?, excluding deviceID: UUID?) throws {
         guard let nestID else { return }

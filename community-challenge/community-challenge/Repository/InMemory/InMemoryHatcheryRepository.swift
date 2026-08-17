@@ -21,9 +21,17 @@ actor InMemoryHatcheryRepository: HatcheryRepository {
     }
 
     func create(_ input: CreateHatcheryInput) async throws -> HatcheryEntity {
+        let name = HatcheryName.trimmed(input.name)
+        guard !name.isEmpty else {
+            throw DomainValidationError.emptyName
+        }
+        guard !hasDuplicateName(name, excluding: nil) else {
+            throw DomainValidationError.duplicateHatcheryName
+        }
+
         let hatchery = HatcheryEntity(
             id: UUID(),
-            name: input.name,
+            name: name,
             shape: input.shape,
             numberOfRows: input.numberOfRows,
             numberOfColumns: input.numberOfColumns,
@@ -41,7 +49,15 @@ actor InMemoryHatcheryRepository: HatcheryRepository {
             throw RepositoryError.notFound(resource: "Hatchery", id: id)
         }
 
-        hatchery.name = input.name
+        let name = HatcheryName.trimmed(input.name)
+        guard !name.isEmpty else {
+            throw DomainValidationError.emptyName
+        }
+        guard !hasDuplicateName(name, excluding: id) else {
+            throw DomainValidationError.duplicateHatcheryName
+        }
+
+        hatchery.name = name
         hatchery.numberOfRows = input.numberOfRows
         hatchery.numberOfColumns = input.numberOfColumns
         hatchery.lengthM = input.lengthM
@@ -53,6 +69,13 @@ actor InMemoryHatcheryRepository: HatcheryRepository {
     func delete(id: UUID) async throws {
         guard hatcheries.removeValue(forKey: id) != nil else {
             throw RepositoryError.notFound(resource: "Hatchery", id: id)
+        }
+    }
+
+    private func hasDuplicateName(_ name: String, excluding id: UUID?) -> Bool {
+        let normalizedName = HatcheryName.normalized(name)
+        return hatcheries.values.contains {
+            $0.id != id && HatcheryName.normalized($0.name) == normalizedName
         }
     }
 }

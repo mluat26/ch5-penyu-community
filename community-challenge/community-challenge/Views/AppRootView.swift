@@ -17,8 +17,7 @@ struct AppRootView: View {
     @State private var hatcheryListController: HatcheryListController
     @State private var isCreatingHatchery = false
     @State private var hatcheryBeforeCreation: HatcherySessionState?
-    @State private var rescanningHatchery: HatcheryEntity?
-    @State private var rescanSetupController: HatcherySetupController?
+    @State private var rescanRequest: RescanRequest?
     @State private var initialHatcheryOpeningState = InitialHatcheryOpeningState.idle
     /// The rich scan session can change even when a hatchery's UUID does not
     /// (for example, after re-scanning). This forces ContentView to rebuild
@@ -43,7 +42,8 @@ struct AppRootView: View {
                     hatchery: activeHatchery,
                     container: container,
                     onSwitchHatchery: activateHatchery,
-                    onCreateHatchery: startNewHatchery
+                    onCreateHatchery: startNewHatchery,
+                    onAccountEnded: endActiveAccount
                 )
                 // ContentView builds its controllers in init, so switching
                 // hatcheries or re-scanning must create a new instance bound
@@ -72,11 +72,13 @@ struct AppRootView: View {
                     }
                 )
             } else if hatcheryListController.hatcheries.isEmpty {
-                // No saved hatcheries means the first-hatch flow is the only
-                // useful destination.
-                HatcherySetupFlowView(
-                    controller: hatcherySetupController,
-                    onSave: finishHatcheryCreation
+                // The introductory pair of Figma screens is only for a
+                // genuinely empty account. Its Create action preserves the
+                // established setup controller and routing below.
+                PreFirstHatchOnboardingView(
+                    onCreateHatchery: startNewHatchery,
+                    onSignInWithApple: signInWithApple,
+                    onJoinWithCode: joinWithCode
                 )
             } else if let firstHatchery = hatcheryListController.hatcheries.first {
                 if initialHatcheryOpeningState == .failed {
@@ -96,17 +98,16 @@ struct AppRootView: View {
                 EmptyView()
             }
         }
-        .fullScreenCover(item: $rescanningHatchery) { _ in
-            if let rescanSetupController {
-                HatcherySetupFlowView(
-                    controller: rescanSetupController,
-                    onSave: finishRescan,
-                    entryPoint: .rescan,
-                    onCancel: cancelRescan
-                )
-            } else {
-                Color.clear
-            }
+        // The controller travels inside the presentation item. Reading it from
+        // a sibling `@State` here returned the stale value cached in this
+        // closure's captured view copy, which rendered an empty cover.
+        .fullScreenCover(item: $rescanRequest) { request in
+            HatcherySetupFlowView(
+                controller: request.controller,
+                onSave: finishRescan,
+                entryPoint: .rescan,
+                onCancel: cancelRescan
+            )
         }
     }
 
@@ -115,6 +116,49 @@ struct AppRootView: View {
         hatcherySetupController = container.makeHatcherySetupController()
         session.startNewHatchery()
         isCreatingHatchery = true
+    }
+
+    /// Apple may resolve to a returning account with hatcheries on another
+    /// device. Reload after the token exchange so the root immediately opens
+    /// that account's first hatchery instead of continuing the empty setup.
+    private func signInWithApple(
+        identityToken: String,
+        nonce: String,
+        fullName: String?
+    ) async throws {
+        try await container.signInWithApple(
+            identityToken: identityToken,
+            nonce: nonce,
+            fullName: fullName
+        )
+        await hatcheryListController.load()
+
+        guard hatcheryListController.hasSuccessfulLoad else {
+            throw AppleSignInFlowError.hatcheriesCouldNotLoad
+        }
+    }
+
+    /// Redeeming moves this device into the inviter's organization, which is
+    /// what makes their hatcheries readable. Reload afterwards so the root
+    /// leaves the empty-account route and opens what the person just joined.
+    private func joinWithCode(_ code: String) async throws {
+        try await container.redeemInvite(code: code)
+        await hatcheryListController.load()
+
+        guard hatcheryListController.hasSuccessfulLoad else {
+            throw AppleSignInFlowError.hatcheriesCouldNotLoad
+        }
+    }
+
+    /// The session the dashboard was built on is gone — signed out or deleted.
+    /// Clear the active hatchery and reload, which drops the app back to the
+    /// welcome route under whatever identity comes next.
+    private func endActiveAccount() {
+        session.activeHatchery = nil
+        initialHatcheryOpeningState = .idle
+        activeSessionRevision = UUID()
+
+        Task { await hatcheryListController.load() }
     }
 
     private func finishHatcheryCreation(_ hatchery: HatcherySessionState) {
@@ -137,29 +181,32 @@ struct AppRootView: View {
     }
 
     private func beginRescan(_ hatchery: HatcheryEntity) {
-        rescanSetupController = container.makeHatcherySetupController(
-            editingHatchery: hatchery
+        let request = RescanRequest(
+            hatchery: hatchery,
+            controller: container.makeHatcherySetupController(
+                editingHatchery: hatchery
+            )
         )
 
         // The request originates in the edit sheet. Give that presentation a
         // moment to dismiss before presenting the scanner above it.
+        // ponytail: still a timing guess. Unlike ContentView there is no cover
+        // to hang `onDismiss` on here — removing it needs the sheet's own
+        // dismissal reported out of HatcheryManagementView.
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(300))
-            guard rescanSetupController != nil else { return }
-            rescanningHatchery = hatchery
+            rescanRequest = request
         }
     }
 
     private func finishRescan(_ hatchery: HatcherySessionState) {
-        rescanningHatchery = nil
-        rescanSetupController = nil
+        rescanRequest = nil
         activateHatchery(hatchery)
         refreshHatcheryList()
     }
 
     private func cancelRescan() {
-        rescanningHatchery = nil
-        rescanSetupController = nil
+        rescanRequest = nil
     }
 
     private func activateHatchery(_ hatchery: HatcherySessionState) {
@@ -198,6 +245,14 @@ struct AppRootView: View {
         Task { @MainActor in
             await hatcheryListController.loadManagement(refreshHatcheries: true)
         }
+    }
+}
+
+private enum AppleSignInFlowError: LocalizedError {
+    case hatcheriesCouldNotLoad
+
+    var errorDescription: String? {
+        "Your account was signed in, but your hatcheries could not be loaded. Please try again."
     }
 }
 
