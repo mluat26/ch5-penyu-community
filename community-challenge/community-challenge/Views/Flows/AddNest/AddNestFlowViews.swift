@@ -47,11 +47,17 @@ struct AddNestConnectBucketView: View {
             }
             .scrollIndicators(.hidden)
             // Standing in for the real trigger: an NFC read will replace this
-            // once that integration exists. A `simultaneousGesture` so it
-            // doesn't compete with the close button's own tap above it.
-            .simultaneousGesture(TapGesture().onEnded(onContinue))
+            // once that integration exists.
+            //
+            // `contentShape` + `onTapGesture` rather than a simultaneous
+            // gesture on the whole ScrollView: that version also fired when
+            // the close button was tapped, so X advanced the flow instead of
+            // leaving it.
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onContinue)
 
             AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
+                .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
@@ -543,8 +549,8 @@ struct NestRegistrationSuccessView: View {
     let onViewNest: () -> Void
     let onBackToHatchery: () -> Void
 
-    private var temperatureStatus: NestTemperatureStatus {
-        NestTemperatureStatus(temperatureC: temperatureC)
+    private var temperatureStatus: NestTemperature.Band {
+        NestTemperature.Band(temperatureC: temperatureC)
     }
 
     var body: some View {
@@ -552,21 +558,19 @@ struct NestRegistrationSuccessView: View {
             AddNestFlowBackground(glowColor: temperatureStatus.backgroundGlowColor)
 
             // TODO: play Resources/success_confetti.lottie here once a
-            // Lottie-rendering package is added -- see conversation. A static
-            // image was tried and removed; the current design has no static
-            // ribbon graphic at rest, only a one-time animation on arrival.
-
             ScrollView {
                 VStack(spacing: 12) {
+                    // The animation is itself a check mark, so it stands in
+                    // for the glyph rather than playing over it. Under Reduce
+                    // Motion it falls back to the static symbol, which is why
+                    // the tint is still needed here.
+                    //
                     // `.fill` already draws its own circular backing (the
                     // checkmark is a cutout, not a separate white glyph on
                     // top) -- wrapping it in another background circle drew
                     // two, a colored ring around a white disc instead of one
                     // flat colored circle.
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(temperatureStatus.accentColor)
-                        .accessibilityHidden(true)
+                    NestSuccessCheckmark(fallbackTint: temperatureStatus.accentColor)
 
                     Text("Nest #\(displayNestNumber) registered!")
                         .font(.largeTitle)
@@ -626,38 +630,21 @@ struct NestRegistrationSuccessView: View {
     }
 }
 
-private enum NestTemperatureStatus {
-    case normal
-    case hot
-    case cold
+// `NestTemperatureStatus` used to live here with its own 24-32°C bounds,
+// which disagreed with the nest cards. Both now read `NestTemperature`, whose
+// thresholds come from the infobook.
+private extension NestTemperature.Band {
+    /// The success screen tints its title and glow from the same band, so a
+    /// nest that reads hot on its card cannot read healthy on registration.
+    var accentColor: Color { tint }
 
-    init(temperatureC: Double) {
-        if temperatureC > 32 {
-            self = .hot
-        } else if temperatureC < 24 {
-            self = .cold
-        } else {
-            self = .normal
-        }
-    }
-
-    var accentColor: Color {
-        switch self {
-        case .normal: .appGreenPrimary
-        case .hot: Color(hex: "#FF383C")
-        case .cold: Color(hex: "#00C3D0")
-        }
-    }
-
-    var titleColor: Color {
-        self == .normal ? .appGreenPrimary : .black
-    }
+    var titleColor: Color { self == .optimal ? .appGreenPrimary : .black }
 
     var backgroundGlowColor: Color {
         switch self {
-        case .normal: Color(hex: "#003C22").opacity(0.1)
-        case .hot: Color(hex: "#FF383C").opacity(0.1)
-        case .cold: Color(hex: "#00C3D0").opacity(0.1)
+        case .optimal: Color(hex: "#003C22").opacity(0.1)
+        case .noData: Color(hex: "#8E8E93").opacity(0.1)
+        default: tint.opacity(0.1)
         }
     }
 }

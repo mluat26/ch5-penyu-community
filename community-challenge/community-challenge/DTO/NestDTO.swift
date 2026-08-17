@@ -87,6 +87,7 @@ struct NestUpdateDTO: Encodable, Sendable {
     let latitude: Double?
     let longitude: Double?
     let locationAddress: String?
+    let nextInspectionDate: Date?
     let placementRow: Int?
     let placementColumn: Int?
 
@@ -99,6 +100,7 @@ struct NestUpdateDTO: Encodable, Sendable {
         case latitude
         case longitude
         case locationAddress = "location_address"
+        case nextInspectionDate = "next_inspection_date"
         case placementRow = "placement_row"
         case placementColumn = "placement_col"
     }
@@ -163,6 +165,7 @@ extension UpdateNestInput {
             latitude: latitude,
             longitude: longitude,
             locationAddress: locationAddress,
+            nextInspectionDate: nextInspectionDate,
             placementRow: placementRow,
             placementColumn: placementColumn
         )

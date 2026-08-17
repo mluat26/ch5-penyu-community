@@ -9,6 +9,9 @@ import Supabase
 /// they hold no matter what the client sends.
 protocol ProfileRepository: Sendable {
     func fetchCurrentProfile() async throws -> ProfileEntity?
+    /// Another member of the same organization. Returns nil when the profile
+    /// is not readable, which the read policy scopes to one organization.
+    func fetchProfile(id: UUID) async throws -> ProfileEntity?
     func updateCurrentProfile(displayName: String?, appleEmail: String?) async throws -> ProfileEntity
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity
     func generateInvite() async throws -> OrganizationInviteEntity
@@ -35,6 +38,19 @@ actor SupabaseProfileRepository: ProfileRepository {
             .from("profile")
             .select()
             .eq("id", value: userID)
+            .execute()
+            .value
+
+        return try rows.first?.toEntity()
+    }
+
+    func fetchProfile(id: UUID) async throws -> ProfileEntity? {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        let rows: [ProfileDTO] = try await client
+            .from("profile")
+            .select()
+            .eq("id", value: id)
             .execute()
             .value
 

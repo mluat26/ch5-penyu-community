@@ -43,6 +43,11 @@ struct ContentView: View {
     /// presentation here follows.
     @State private var pendingInvite: OrganizationInviteEntity?
     @State private var presentedInvite: OrganizationInviteEntity?
+    /// A nest to show after the Add Nest flow closes. Held rather than
+    /// presented immediately: the flow has to finish popping first, or the
+    /// sheet is presented on a stack that is still unwinding.
+    @State private var pendingNestDetail: NestDetailPresentation?
+    @State private var presentedNestDetail: NestDetailPresentation?
 
     init(
         hatchery: HatcherySessionState,
@@ -85,7 +90,10 @@ struct ContentView: View {
                     onOpenHatcheryMenu: {
                         presentHatcheryMenu()
                     },
-                    onOpenProfile: { isShowingProfile = true }
+                    onOpenProfile: { isShowingProfile = true },
+                    // Same route as rescanning from the management sheet: the
+                    // hatchery exists, it just has no photographed area yet.
+                    onScanHatchery: { beginRescan(hatchery.hatchery) }
                 )
                 .sheet(
                     isPresented: $isShowingProfile,
@@ -116,6 +124,26 @@ struct ContentView: View {
                     // Figma 158:2283 draws an 801pt sheet; iOS adds the 34pt
                     // bottom safe area to a fixed detent, so the content is 767.
                     .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(34)
+                    .presentationSizing(.page)
+                }
+                .sheet(item: $presentedNestDetail) { selection in
+                    NestDetailSheet(
+                        item: selection.item,
+                        ordinal: selection.ordinal,
+                        sectionLabel: selection.sectionID,
+                        controller: container.makeNestDetailController(nestID: selection.item.id),
+                        onClose: { presentedNestDetail = nil },
+                        onDelete: {
+                            Task {
+                                try? await container.makeNestService().deleteNest(id: selection.item.id)
+                                presentedNestDetail = nil
+                                await hatcheryController.load()
+                            }
+                        }
+                    )
+                    .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                     .presentationDragIndicator(.visible)
                     .presentationCornerRadius(34)
                     .presentationSizing(.page)
@@ -170,9 +198,16 @@ struct ContentView: View {
                         )
                     case .locationPicker:
                         NestLocationPickerView(
-                            controller: nestController,
+                            initialLatitude: nestController.draft.latitude,
+                            initialLongitude: nestController.draft.longitude,
+                            initialAddress: nestController.draft.locationAddress,
                             onCancel: router.pop,
-                            onSave: router.pop
+                            onSave: { latitude, longitude, address in
+                                nestController.draft.latitude = latitude
+                                nestController.draft.longitude = longitude
+                                nestController.draft.locationAddress = address
+                                router.pop()
+                            }
                         )
                     case .eggInformation:
                         AddNestEggInformationView(
@@ -200,27 +235,22 @@ struct ContentView: View {
                             temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
                             onViewNest: {
                                 guard let nest = nestController.lastSavedNest else { return }
-                                router.push(
-                                    .nestDetail(
-                                        item: NestDashboardItem(
-                                            nest: nest,
-                                            latestTemperatureC: hatcheryController.overview?.averageTemperatureC,
-                                            latestBatteryVoltage: nil
-                                        ),
-                                        ordinal: Int(nestController.draft.nestNumber) ?? 0,
-                                        sectionID: nestController.draft.section
-                                    )
+                                // Figma shows nest detail as a sheet, so this
+                                // leaves the flow first and presents rather
+                                // than pushing another page onto it.
+                                pendingNestDetail = NestDetailPresentation(
+                                    item: NestDashboardItem(
+                                        nest: nest,
+                                        latestTemperatureC: nil,
+                                        latestBatteryVoltage: nil
+                                    ),
+                                    ordinal: Int(nestController.draft.nestNumber) ?? 0,
+                                    sectionID: nestController.draft.section
                                 )
+                                finishAddNestFlow()
                             },
                             onBackToHatchery: finishAddNestFlow
                         )
-                    case .nestDetail(let item, let ordinal, let sectionID):
-                        NestDetailView(
-                            item: item,
-                            ordinal: ordinal,
-                            sectionID: sectionID
-                        )
-                        .toolbar(.hidden, for: .navigationBar)
                     }
                 }
                 .sheet(isPresented: $isPickingSection) {
@@ -282,6 +312,10 @@ struct ContentView: View {
     private func finishAddNestFlow() {
         nestController.reset()
         router.reset()
+
+        guard let pending = pendingNestDetail else { return }
+        pendingNestDetail = nil
+        presentedNestDetail = pending
     }
 
     private func presentHatcheryMenu() {
@@ -393,6 +427,15 @@ struct ContentView: View {
 /// What to do once the hatchery management cover has finished dismissing.
 /// Every one of these either rebuilds this view or presents something else,
 /// and neither is safe while a presentation is still animating away.
+/// One nest to show in the detail sheet, with the labels the sheet needs.
+struct NestDetailPresentation: Identifiable {
+    let item: NestDashboardItem
+    let ordinal: Int
+    let sectionID: String
+
+    var id: UUID { item.id }
+}
+
 private enum PendingManagementAction {
     case switchHatchery(HatcherySessionState)
     case createHatchery

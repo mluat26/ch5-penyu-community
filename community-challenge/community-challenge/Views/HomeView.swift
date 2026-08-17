@@ -13,6 +13,9 @@ struct HomeView: View {
     let onAddNest: () -> Void
     let onOpenHatcheryMenu: () -> Void
     var onOpenProfile: (() -> Void)?
+    /// Opens the scan flow for this hatchery. Supplied where the empty state
+    /// is reachable; the prompt is inert without it.
+    var onScanHatchery: (() -> Void)?
 
     @State private var presentedSection: HatcherySectionDashboard?
 
@@ -34,13 +37,26 @@ struct HomeView: View {
                     header(screenWidth: screenWidth)
                         .padding(.top, 87)
 
-                    hatcheryGrid(width: gridWidth, height: gridHeight)
-                        .padding(.top, 25)
+                    if hatchery.hasBeenScanned {
+                        hatcheryGrid(width: gridWidth, height: gridHeight)
+                            .padding(.top, 25)
+                    } else {
+                        // Figma 175:3792. A skipped scan still has a valid
+                        // grid, so without this the dashboard draws a blank
+                        // rectangle that reads as a loading failure.
+                        HatcheryScanPrompt(onScan: { onScanHatchery?() })
+                            .padding(.top, 25)
+                            .padding(.leading, 16)
+                    }
 
                     overview(width: contentWidth)
                         .padding(.top, 25)
 
+                    // Placing a nest needs a mapped grid to place it on, so
+                    // the design dims this to 30% until the scan exists.
                     HatcheryPrimaryButton(title: "Add new nest", action: onAddNest)
+                    .disabled(!hatchery.hasBeenScanned)
+                    .opacity(hatchery.hasBeenScanned ? 1 : 0.3)
                     .frame(width: contentWidth, height: 55)
                     .padding(.top, 36)
                     .padding(.leading, 16)
@@ -247,13 +263,13 @@ struct HomeView: View {
                         title: "Nests",
                         value: (selectedSection?.nestCount
                             ?? controller.overview?.nestCount)
-                            .map(String.init) ?? "—"
+                            .map(String.init) ?? "--"
                     )
                     statCard(
                         title: "Eggs",
                         value: (selectedSection?.totalEggs
                             ?? controller.overview?.totalEggs)
-                            .map(groupedNumber) ?? "—"
+                            .map(groupedNumber) ?? "--"
                     )
                 }
                 .frame(height: 85)
@@ -526,35 +542,15 @@ private struct SectionOverviewSheet: View {
     }
 
     private func temperaturePresentation(for temperature: Double?) -> TemperaturePresentation {
-        guard let temperature else {
-            return TemperaturePresentation(
-                text: "--",
-                systemName: "thermometer.medium",
-                tint: Color(hex: "#8E8E93"),
-                chipWidth: 76
-            )
-        }
-        if temperature >= 32 {
-            return TemperaturePresentation(
-                text: temperatureText(temperature) + "°C",
-                systemName: "heat.waves",
-                tint: Color(hex: "#FF383C"),
-                chipWidth: 85
-            )
-        }
-        if temperature <= 27 {
-            return TemperaturePresentation(
-                text: temperatureText(temperature) + "°C",
-                systemName: "snowflake",
-                tint: Color(hex: "#00C3D0"),
-                chipWidth: 83
-            )
-        }
+        // Band and colour come from `NestTemperature` so this chip agrees
+        // with the nest cards and the detail chart. Only the chip width is
+        // decided here, since it depends on the rendered string.
+        let band = NestTemperature.Band(temperatureC: temperature)
         return TemperaturePresentation(
-            text: temperatureText(temperature) + "°C",
-            systemName: "checkmark.circle",
-            tint: Color(hex: "#34C759"),
-            chipWidth: 85
+            text: NestTemperature.textWithUnit(temperature),
+            systemName: band == .noData ? "thermometer.medium" : band.systemImage,
+            tint: band.tint,
+            chipWidth: temperature == nil ? 76 : 85
         )
     }
 

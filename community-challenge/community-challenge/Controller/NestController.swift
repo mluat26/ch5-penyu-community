@@ -11,10 +11,23 @@ final class NestController {
 
     private let hatcheryID: UUID
     private let nestService: NestService
+    /// Resolves the signed-in user, so a saved nest records who collected it.
+    private let identity: (any SupabaseIdentityProviding)?
 
-    init(hatcheryID: UUID, nestService: NestService) {
+    init(
+        hatcheryID: UUID,
+        nestService: NestService,
+        identity: (any SupabaseIdentityProviding)? = nil
+    ) {
         self.hatcheryID = hatcheryID
         self.nestService = nestService
+        self.identity = identity
+    }
+
+    /// The current user, or nil if the identity could not be resolved. A nest
+    /// is still worth saving without its founder, so this never throws.
+    private func currentUserID() async -> UUID? {
+        try? await identity?.ensureAuthenticatedUserID()
     }
 
     func save() async -> NestEntity? {
@@ -40,10 +53,15 @@ final class NestController {
         defer { isSaving = false }
 
         do {
+            let founderID = await currentUserID()
+
             let nest = try await nestService.createNest(
                 CreateNestInput(
                     hatcheryID: hatcheryID,
-                    founderID: nil,
+                    // Who collected this nest. The infobook calls this the
+                    // founder / responsible person, and the detail screen
+                    // shows it as "Data logger".
+                    founderID: founderID,
                     numberOfEggs: eggCount,
                     dateEggsLaid: AppDateFormatting.parseNestDraftDate(draft.collectionDate),
                     datePredictedHatch: AppDateFormatting.parseNestDraftDate(draft.hatchDate),

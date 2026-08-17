@@ -25,8 +25,16 @@ struct NestDetailSheet: View {
 
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var isConfirmingDelete = false
+    /// Figma 175:3948 (view) vs 175:4110 (edit). The frames differ in more
+    /// than styling: editing drops the battery pill and the Hatched bar, adds
+    /// the Data logger row, and is the only place Delete nest appears.
+    @State private var isEditing = false
+    /// Holds the nest after a save so the rows show the new values without
+    /// refetching the section behind this sheet.
+    @State private var editedNest: NestEntity?
+    @State private var isPickingLocation = false
 
-    private var nest: NestEntity { item.nest }
+    private var nest: NestEntity { editedNest ?? item.nest }
 
     var body: some View {
         GeometryReader { geometry in
@@ -47,15 +55,34 @@ struct NestDetailSheet: View {
                         .background(Color(uiColor: .systemGroupedBackground))
                 }
 
-                hatchedBar(scale: scale)
-                    .frame(width: geometry.size.width, alignment: .center)
-                    .offset(y: geometry.size.height - 96 * scale)
+                if !isEditing {
+                    hatchedBar(scale: scale)
+                        .frame(width: geometry.size.width, alignment: .center)
+                        .offset(y: geometry.size.height - 96 * scale)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .task { await controller.load() }
+        .task {
+            await controller.load()
+            await controller.loadDataLogger(founderID: nest.founderID)
+        }
+        .fullScreenCover(isPresented: $isPickingLocation) {
+            NestLocationPickerView(
+                initialLatitude: controller.draftLatitude,
+                initialLongitude: controller.draftLongitude,
+                initialAddress: controller.draftLocation.isEmpty ? nil : controller.draftLocation,
+                onCancel: { isPickingLocation = false },
+                onSave: { latitude, longitude, address in
+                    controller.draftLatitude = latitude
+                    controller.draftLongitude = longitude
+                    controller.draftLocation = address ?? ""
+                    isPickingLocation = false
+                }
+            )
+        }
         .confirmationDialog(
             "Delete this nest?",
             isPresented: $isConfirmingDelete,
@@ -91,43 +118,73 @@ struct NestDetailSheet: View {
                 .frame(width: Layout.sheetWidth * scale, height: 22 * scale)
                 .offset(y: 13 * scale)
 
-            Button {} label: {
-                Image(systemName: "pencil")
+            Button {
+                if isEditing {
+                    Task {
+                        if let saved = await controller.save(nest) {
+                            editedNest = saved
+                            isEditing = false
+                        }
+                    }
+                } else {
+                    controller.beginEditing(nest)
+                    isEditing = true
+                }
+            } label: {
+                Image(systemName: isEditing ? "checkmark" : "pencil")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 44 * scale, height: 44 * scale)
                     .background(Color.accentColor, in: Circle())
             }
             .buttonStyle(.plain)
+            .disabled(controller.isSaving)
             .offset(x: 330 * scale)
-            .accessibilityLabel("Edit nest")
+            .accessibilityLabel(isEditing ? "Save nest" : "Edit nest")
         }
         .frame(width: Layout.sheetWidth * scale, height: 54 * scale, alignment: .topLeading)
     }
 
     // MARK: - Content (166:3252 — sections at fixed y offsets)
 
+    /// The battery pill occupies 36pt above the image in view mode, so every
+    /// section below it moves down by that much. Edit mode starts at the image.
+    private var sectionShift: CGFloat { isEditing ? 0 : 36 }
+
     private func content(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
+            if !isEditing {
+                batteryPill(scale: scale)
+                    .offset(x: 16 * scale)
+            }
+
             heroAndStats(scale: scale)
-                .offset(x: 16 * scale)
+                .offset(x: 16 * scale, y: isEditing ? 0 : 36 * scale)
 
             weekAndChart(scale: scale)
-                .offset(x: 10 * scale, y: 273.09 * scale)
+                .offset(x: 10 * scale, y: (273.09 + sectionShift) * scale)
 
             informationSection(scale: scale)
-                .offset(x: 16 * scale, y: 619.09 * scale)
+                .offset(x: 16 * scale, y: (619.09 + sectionShift) * scale)
 
             timelineSection(scale: scale)
-                .offset(x: 16 * scale, y: 983.09 * scale)
+                .offset(x: 16 * scale, y: (983.09 + sectionShift) * scale)
 
             inspectionSection(scale: scale)
-                .offset(x: 16 * scale, y: 1321.09 * scale)
+                .offset(x: 16 * scale, y: (1321.09 + sectionShift) * scale)
 
-            deleteButton(scale: scale)
-                .offset(x: 16 * scale, y: 1617.09 * scale)
+            if isEditing {
+                deleteButton(scale: scale)
+                    .offset(x: 16 * scale, y: (1617.09 + sectionShift) * scale)
+            }
         }
         .frame(width: Layout.sheetWidth * scale, height: 1707 * scale, alignment: .topLeading)
+    }
+
+    /// 175:3981 — an 87 × 36 pill centred over the image, view mode only.
+    private func batteryPill(scale: CGFloat) -> some View {
+        NestStatusPill.battery(level: item.batteryLevel)
+            .frame(width: Layout.sectionWidth * scale, height: 36 * scale)
     }
 
     /// 166:3253 — image 294 × 164 centred at x32, then a 85pt stat row.
@@ -302,16 +359,21 @@ struct NestDetailSheet: View {
             NestTemperatureChart(readings: readings, scale: scale)
                 .frame(width: 341 * scale, height: 173 * scale, alignment: .bottomLeading)
 
-            VStack(alignment: .leading, spacing: 0) {
+            // 175:4060 — 12pt bold on a 152pt column, evenly spaced. The
+            // labels were 13pt in a 21pt box, which clipped the degree sign.
+            VStack(spacing: 0) {
                 ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
                     Text("\(degrees)°")
-                        .font(.system(size: 13 * scale, weight: .regular))
+                        .font(.system(size: 12 * scale, weight: .bold))
                         .foregroundStyle(Color(hex: "#8E8E93"))
-                        .frame(width: 21 * scale, height: 16 * scale, alignment: .leading)
-                        .frame(height: 27.2 * scale, alignment: .top)
+                        .fixedSize()
+                        .frame(height: 16 * scale)
+
+                    if degrees != 18 { Spacer(minLength: 0) }
                 }
             }
-            .offset(x: 349 * scale)
+            .frame(width: 24 * scale, height: 152 * scale, alignment: .leading)
+            .offset(x: 346 * scale)
         }
         .frame(width: 370 * scale, height: 173 * scale, alignment: .topLeading)
     }
@@ -334,19 +396,20 @@ struct NestDetailSheet: View {
     private func informationSection(scale: CGFloat) -> some View {
         detailSection(title: "Information", subtitle: "Nest detail information", scale: scale) {
             infoRow(title: "Bucket ID", value: nest.bucketID ?? "—", scale: scale)
-            infoRow(title: "Data logger", value: "—", scale: scale)
-            infoRow(
+            if isEditing {
+                infoRow(
+                    title: "Data logger",
+                    value: controller.dataLoggerName ?? "—",
+                    scale: scale
+                )
+            }
+            dateRow(
                 title: "Collection date",
-                value: nest.dateEggsLaid.map(formatted) ?? "—",
-                isBadge: true,
+                stored: nest.dateEggsLaid,
+                draft: $controller.draftCollectionDate,
                 scale: scale
             )
-            infoRow(
-                title: "Location",
-                value: nest.locationAddress ?? "—",
-                showsChevron: true,
-                scale: scale
-            )
+            locationRow(scale: scale)
         }
     }
 
@@ -362,22 +425,22 @@ struct NestDetailSheet: View {
             .padding(.top, 16 * scale)
 
             VStack(spacing: 0) {
-                infoRow(
+                dateRow(
                     title: "Inspection date",
-                    value: nest.nextInspectionDate.map(formatted) ?? "—",
-                    isBadge: true,
+                    stored: nest.nextInspectionDate,
+                    draft: $controller.draftInspectionDate,
                     scale: scale
                 )
-                infoRow(
+                dateRow(
                     title: "Prediction",
                     subtitle: "Hatching date",
-                    value: nest.datePredictedHatch.map(formatted) ?? "—",
-                    isBadge: true,
+                    stored: nest.datePredictedHatch,
+                    draft: $controller.draftPredictedHatch,
                     scale: scale
                 )
             }
             .frame(width: Layout.sectionWidth * scale)
-            .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
+            .background(.white, in: RoundedRectangle(cornerRadius: 26 * scale))
             .padding(.top, 16 * scale)
         }
         .frame(width: Layout.sectionWidth * scale, alignment: .topLeading)
@@ -447,7 +510,7 @@ struct NestDetailSheet: View {
 
             VStack(spacing: 0) { content() }
                 .frame(width: Layout.sectionWidth * scale)
-                .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
+                .background(.white, in: RoundedRectangle(cornerRadius: 26 * scale))
                 .padding(.top, 16 * scale)
         }
         .frame(width: Layout.sectionWidth * scale, alignment: .topLeading)
@@ -463,7 +526,7 @@ struct NestDetailSheet: View {
 
             Text(subtitle)
                 .font(.system(size: 15 * scale, weight: .regular))
-                .foregroundStyle(Color(hex: "#8E8E93"))
+                .foregroundStyle(.black.opacity(0.5))
                 .frame(width: Layout.sectionWidth * scale, height: 20 * scale, alignment: .leading)
                 .offset(y: 32 * scale)
         }
@@ -517,6 +580,91 @@ struct NestDetailSheet: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Reads as a badge, edits as a wheel-free compact picker. Figma marks
+    /// these rows "Picker - Date", which is what `.compact` renders.
+    private func dateRow(
+        title: String,
+        subtitle: String? = nil,
+        stored: Date?,
+        draft: Binding<Date>,
+        scale: CGFloat
+    ) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 1 * scale) {
+                Text(title)
+                    .font(.system(size: 17 * scale, weight: .regular))
+                    .foregroundStyle(.black)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12 * scale, weight: .regular))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                }
+            }
+
+            Spacer(minLength: 12 * scale)
+
+            if isEditing {
+                DatePicker("", selection: draft, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+            } else {
+                Text(stored.map(formatted) ?? "—")
+                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12 * scale)
+                    .padding(.vertical, 6 * scale)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10 * scale)
+                            .fill(Color(hex: "#F1F1F1"))
+                    }
+            }
+        }
+        .padding(.horizontal, 16 * scale)
+        .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
+    }
+
+    /// The stored address is a string resolved once at capture time, so it is
+    /// edited as text here rather than re-running the map picker.
+    private func locationRow(scale: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text("Location")
+                .font(.system(size: 17 * scale, weight: .regular))
+                .foregroundStyle(.black)
+
+            Spacer(minLength: 12 * scale)
+
+            if isEditing {
+                // Same map the add-nest flow uses, so a pin edited here is
+                // resolved to an address the same way it was captured.
+                Button {
+                    isPickingLocation = true
+                } label: {
+                    HStack(spacing: 4 * scale) {
+                        Text(controller.draftLocation.isEmpty ? "Set location" : controller.draftLocation)
+                            .font(.system(size: 15 * scale, weight: .regular))
+                            .lineLimit(1)
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 13 * scale, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(nest.locationAddress ?? "—")
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .padding(.leading, 8 * scale)
+            }
+        }
+        .padding(.horizontal, 16 * scale)
+        .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
+    }
+
     /// 166:3356 — 174 × 94 card, label at y17, value at y43.
     private func timelineStat(title: String, value: String, scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
@@ -554,19 +702,37 @@ struct NestDetailSheet: View {
     }
 }
 
-/// 166:3304 — bars run cool-to-warm by temperature rather than by position,
-/// so a hot reading is obvious wherever it falls in the day. Empty slots draw
-/// the 7.75pt stubs Figma shows for hours with no reading.
+/// Figma 175:4035. The bars are not individually tinted: one continuous
+/// gradient spans the whole plot and every bar samples it at its own height,
+/// which is why a tall bar reaches purple while a short one stays green.
+///
+/// This is a heat map over the 18–33°C axis, deliberately distinct from the
+/// discrete `NestTemperature.Band` colours used by the pills — the pills
+/// answer "is this nest healthy", the chart shows the shape of the day.
 private struct NestTemperatureChart: View {
     let readings: [IoTDataEntity]
     let scale: CGFloat
 
-    private static let barCount = 28
+    /// 175:4035 draws 24 bars — one per hour of the day. 28 produced extra
+    /// empty stubs trailing off the end of the plot.
+    private static let barCount = 24
     private static let barWidth: CGFloat = 8.458_333
     private static let pitch: CGFloat = 14.458_333
     private static let fullHeight: CGFloat = 173
     private static let stubHeight: CGFloat = 7.75
     private static let axisRange: ClosedRange<Double> = 18...33
+
+    /// Bottom to top, matching the axis labels 18° through 33°.
+    private static let heatGradient = LinearGradient(
+        stops: [
+            .init(color: Color(red: 50 / 255, green: 200 / 255, blue: 89 / 255), location: 0),
+            .init(color: Color(red: 254 / 255, green: 201 / 255, blue: 1 / 255), location: 0.49),
+            .init(color: Color(red: 246 / 255, green: 73 / 255, blue: 70 / 255), location: 0.86),
+            .init(color: Color(red: 119 / 255, green: 62 / 255, blue: 141 / 255), location: 1),
+        ],
+        startPoint: .bottom,
+        endPoint: .top
+    )
 
     /// One slot per bar across the day, so a partial day leaves stubs at the
     /// end rather than stretching a few readings across the whole axis.
@@ -587,11 +753,20 @@ private struct NestTemperatureChart: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            ForEach(Array(slots.enumerated()), id: \.offset) { index, temperature in
-                bar(for: temperature)
-                    .frame(width: Self.barWidth * scale)
-                    .offset(x: Self.pitch * CGFloat(index) * scale)
-            }
+            // The infobook's acceptable band, behind the bars so a reading can
+            // be read against the limits rather than guessed at.
+            thresholdLine(at: NestTemperature.maximumAcceptableC)
+            thresholdLine(at: NestTemperature.minimumAcceptableC)
+
+            // Empty hours are flat grey stubs, drawn separately because they
+            // must not take the heat gradient.
+            barShapes(filled: false)
+                .foregroundStyle(.black.opacity(0.1))
+
+            // One gradient for the whole plot, revealed only where bars are.
+            Self.heatGradient
+                .frame(height: Self.fullHeight * scale)
+                .mask(alignment: .bottomLeading) { barShapes(filled: true) }
         }
         .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
         .accessibilityElement(children: .ignore)
@@ -599,33 +774,38 @@ private struct NestTemperatureChart: View {
         .accessibilityValue(accessibilityValue)
     }
 
-    @ViewBuilder
-    private func bar(for temperature: Double?) -> some View {
-        if let temperature {
-            let span = Self.axisRange.upperBound - Self.axisRange.lowerBound
-            let fraction = min(max((temperature - Self.axisRange.lowerBound) / span, 0), 1)
-
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [Color(hex: "#7BD143"), tint(for: fraction)],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
-                )
-                .frame(height: max(Self.stubHeight, fraction * Self.fullHeight) * scale)
-        } else {
-            Capsule()
-                .fill(Color(hex: "#D9D9D9"))
-                .frame(height: Self.stubHeight * scale)
+    private func barShapes(filled: Bool) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            ForEach(Array(slots.enumerated()), id: \.offset) { index, temperature in
+                if (temperature != nil) == filled {
+                    Capsule()
+                        .frame(width: Self.barWidth * scale, height: height(for: temperature) * scale)
+                        .offset(x: Self.pitch * CGFloat(index) * scale)
+                }
+            }
         }
+        .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
     }
 
-    private func tint(for fraction: Double) -> Color {
-        switch fraction {
-        case ..<0.34: Color(hex: "#C8D93A")
-        case ..<0.67: Color(hex: "#F5A623")
-        default: Color(hex: "#A24BD1")
+    private func height(for temperature: Double?) -> CGFloat {
+        guard let temperature else { return Self.stubHeight }
+        let span = Self.axisRange.upperBound - Self.axisRange.lowerBound
+        let fraction = min(max((temperature - Self.axisRange.lowerBound) / span, 0), 1)
+        return max(Self.stubHeight, fraction * Self.fullHeight)
+    }
+
+    /// Positioned on the same 18–33°C axis the design labels.
+    @ViewBuilder
+    private func thresholdLine(at temperatureC: Double) -> some View {
+        let span = Self.axisRange.upperBound - Self.axisRange.lowerBound
+        let fraction = (temperatureC - Self.axisRange.lowerBound) / span
+
+        if (0...1).contains(fraction) {
+            Rectangle()
+                .fill(.black.opacity(0.08))
+                .frame(height: 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .offset(y: -fraction * Self.fullHeight * scale)
         }
     }
 

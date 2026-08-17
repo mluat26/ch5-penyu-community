@@ -32,56 +32,20 @@ struct NestStatusPill: View {
     }
 }
 
-/// How a nest's latest temperature reads for incubation.
-///
-/// Distinct from the `NestTemperatureStatus` in the add-nest flow, which uses
-/// wider 24–32°C bounds for its accent colours. These narrower bounds are the
-/// sex-ratio ones.
-///
-/// The thresholds decide sex ratio in real nests, so they are named here
-/// rather than buried in a view: below 29°C skews male, above 31°C skews
-/// female and risks the clutch.
-enum NestIncubationStatus {
-    case cold
-    case healthy
-    case hot
-    case unknown
-
-    init(temperatureC: Double?) {
-        guard let temperatureC else { self = .unknown; return }
-        if temperatureC < 29 { self = .cold }
-        else if temperatureC > 31 { self = .hot }
-        else { self = .healthy }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .cold: "snowflake"
-        case .healthy: "checkmark.circle"
-        case .hot: "heat.waves"
-        case .unknown: "exclamationmark.icloud"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .cold: Color(hex: "#00C3D0")
-        case .healthy: Color(hex: "#34C759")
-        case .hot, .unknown: Color(hex: "#FF383C")
-        }
-    }
-}
+// Temperature judgement and colour live in `NestTemperature`, built from
+// the infobook's thresholds, so one reading cannot look healthy on one
+// screen and alarming on another.
 
 extension NestStatusPill {
     /// Figma draws an unreported temperature as "--" on the same red as a hot
     /// nest: a logger that stopped talking is a problem, not a neutral state.
     static func temperature(_ temperatureC: Double?) -> NestStatusPill {
-        let status = NestIncubationStatus(temperatureC: temperatureC)
+        let band = NestTemperature.Band(temperatureC: temperatureC)
         return NestStatusPill(
-            systemImage: status.systemImage,
-            text: temperatureC.map { String(format: "%.1f°C", $0) } ?? "--",
+            systemImage: band.systemImage,
+            text: NestTemperature.textWithUnit(temperatureC),
             foreground: .white,
-            background: status.tint
+            background: band.tint
         )
     }
 

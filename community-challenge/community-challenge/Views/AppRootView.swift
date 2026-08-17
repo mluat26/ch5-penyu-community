@@ -123,11 +123,13 @@ struct AppRootView: View {
     /// that account's first hatchery instead of continuing the empty setup.
     private func signInWithApple(
         identityToken: String,
-        nonce: String
+        nonce: String,
+        fullName: String?
     ) async throws {
         try await container.signInWithApple(
             identityToken: identityToken,
-            nonce: nonce
+            nonce: nonce,
+            fullName: fullName
         )
         await hatcheryListController.load()
 

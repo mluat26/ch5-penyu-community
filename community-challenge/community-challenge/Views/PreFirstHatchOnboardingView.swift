@@ -18,7 +18,10 @@ struct PreFirstHatchOnboardingView: View {
     }
 
     let onCreateHatchery: () -> Void
-    let onSignInWithApple: (String, String) async throws -> Void
+    /// Token, nonce, and the full name Apple supplies. That name arrives only
+    /// on a person's very first authorization and never again, so it has to be
+    /// captured here or it is lost for good.
+    let onSignInWithApple: (String, String, String?) async throws -> Void
     /// Redeems an invite code and joins that organization. Throws so the join
     /// screen can show the database's own reason for refusing a code.
     var onJoinWithCode: ((String) async throws -> Void)?
@@ -324,7 +327,11 @@ struct PreFirstHatchOnboardingView: View {
             defer { isSigningInWithApple = false }
 
             do {
-                try await onSignInWithApple(token, rawAppleNonce)
+                try await onSignInWithApple(
+                    token,
+                    rawAppleNonce,
+                    Self.formattedName(from: credential.fullName)
+                )
                 showStartStep()
             } catch {
                 guard !Task.isCancelled else { return }
@@ -415,6 +422,20 @@ private final class AppleSignInCoordinator: NSObject,
     }
 }
 
+extension PreFirstHatchOnboardingView {
+    /// Apple hands back name components, not a string, and omits them for a
+    /// returning user. Returns nil rather than an empty string so a repeat
+    /// sign-in never blanks a name the person already set.
+    static func formattedName(from components: PersonNameComponents?) -> String? {
+        guard let components else { return nil }
+        let formatted = PersonNameComponentsFormatter.localizedString(
+            from: components,
+            style: .default
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return formatted.isEmpty ? nil : formatted
+    }
+}
+
 private enum AppleSignInError: LocalizedError {
     case missingIdentityToken
 
@@ -473,6 +494,6 @@ private struct PreFirstHatchWelcomeArtwork: View {
 #Preview("Welcome · Figma 119:3271", traits: .fixedLayout(width: 402, height: 874)) {
     PreFirstHatchOnboardingView(
         onCreateHatchery: {},
-        onSignInWithApple: { _, _ in }
+        onSignInWithApple: { _, _, _ in }
     )
 }

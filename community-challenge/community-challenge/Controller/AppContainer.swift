@@ -104,12 +104,18 @@ final class AppContainer {
         NestDetailController(
             nestID: nestID,
             ioTDataRepository: ioTDataRepository,
-            inspectionService: inspectionService
+            inspectionService: inspectionService,
+            nestService: nestService,
+            profileRepository: profileRepository
         )
     }
 
     func makeNestController(hatcheryID: UUID) -> NestController {
-        NestController(hatcheryID: hatcheryID, nestService: nestService)
+        NestController(
+            hatcheryID: hatcheryID,
+            nestService: nestService,
+            identity: authenticationService
+        )
     }
 
     /// Joins the organization the code belongs to. The database owns every
@@ -145,11 +151,26 @@ final class AppContainer {
     /// client and identity coordinator shared by all repositories.
     func signInWithApple(
         identityToken: String,
-        nonce: String
+        nonce: String,
+        fullName: String? = nil
     ) async throws {
         _ = try await authenticationService.signInWithApple(
             identityToken: identityToken,
             nonce: nonce
+        )
+
+        // Apple supplies the name only on a person's first authorization, so
+        // this is the one chance to keep it. Never overwrite an existing name
+        // with nil: a returning user sends no name, and blanking what they
+        // already set would be worse than leaving it.
+        guard let fullName, !fullName.isEmpty else { return }
+
+        let existing = try? await profileRepository.fetchCurrentProfile()
+        guard existing?.displayName?.isEmpty ?? true else { return }
+
+        _ = try? await profileRepository.updateCurrentProfile(
+            displayName: fullName,
+            appleEmail: existing?.appleEmail
         )
     }
 

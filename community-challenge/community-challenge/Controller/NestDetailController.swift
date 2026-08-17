@@ -12,18 +12,91 @@ final class NestDetailController {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
+    /// Edited in place by the detail sheet's edit mode, committed by `save`.
+    /// Seeded from the nest so cancelling simply discards these.
+    var draftCollectionDate = Date()
+    var draftPredictedHatch = Date()
+    var draftInspectionDate = Date()
+    var draftLocation = ""
+    /// The pin behind `draftLocation`. Edited through the map picker, so the
+    /// address and the coordinates cannot drift apart.
+    var draftLatitude: Double?
+    var draftLongitude: Double?
+    private(set) var isSaving = false
+    /// The founder's display name, shown as "Data logger". Nil until resolved,
+    /// and stays nil if the nest has no founder or that person set no name.
+    private(set) var dataLoggerName: String?
+
     private let nestID: UUID
     private let ioTDataRepository: any IoTDataRepository
     private let inspectionService: InspectionService
+    private let nestService: NestService?
+    private let profileRepository: (any ProfileRepository)?
 
     init(
         nestID: UUID,
         ioTDataRepository: any IoTDataRepository,
-        inspectionService: InspectionService
+        inspectionService: InspectionService,
+        nestService: NestService? = nil,
+        profileRepository: (any ProfileRepository)? = nil
     ) {
         self.nestID = nestID
         self.ioTDataRepository = ioTDataRepository
         self.inspectionService = inspectionService
+        self.nestService = nestService
+        self.profileRepository = profileRepository
+    }
+
+    /// Turns `founder_id` into a name. Readable only for people in the same
+    /// organization, which is what the profile read policy allows.
+    func loadDataLogger(founderID: UUID?) async {
+        guard let founderID, let profileRepository else { return }
+        dataLoggerName = try? await profileRepository.fetchProfile(id: founderID)?.displayName
+    }
+
+    /// Fills the draft from the nest being shown. Called when edit mode opens
+    /// so the pickers start on the stored values rather than today.
+    func beginEditing(_ nest: NestEntity) {
+        draftCollectionDate = nest.dateEggsLaid ?? .now
+        draftPredictedHatch = nest.datePredictedHatch ?? .now
+        draftInspectionDate = nest.nextInspectionDate ?? .now
+        draftLocation = nest.locationAddress ?? ""
+        draftLatitude = nest.latitude
+        draftLongitude = nest.longitude
+        errorMessage = nil
+    }
+
+    /// Writes the edited fields back. Returns the saved nest so the sheet can
+    /// show the new values without refetching.
+    func save(_ nest: NestEntity) async -> NestEntity? {
+        guard let nestService, !isSaving else { return nil }
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        let trimmedLocation = draftLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            return try await nestService.updateNest(
+                id: nest.id,
+                UpdateNestInput(
+                    numberOfEggs: nest.numberOfEggs,
+                    dateEggsLaid: draftCollectionDate,
+                    datePredictedHatch: draftPredictedHatch,
+                    bucketID: nest.bucketID,
+                    nestNumber: nest.nestNumber,
+                    latitude: draftLatitude,
+                    longitude: draftLongitude,
+                    locationAddress: trimmedLocation.isEmpty ? nil : trimmedLocation,
+                    nextInspectionDate: draftInspectionDate,
+                    placementRow: nest.placementRow,
+                    placementColumn: nest.placementColumn
+                )
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
     }
 
     /// Readings for `day`, oldest first, which is the order the chart draws.

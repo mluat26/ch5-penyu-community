@@ -82,9 +82,14 @@ private struct CenteredLabelStyle: LabelStyle {
 /// map pans and zooms, and a beach is mostly featureless, so a stray tap while
 /// framing the shot would otherwise silently move the record.
 struct NestLocationPickerView: View {
-    @Bindable var controller: NestController
+    /// Starting pin, if the caller already has one.
+    let initialLatitude: Double?
+    let initialLongitude: Double?
+    let initialAddress: String?
     let onCancel: () -> Void
-    let onSave: () -> Void
+    /// Hands back the dropped pin and the address resolved for it, so this
+    /// screen works for editing a saved nest as well as creating one.
+    let onSave: (Double, Double, String?) -> Void
 
     @State private var camera: MapCameraPosition
     @State private var coordinate: CLLocationCoordinate2D?
@@ -98,23 +103,25 @@ struct NestLocationPickerView: View {
     @State private var userLocation = UserLocationProvider()
 
     init(
-        controller: NestController,
+        initialLatitude: Double? = nil,
+        initialLongitude: Double? = nil,
+        initialAddress: String? = nil,
         onCancel: @escaping () -> Void,
-        onSave: @escaping () -> Void
+        onSave: @escaping (Double, Double, String?) -> Void
     ) {
-        self.controller = controller
+        self.initialLatitude = initialLatitude
+        self.initialLongitude = initialLongitude
+        self.initialAddress = initialAddress
         self.onCancel = onCancel
         self.onSave = onSave
 
-        let existing = controller.draft.latitude.flatMap { latitude in
-            controller.draft.longitude.map { longitude in
+        let existing = initialLatitude.flatMap { latitude in
+            initialLongitude.map { longitude in
                 CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             }
         }
         _coordinate = State(initialValue: existing)
-        _addressLines = State(
-            initialValue: Self.lines(from: controller.draft.locationAddress)
-        )
+        _addressLines = State(initialValue: Self.lines(from: initialAddress))
         _camera = State(
             initialValue: existing.map {
                 .region(
@@ -241,12 +248,11 @@ struct NestLocationPickerView: View {
     }
 
     private func save(_ coordinate: CLLocationCoordinate2D) {
-        controller.draft.latitude = coordinate.latitude
-        controller.draft.longitude = coordinate.longitude
-        controller.draft.locationAddress = addressLines.isEmpty
-            ? nil
-            : addressLines.joined(separator: ", ")
-        onSave()
+        onSave(
+            coordinate.latitude,
+            coordinate.longitude,
+            addressLines.isEmpty ? nil : addressLines.joined(separator: ", ")
+        )
     }
 
     /// Clearing the pin is what closing the card means, the same way dismissing
@@ -445,14 +451,7 @@ struct PinnedLocationSheet: View {
 }
 
 #Preview("Pick nest location", traits: .fixedLayout(width: 402, height: 874)) {
-    NestLocationPickerView(
-        controller: NestController(
-            hatcheryID: UUID(),
-            nestService: NestService(repository: InMemoryNestRepository())
-        ),
-        onCancel: { },
-        onSave: { }
-    )
+    NestLocationPickerView(onCancel: { }, onSave: { _, _, _ in })
 }
 
 // The map itself needs a device to render, so the card gets its own preview:

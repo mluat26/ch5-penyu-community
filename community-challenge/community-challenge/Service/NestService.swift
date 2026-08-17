@@ -29,6 +29,9 @@ struct UpdateNestInput: Hashable, Sendable {
     var latitude: Double? = nil
     var longitude: Double? = nil
     var locationAddress: String? = nil
+    /// When the next visit is due. Editable from the nest detail screen; nil
+    /// once a nest has hatched, since nothing further is scheduled.
+    var nextInspectionDate: Date? = nil
     var placementRow: Int?
     var placementColumn: Int?
 }

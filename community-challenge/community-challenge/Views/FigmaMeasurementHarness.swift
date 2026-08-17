@@ -146,6 +146,10 @@ private struct StubProfileRepository: ProfileRepository {
         )
     }
 
+    func fetchProfile(id: UUID) async throws -> ProfileEntity? {
+        try await fetchCurrentProfile()
+    }
+
     func updateCurrentProfile(displayName: String?, appleEmail: String?) async throws -> ProfileEntity {
         try await fetchCurrentProfile()!
     }
