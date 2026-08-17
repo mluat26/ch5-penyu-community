@@ -8,11 +8,607 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Bindable var controller: HatcheryController
+    let onAddNest: () -> Void
+    let onOpenHatcheryMenu: () -> Void
+
+    @State private var presentedSection: HatcherySectionDashboard?
+
+    private var hatchery: HatcherySessionState { controller.sessionState }
+    private var columns: [String] { hatchery.grid.columnLabels }
+    private var rows: [String] { hatchery.grid.rowLabels }
+
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        GeometryReader { geometry in
+            let screenWidth = min(geometry.size.width, 402)
+            let contentWidth = min(max(screenWidth - 32, 0), 370)
+            let gridWidth = max(contentWidth - 21, 0)
+            let gridHeight = gridWidth * 279 / 349
+
+            ZStack(alignment: .topLeading) {
+                Color.white
+                    .overlay(alignment: .topLeading) {
+                        Circle()
+                            .fill(Color(hex: "#FEF6ED"))
+                            .frame(width: 621, height: 621)
+                            .blur(radius: 50)
+                            .offset(x: -110, y: -378)
+                            .allowsHitTesting(false)
+                    }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    header(screenWidth: screenWidth)
+                        .padding(.top, 87)
+
+                    hatcheryGrid(width: gridWidth, height: gridHeight)
+                        .padding(.top, 25)
+
+                    overview(width: contentWidth)
+                        .padding(.top, 25)
+
+                    Button {
+                        onAddNest()
+                    } label: {
+                        Text("Add new nest")
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .tracking(-0.43)
+                            .foregroundStyle(Color(hex: "#FAF8F4"))
+                            .frame(maxWidth: .infinity, minHeight: 55)
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color(hex: "#2E7D5B"), in: RoundedRectangle(cornerRadius: 26))
+                    .frame(width: contentWidth, height: 55)
+                    .padding(.top, 36)
+                    .padding(.leading, 16)
+                }
+                .frame(width: screenWidth, alignment: .leading)
+
+                hatcherySelectorTapTarget(screenWidth: screenWidth)
+            }
+            .frame(width: screenWidth, height: geometry.size.height, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .ignoresSafeArea()
+        .preferredColorScheme(.light)
+        .sheet(item: $presentedSection) { section in
+            SectionOverviewSheet(section: section)
+                .presentationDetents([.height(707)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+        }
+        .task { await controller.load() }
+        .onAppear(perform: clearInactiveSelection)
+        .onChange(of: hatchery.grid) { _, _ in
+            clearInactiveSelection()
+        }
+    }
+
+    private func header(screenWidth: CGFloat) -> some View {
+        let headerWidth = max(screenWidth - 16, 0)
+        let selectorTapWidth = min(176, max(headerWidth - 156, 0))
+
+        return HStack(spacing: 0) {
+            HatcherySelectorLabel(hatcheryName: hatchery.hatchery.name)
+                .frame(width: selectorTapWidth, height: 48, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 12) {
+                toolbarIcon(systemName: "bell", label: "Notifications")
+                toolbarIcon(systemName: "person", label: "Profile")
+            }
+            .frame(width: 156, height: 48)
+        }
+        .frame(width: headerWidth, height: 48)
+        .padding(.leading, 16)
+    }
+
+    /// Kept as a top-level sibling of the dashboard rather than nested inside
+    /// the title artwork. On physical devices this gives the selector one
+    /// straightforward native Button hit-test path across its full target.
+    private func hatcherySelectorTapTarget(screenWidth: CGFloat) -> some View {
+        let headerWidth = max(screenWidth - 16, 0)
+        let tapWidth = min(176, max(headerWidth - 156, 0))
+
+        return Button(action: onOpenHatcheryMenu) {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: tapWidth, height: 56)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("hatchery-menu")
+        .accessibilityLabel("Switch hatchery")
+        .accessibilityHint("Opens the hatchery menu")
+        .padding(.leading, 16)
+        .padding(.top, 83)
+    }
+
+    private func toolbarIcon(
+            systemName: String,
+            label: String
+        ) -> some View {
+            Image(systemName: systemName)
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(.black)
+                .frame(width: 48, height: 48)
+                .glassEffect(.regular, in: .circle)
+                .accessibilityLabel(label)
+        }
+    private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 21)
+
+                HStack(spacing: 2) {
+                    ForEach(columns, id: \.self) { column in
+                        Text(column)
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.black.opacity(0.5))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(width: width)
+            }
+            .frame(width: width + 21, height: 16, alignment: .leading)
+
+            HStack(spacing: 12) {
+                VStack(spacing: 0) {
+                    ForEach(rows, id: \.self) { row in
+                        Text(row)
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.black.opacity(0.5))
+                            .frame(maxHeight: .infinity)
+                    }
+                }
+                .frame(width: 9, height: height, alignment: .top)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color(hex: "#BFCABD"))
+
+                    Image(uiImage: hatchery.rectifiedPhoto)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: height)
+                        .clipped()
+                        .accessibilityLabel("Photo of \(hatchery.hatchery.name)")
+
+                    VStack(spacing: 2) {
+                        ForEach(rows.indices, id: \.self) { row in
+                            HStack(spacing: 2) {
+                                ForEach(columns.indices, id: \.self) { column in
+                                    let sectionID = "\(columns[column])\(rows[row])"
+                                    let section = gridSection(row: row, column: column)
+
+                                    if section?.isActive == true {
+                                        Button {
+                                            controller.selectSection(id: sectionID)
+                                        } label: {
+                                            Color(hex: "#003C22")
+                                                .opacity(controller.selectedSectionID == sectionID ? 0.70 : 0.30)
+                                                .overlay {
+                                                    if controller.selectedSectionID == sectionID {
+                                                        sectionBadge(sectionID)
+                                                    }
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .contentShape(Rectangle())
+                                        .accessibilityLabel("Section \(sectionID)")
+                                    } else {
+                                        Color.black
+                                            .opacity(0.14)
+                                            .overlay {
+                                                Rectangle()
+                                                    .stroke(.white.opacity(0.18), lineWidth: 1)
+                                            }
+                                            .accessibilityElement(children: .ignore)
+                                            .accessibilityLabel("Section \(sectionID), outside the marked sand area")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+            }
+            .frame(width: width + 21, height: height, alignment: .leading)
+        }
+        .frame(width: width + 21, alignment: .leading)
+        .padding(.leading, 16)
+    }
+
+    private func overview(width: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    overviewKicker
+                        .font(.footnote)
+                        .tracking(-0.08)
+                        .lineLimit(1)
+
+                    Text("Check the status of the hatchery")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .tracking(-0.43)
+                        .foregroundStyle(Color(hex: "#575757"))
+                }
+
+                Spacer(minLength: 0)
+
+                if selectedSection != nil {
+                    Button {
+                        presentedSection = selectedSection
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.body)
+                            .foregroundStyle(Color(hex: "#0C7C4D"))
+                            .accessibilityHidden(true)
+                            .frame(width: 44, height: 44, alignment: .trailing)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show section overview")
+                }
+            }
+            .frame(height: 44)
+
+            VStack(spacing: 12) {
+                temperatureCard(value: temperatureText(
+                    selectedSection?.averageTemperatureC
+                        ?? controller.overview?.averageTemperatureC
+                ))
+
+                HStack(spacing: 12) {
+                    statCard(
+                        title: "Nests",
+                        value: (selectedSection?.nestCount
+                            ?? controller.overview?.nestCount)
+                            .map(String.init) ?? "—"
+                    )
+                    statCard(
+                        title: "Eggs",
+                        value: (selectedSection?.totalEggs
+                            ?? controller.overview?.totalEggs)
+                            .map(groupedNumber) ?? "—"
+                    )
+                }
+                .frame(height: 85)
+            }
+            .padding(.top, 24)
+        }
+        .frame(width: width, height: 269, alignment: .top)
+        .padding(.horizontal, 16)
+    }
+
+    private func temperatureCard(value: String) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Average temperature")
+                    .font(.caption)
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .opacity(0.8)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.body)
+                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .accessibilityHidden(true)
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(alignment: .top, spacing: 0) {
+                Text(value)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .tracking(0.38)
+
+                Text("°C")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .padding(.top, 2)
+            }
+            .foregroundStyle(Color(hex: "#0C7C4D"))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104, alignment: .topLeading)
+        .background(cardBackground)
+    }
+
+    private func statCard(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(Color(hex: "#8E8E93"))
+                .opacity(0.8)
+
+            Spacer(minLength: 0)
+
+            Text(value)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .tracking(-0.45)
+                .foregroundStyle(.black)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(cardBackground)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 24)
+            .fill(.white)
+            .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+
+    private var selectedSection: HatcherySectionDashboard? { controller.selectedSection }
+
+    private func gridSection(row: Int, column: Int) -> HatcherySection? {
+        hatchery.grid.sections.first { $0.row == row && $0.column == column }
+    }
+
+    private func clearInactiveSelection() {
+        controller.clearInactiveSelection()
+        if controller.selectedSection == nil {
+            presentedSection = nil
+        }
+    }
+
+    private var overviewKicker: Text {
+        guard let selectedSection else {
+            return Text("HATCHERY OVERVIEW")
+                .foregroundColor(Color(hex: "#757575"))
+        }
+
+        let sectionName = Text("SECTION \(selectedSection.id)")
+            .fontWeight(.bold)
+            .foregroundColor(Color(hex: "#0C7C4D"))
+
+        return Text("HATCHERY \(sectionName) OVERVIEW")
+            .foregroundColor(Color(hex: "#757575"))
+    }
+
+    private func sectionBadge(_ sectionID: String) -> some View {
+        Text(sectionID)
+            .font(.caption)
+            .fontWeight(.bold)
+            .foregroundStyle(.black)
+            .frame(width: 35, height: 36)
+            .background(.white, in: Capsule())
+            .padding(4)
+            .background(.white.opacity(0.24), in: Capsule())
+            .accessibilityHidden(true)
+    }
+
+    private func temperatureText(_ temperature: Double?) -> String {
+        guard let temperature else { return "—" }
+        return String(format: "%.1f", temperature)
+    }
+
+    private func groupedNumber(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
     }
 }
 
-#Preview {
-    HomeView()
+private struct SectionOverviewSheet: View {
+    let section: HatcherySectionDashboard
+
+    @State private var selectedNest: NestDetailSelection?
+
+    var body: some View {
+        SheetChrome(title: "Section \(section.id)") { sheetWidth in
+            summary
+                .frame(width: 370, height: 85, alignment: .top)
+                .offset(x: (sheetWidth - 370) / 2, y: 71)
+
+            nestList
+                .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
+        }
+        .sheet(item: $selectedNest) { selection in
+            NestDetailView(
+                item: selection.item,
+                ordinal: selection.ordinal,
+                sectionID: section.id
+            )
+            .presentationDetents([.height(707)])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(34)
+            .presentationSizing(.page)
+        }
+    }
+
+    private var summary: some View {
+        HStack(alignment: .top, spacing: 12) {
+            sheetSummaryValue(
+                title: "Average temperature",
+                value: temperatureText(section.averageTemperatureC),
+                unit: "°C",
+                valueColor: Color(hex: "#0C7C4D"),
+                alignment: .leading
+            )
+            .frame(width: 151, height: 85, alignment: .topLeading)
+
+            sheetSummaryValue(title: "Nests", value: String(section.nestCount))
+                .frame(width: 97.5, height: 85, alignment: .top)
+
+            sheetSummaryValue(title: "Eggs", value: groupedNumber(section.totalEggs))
+                .frame(width: 97.5, height: 85, alignment: .top)
+        }
+        .frame(width: 370, height: 85, alignment: .top)
+    }
+
+    private var nestList: some View {
+        // The card stays 464pt because the sheet is a fixed 707 and this list
+        // starts 167 down; what changed is that its contents scroll.
+        //
+        // It used to render `section.nests.prefix(4)` into exactly four 116pt
+        // rows with no scroll view, so a section's fifth nest was counted in
+        // the header above and then had nowhere to appear -- which reads as the
+        // nest never having been saved.
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(Array(section.nests.enumerated()), id: \.element.id) { index, nest in
+                    Button {
+                        selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
+                    } label: {
+                        nestRow(nest, ordinal: index + 1)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .frame(height: 116)
+                    .overlay(alignment: .bottom) {
+                        if index < section.nests.count - 1 {
+                            Rectangle()
+                                .fill(Color(hex: "#EEEEEE"))
+                                .frame(height: 1)
+                        }
+                    }
+                }
+            }
+        }
+        // Four or fewer nests fill the card exactly, so leave those sections
+        // feeling fixed rather than springy.
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: 371, height: 464)
+        .background(.white, in: RoundedRectangle(cornerRadius: 26))
+        .clipShape(RoundedRectangle(cornerRadius: 26))
+    }
+
+    private func nestRow(
+        _ item: NestDashboardItem,
+        ordinal: Int
+    ) -> some View {
+        let temperature = temperaturePresentation(for: item.latestTemperatureC)
+
+        return ZStack(alignment: .topLeading) {
+            HStack(spacing: 4) {
+                Text("Nest #\(item.nest.displayNumber(fallbackOrdinal: ordinal))")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#2B2B2B"))
+
+                Text("· \(item.nest.numberOfEggs) eggs")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Color(hex: "#4A4A4A"))
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "timer")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
+
+                Text(hatchCountdown(for: item.nest))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
+            }
+            .frame(width: 339, height: 22)
+            .offset(x: 16, y: 16)
+
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: temperature.systemName)
+                        .font(.system(size: 12, weight: .regular))
+
+                    Text(temperature.text)
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(.white)
+                .frame(width: temperature.chipWidth, height: 36)
+                .background(temperature.tint, in: RoundedRectangle(cornerRadius: 16))
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .accessibilityHidden(true)
+            }
+            .frame(width: 339, height: 36)
+            .offset(x: 16, y: 64)
+        }
+        .frame(width: 371, height: 116, alignment: .topLeading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func temperatureText(_ temperature: Double?) -> String {
+        guard let temperature else { return "—" }
+        return String(format: "%.1f", temperature)
+    }
+
+    private func groupedNumber(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
+    }
+
+    private func hatchCountdown(for nest: NestEntity) -> String {
+        guard let days = nest.daysUntilHatch else { return "Hatch date pending" }
+        return days <= 0 ? "Hatching now" : "Hatch in \(days) days"
+    }
+
+    private func temperaturePresentation(for temperature: Double?) -> TemperaturePresentation {
+        guard let temperature else {
+            return TemperaturePresentation(
+                text: "--",
+                systemName: "thermometer.medium",
+                tint: Color(hex: "#8E8E93"),
+                chipWidth: 76
+            )
+        }
+        if temperature >= 32 {
+            return TemperaturePresentation(
+                text: temperatureText(temperature) + "°C",
+                systemName: "heat.waves",
+                tint: Color(hex: "#FF383C"),
+                chipWidth: 85
+            )
+        }
+        if temperature <= 27 {
+            return TemperaturePresentation(
+                text: temperatureText(temperature) + "°C",
+                systemName: "snowflake",
+                tint: Color(hex: "#00C3D0"),
+                chipWidth: 83
+            )
+        }
+        return TemperaturePresentation(
+            text: temperatureText(temperature) + "°C",
+            systemName: "checkmark.circle",
+            tint: Color(hex: "#34C759"),
+            chipWidth: 85
+        )
+    }
+
+    private struct TemperaturePresentation {
+        let text: String
+        let systemName: String
+        let tint: Color
+        let chipWidth: CGFloat
+    }
+
+    private struct NestDetailSelection: Identifiable {
+        let item: NestDashboardItem
+        let ordinal: Int
+
+        var id: UUID { item.id }
+    }
+
+}
+
+#Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
+    HomeView(
+        controller: AppContainer().makeHatcheryController(
+            sessionState: .previewSample
+        ),
+        onAddNest: { },
+        onOpenHatcheryMenu: { }
+    )
 }

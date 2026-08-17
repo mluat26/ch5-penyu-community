@@ -7,3 +7,35 @@ project.xcworkspace/xcuserdata/
 
 # OS X
 .DS_Store
+
+# Local design references; app-bundled assets belong in the target asset catalog.
+community-challenge/Docs/
+community-challenge/Assets/
+
+# Secrets. This repository is public, and the current dev RLS policy gives the
+# anon key full access to hatchery and nest, so the key is a real credential
+# until ownership policies replace that policy.
+# Copy community-challenge/Config/SupabaseSecrets.xcconfig.example to this
+# ignored path, then add the local values.
+community-challenge/Config/SupabaseSecrets.xcconfig
+
+# Supabase CLI local state (contains the linked project ref).
+supabase/.temp/
+
+# Local ML-training corpus and generated outputs. Keep provenance and
+# documentation in training/ tracked; do not add a global *.mlmodel ignore.
+training/raw/
+training/curated/
+training/datasets/
+training/exports/
+training/runs/
+training/reviews/
+training/.cache/
+__pycache__/
+training/*.zip
+training/*.tar
+training/*.tar.gz
+
+# Local-only prototype model trained from the ignored testing corpus. Keep it
+# available to Xcode for device trials, but never add it to Git or a release.
+community-challenge/community-challenge/Models/HatcheryDetector.mlmodel

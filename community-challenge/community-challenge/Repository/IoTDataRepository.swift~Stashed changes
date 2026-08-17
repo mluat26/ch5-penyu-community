@@ -1,0 +1,13 @@
+//
+//  IoTDataRepository.swift
+//  
+//
+//  Created by Arthaz's MacBook on 14/08/26.
+//
+
+import Foundation
+
+protocol IoTDataRepository: Sendable {
+    func fetch(id: UUID) async throws -> IoTDataEntity
+    func fetchAll(nestID: UUID) async throws -> [IoTDataEntity]
+}

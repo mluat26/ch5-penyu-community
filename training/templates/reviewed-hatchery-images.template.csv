@@ -1,0 +1,8 @@
+image_path,source_id,split_group,decision,label,x,y,width,height,reviewer,reviewed_at,notes
+# Copy this file outside Git, then replace each example with a human-reviewed image row.
+# Positive: visually confirmed hatchery bed, label exactly hatchery, and integer top-left pixel box.
+/absolute/path/to/confirmed-hatchery.jpg,field-hatchery-001,field-site-a-session-20260814,positive,hatchery,120,90,960,640,Your Name,2026-08-14,Box follows the usable sand bed only.
+# Negative: visually reviewed non-hatchery image; label and all box values stay blank.
+/absolute/path/to/confirmed-negative.jpg,field-negative-001,field-site-b-session-20260815,negative,,,,,,Your Name,2026-08-15,Bare sand and poles; no usable hatchery bed.
+# Exclude: retained only as a human review note; it is never copied, labeled, or included in a split.
+/absolute/path/to/uncertain-image.jpg,field-uncertain-001,field-site-c-session-20260816,exclude,,,,,,Your Name,2026-08-16,Do not use until a human can inspect it clearly.
