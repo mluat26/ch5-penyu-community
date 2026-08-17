@@ -165,10 +165,14 @@ final class AppContainer {
         // already set would be worse than leaving it.
         guard let fullName, !fullName.isEmpty else { return }
 
-        let existing = try? await profileRepository.fetchCurrentProfile()
+        // These reads and writes are deliberately not swallowed. The earlier
+        // `try?` here turned a failed name save into a blank Data logger row
+        // with nothing to diagnose from — the one chance to keep the name had
+        // already passed by the time anyone noticed.
+        let existing = try await profileRepository.fetchCurrentProfile()
         guard existing?.displayName?.isEmpty ?? true else { return }
 
-        _ = try? await profileRepository.updateCurrentProfile(
+        _ = try await profileRepository.updateCurrentProfile(
             displayName: fullName,
             appleEmail: existing?.appleEmail
         )
