@@ -1140,7 +1140,7 @@ private struct AddNestPreviewCard: View {
                 // Interpolating a styled `Text` rather than `Text + Text`,
                 // which is deprecated on this SDK.
                 Text(
-                    "* \(Text("Auto").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
+                    "* \(Text("Auto, the content auto generate by AI").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
                 )
                 .font(.caption2)
                 .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
@@ -1150,7 +1150,7 @@ private struct AddNestPreviewCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(hex: "#939393").opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(hex: "#939393").opacity(0.1), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
