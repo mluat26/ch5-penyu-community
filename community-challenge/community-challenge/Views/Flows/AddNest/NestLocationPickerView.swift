@@ -151,7 +151,7 @@ struct NestLocationPickerView: View {
                 MapCompass()
             }
             .gesture(
-                LongPressGesture(minimumDuration: 0.4)
+                LongPressGesture(minimumDuration: 0.2)
                     .sequenced(before: DragGesture(minimumDistance: 0))
                     .onEnded { value in
                         guard
