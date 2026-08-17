@@ -396,13 +396,14 @@ struct NestDetailSheet: View {
     private func informationSection(scale: CGFloat) -> some View {
         detailSection(title: "Information", subtitle: "Nest detail information", scale: scale) {
             infoRow(title: "Bucket ID", value: nest.bucketID ?? "—", scale: scale)
-            if isEditing {
-                infoRow(
-                    title: "Data logger",
-                    value: controller.dataLoggerName ?? "—",
-                    scale: scale
-                )
-            }
+            // Shown in both modes: it is read-only either way, and who logged
+            // the nest is reference information worth having while reading the
+            // record, not only while changing it.
+            infoRow(
+                title: "Data logger",
+                value: controller.dataLoggerName ?? "—",
+                scale: scale
+            )
             dateRow(
                 title: "Collection date",
                 stored: nest.dateEggsLaid,

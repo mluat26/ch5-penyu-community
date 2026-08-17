@@ -106,7 +106,7 @@ final class HatcheryNameUniquenessTests: XCTestCase {
         HatcheryService(
             hatcheryRepository: InMemoryHatcheryRepository(seed: seed),
             nestRepository: InMemoryNestRepository(),
-            telemetryRepository: InMemoryTelemetryRepository()
+            ioTDataRepository: InMemoryIoTDataRepository()
         )
     }
 

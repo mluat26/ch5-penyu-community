@@ -47,8 +47,8 @@ final class SupabaseNestLiveTests: XCTestCase {
     /// repeated runs do not accumulate rows.
     func testNestCRUDAgainstLiveDatabase() async throws {
         // Rows and columns must agree with the dimensions the way
-        // HatcheryGridGenerator derives them (floor(m / 2.0)), otherwise this
-        // test writes a hatchery the app could never have produced.
+        // HatcherySectionSolver derives them, otherwise this test writes a
+        // hatchery the app could never have produced.
         let hatchery = try await hatcheryRepository.create(
             CreateHatcheryInput(
                 name: "Live test \(UUID().uuidString.prefix(8))",

@@ -562,7 +562,8 @@ final class NestFlowTests: XCTestCase {
                 placementRow: 1,
                 placementColumn: 1
             ),
-            latestTemperatureC: 30
+            latestTemperatureC: 30,
+            latestBatteryVoltage: nil
         )
     }
 }
