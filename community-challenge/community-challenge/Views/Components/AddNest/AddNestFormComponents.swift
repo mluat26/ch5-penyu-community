@@ -47,6 +47,10 @@ struct AddNestFlowHeader: View {
                 .frame(width: 48, height: 48)
                 .glassEffect()
                 .frame(width: 72, height: 48)
+                // `.plain` hit-tests rendered content, so without this the
+                // 12 pt either side of the glass circle is dead -- and that is
+                // the screen-edge side of both buttons, where a thumb lands.
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .frame(width: 72, height: 48)

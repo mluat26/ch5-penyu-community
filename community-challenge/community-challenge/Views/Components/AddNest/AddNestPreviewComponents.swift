@@ -125,48 +125,42 @@ struct AddNestFoundLocationCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Nest was found")
-                .font(.caption)
-                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(address ?? "Dropped pin")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color(hex: "#2A2A2A"))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
 
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(address ?? "Dropped pin")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color(hex: "#2A2A2A"))
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-
-                    Text(NestLocationPickerView.formattedCoordinates(coordinate))
-                        .font(.body)
-                        .foregroundStyle(Color.appNeutralGray1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // A still, non-interactive map: this is a confirmation, and a
-                // pannable map here would compete with the page's own scroll.
-                Map(
-                    initialPosition: .region(
-                        MKCoordinateRegion(
-                            center: coordinate,
-                            span: MKCoordinateSpan(
-                                latitudeDelta: 0.004,
-                                longitudeDelta: 0.004
-                            )
-                        )
-                    ),
-                    interactionModes: []
-                ) {
-                    Marker("", coordinate: coordinate)
-                        .tint(Color.appGreenPrimary)
-                }
-                .frame(width: 80, height: 81)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                Text(NestLocationPickerView.formattedCoordinates(coordinate))
+                    .font(.body)
+                    .foregroundStyle(Color.appNeutralGray1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // A still, non-interactive map: this is a confirmation, and a
+            // pannable map here would compete with the page's own scroll.
+            Map(
+                initialPosition: .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(
+                            latitudeDelta: 0.004,
+                            longitudeDelta: 0.004
+                        )
+                    )
+                ),
+                interactionModes: []
+            ) {
+                Marker("", coordinate: coordinate)
+                    .tint(Color.appGreenPrimary)
+            }
+            .frame(width: 80, height: 81)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

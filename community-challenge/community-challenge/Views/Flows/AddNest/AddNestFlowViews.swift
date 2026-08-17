@@ -465,12 +465,10 @@ struct AddNestPreviewView: View {
                             .multilineTextAlignment(.center)
                             .frame(width: 321, height: 22)
                     }
-                    .frame(width: 321, height: 100, alignment: .top)
-                    // Outside the sized frame, not inside it: padding applied
-                    // before `.frame(height: 100)` pushes the content down
-                    // within that box instead of moving the box itself, and
-                    // the content had nowhere to go but overflow past its own
-                    // bottom edge into the card below it.
+                    // Sized by its own text, not a fixed 100: the title and
+                    // subtitle come to 68, so the extra 32 was dead space
+                    // between the subtitle and the card below.
+                    .frame(width: 321, alignment: .top)
                     .padding(.top, 78)
 
                     AddNestPreviewCard(
@@ -494,11 +492,20 @@ struct AddNestPreviewView: View {
                     // an empty block would imply the pin was lost.
                     if let latitude = controller.draft.latitude,
                        let longitude = controller.draft.longitude {
-                        AddNestFoundLocationCard(
-                            latitude: latitude,
-                            longitude: longitude,
-                            address: controller.draft.locationAddress
-                        )
+                        // The caption labels the card from outside it, matching
+                        // the detail row above, which is also captioned in the
+                        // page rather than inside its own box.
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Nest was found")
+                                .font(.caption)
+                                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+
+                            AddNestFoundLocationCard(
+                                latitude: latitude,
+                                longitude: longitude,
+                                address: controller.draft.locationAddress
+                            )
+                        }
                         .padding(.top, 20)
                         .padding(.horizontal, 16)
                     }
