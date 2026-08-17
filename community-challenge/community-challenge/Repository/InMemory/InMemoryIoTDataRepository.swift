@@ -7,6 +7,19 @@ actor InMemoryIoTDataRepository: IoTDataRepository {
         readings = Dictionary(uniqueKeysWithValues: seed.map { ($0.id, $0) })
     }
 
+    func fetch(id: UUID) async throws -> IoTDataEntity {
+        guard let reading = readings[id] else {
+            throw RepositoryError.notFound(resource: "IoTData", id: id)
+        }
+        return reading
+    }
+
+    func fetchAll(nestID: UUID) async throws -> [IoTDataEntity] {
+        return readings.values
+            .filter { $0.nestID == nestID }
+            .sorted { $0.timestamp > $1.timestamp }
+    }
+
     func fetchReadings(
         nestIDs: [UUID],
         in interval: DateInterval?
