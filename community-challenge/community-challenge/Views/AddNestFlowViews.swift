@@ -346,10 +346,13 @@ struct AddNestEggInformationView: View {
                             // The number of days is the input; the row above
                             // already shows the date it resolves to, so the
                             // choice is never made blind.
-                            AddNestDaysPicker(text: $controller.draft.daysAfterCollection)
-                                .onChange(of: controller.draft.daysAfterCollection) { _, _ in
-                                    controller.updateInspectionDateFromDays()
-                                }
+                            AddNestBigNumberField(
+                                text: $controller.draft.daysAfterCollection,
+                                focus: $isFieldFocused
+                            )
+                            .onChange(of: controller.draft.daysAfterCollection) { _, _ in
+                                controller.updateInspectionDateFromDays()
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -473,7 +476,10 @@ struct AddNestPreviewView: View {
                             .multilineTextAlignment(.center)
                             .frame(width: 321, height: 22)
                     }
-                    .frame(width: 321, height: 100, alignment: .top)
+                    // Sized by its own text, not a fixed 100: the title and
+                    // subtitle come to 68, so the extra 32 was dead space
+                    // between the subtitle and the card below.
+                    .frame(width: 321, alignment: .top)
                     // Outside the sized frame, not inside it: padding applied
                     // before `.frame(height: 100)` pushes the content down
                     // within that box instead of moving the box itself, and
@@ -502,11 +508,20 @@ struct AddNestPreviewView: View {
                     // an empty block would imply the pin was lost.
                     if let latitude = controller.draft.latitude,
                        let longitude = controller.draft.longitude {
-                        AddNestFoundLocationCard(
-                            latitude: latitude,
-                            longitude: longitude,
-                            address: controller.draft.locationAddress
-                        )
+                        // The caption labels the card from outside it, matching
+                        // the detail row above, which is also captioned in the
+                        // page rather than inside its own box.
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Nest was found")
+                                .font(.caption)
+                                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+
+                            AddNestFoundLocationCard(
+                                latitude: latitude,
+                                longitude: longitude,
+                                address: controller.draft.locationAddress
+                            )
+                        }
                         .padding(.top, 20)
                         .padding(.horizontal, 16)
                     }
@@ -684,6 +699,10 @@ private struct AddNestFlowHeader: View {
                 .frame(width: 48, height: 48)
                 .glassEffect()
                 .frame(width: 72, height: 48)
+                // `.plain` hit-tests rendered content, so without this the
+                // 12 pt either side of the glass circle is dead -- and that is
+                // the screen-edge side of both buttons, where a thumb lands.
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .frame(width: 72, height: 48)
@@ -976,47 +995,6 @@ private struct AddNestBigNumberField: View {
     }
 }
 
-/// The "after X days" count. A wheel rather than a keypad: the value is a small
-/// bounded number, and a picker cannot hand the controller the empty or
-/// non-numeric string a text field can.
-///
-/// Stays a `String` binding because that is what the draft stores, so the
-/// existing day/date round-tripping is untouched.
-private struct AddNestDaysPicker: View {
-    @Binding var text: String
-
-    private var days: Int { Int(text) ?? 0 }
-
-    /// Never shorter than the value it has to display: switching over from a
-    /// hand-picked date can leave a count past the usual range, and a wheel
-    /// whose selection matches no row renders blank.
-    private var options: [Int] { Array(0...max(60, days)) }
-
-    var body: some View {
-        Picker(
-            "",
-            selection: Binding(
-                get: { days },
-                set: { text = String($0) }
-            )
-        ) {
-            ForEach(options, id: \.self) { day in
-                Text("\(day)")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.black)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.wheel)
-        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
-        )
-    }
-}
-
 private struct AddNestDateField: View {
     let label: String
     let value: String
@@ -1162,7 +1140,7 @@ private struct AddNestPreviewCard: View {
                 // Interpolating a styled `Text` rather than `Text + Text`,
                 // which is deprecated on this SDK.
                 Text(
-                    "* \(Text("Auto, the content auto generate by AI").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
+                    "* \(Text("Auto").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
                 )
                 .font(.caption2)
                 .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
@@ -1172,7 +1150,7 @@ private struct AddNestPreviewCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(hex: "#939393").opacity(0.1), in: RoundedRectangle(cornerRadius: 24))
+        .background(Color(hex: "#939393").opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -1243,48 +1221,42 @@ private struct AddNestFoundLocationCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Nest was found")
-                .font(.caption)
-                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(address ?? "Dropped pin")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color(hex: "#2A2A2A"))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
 
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(address ?? "Dropped pin")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color(hex: "#2A2A2A"))
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-
-                    Text(NestLocationPickerView.formattedCoordinates(coordinate))
-                        .font(.body)
-                        .foregroundStyle(Color.appNeutralGray1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // A still, non-interactive map: this is a confirmation, and a
-                // pannable map here would compete with the page's own scroll.
-                Map(
-                    initialPosition: .region(
-                        MKCoordinateRegion(
-                            center: coordinate,
-                            span: MKCoordinateSpan(
-                                latitudeDelta: 0.004,
-                                longitudeDelta: 0.004
-                            )
-                        )
-                    ),
-                    interactionModes: []
-                ) {
-                    Marker("", coordinate: coordinate)
-                        .tint(Color.appGreenPrimary)
-                }
-                .frame(width: 80, height: 81)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                Text(NestLocationPickerView.formattedCoordinates(coordinate))
+                    .font(.body)
+                    .foregroundStyle(Color.appNeutralGray1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // A still, non-interactive map: this is a confirmation, and a
+            // pannable map here would compete with the page's own scroll.
+            Map(
+                initialPosition: .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(
+                            latitudeDelta: 0.004,
+                            longitudeDelta: 0.004
+                        )
+                    )
+                ),
+                interactionModes: []
+            ) {
+                Marker("", coordinate: coordinate)
+                    .tint(Color.appGreenPrimary)
+            }
+            .frame(width: 80, height: 81)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
