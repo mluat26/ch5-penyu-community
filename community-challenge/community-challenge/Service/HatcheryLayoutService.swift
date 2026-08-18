@@ -40,6 +40,26 @@ nonisolated struct HatcheryLayoutService: Sendable {
         return try await uploadAndFinalize(pending: pending, request: request)
     }
 
+    /// Removes every layout photograph belonging to the signed-in person.
+    ///
+    /// Called immediately before the account deletion RPC, because the rows
+    /// that record which object belongs to whom are about to go with it. It has
+    /// to happen through the Storage API: Postgres refuses a direct delete on
+    /// `storage.objects` outright, so the account deletion function cannot do
+    /// this itself no matter what privileges it runs with.
+    ///
+    /// Best effort per object, and non-throwing overall. Deleting an account is
+    /// something a person is entitled to; one stubborn file must not be able to
+    /// stand in the way of it. A file left behind is a storage cost, and the
+    /// alternative is an account that cannot be closed.
+    func deleteCurrentUserPhotos() async {
+        guard let paths = try? await repository.currentUserPhotoPaths() else { return }
+
+        for path in paths {
+            try? await photoStore.delete(path: path)
+        }
+    }
+
     private func uploadAndFinalize(
         pending: HatcheryLayoutRevision,
         request: HatcheryLayoutSaveRequest
