@@ -36,6 +36,14 @@ final class NestRouter {
         path.removeLast()
     }
 
+    /// Returns to an earlier page, dropping everything stacked above it. A
+    /// route that is not on the path leaves it untouched, so a stale tap
+    /// cannot unwind the flow.
+    func popTo(_ route: NestRoute) {
+        guard let index = path.lastIndex(of: route) else { return }
+        path.removeSubrange(path.index(after: index)...)
+    }
+
     func replace(with route: NestRoute) {
         path = [route]
     }

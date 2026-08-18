@@ -20,6 +20,10 @@ protocol HatcheryLayoutRepository: Sendable {
     /// For a failed first layout this also removes the otherwise-hidden parent
     /// hatchery, so an interrupted setup never becomes a permanent ghost row.
     func purgeFailed(layoutID: UUID) async throws
+    /// Every layout photo path belonging to the signed-in person, from the
+    /// same predicate `delete_my_account` uses to delete the rows -- so the
+    /// photos removed and the rows removed cannot drift apart.
+    func currentUserPhotoPaths() async throws -> [String]
 }
 
 /// Private object storage for the source photo of a layout revision.

@@ -128,6 +128,12 @@ final class AppContainer {
     /// Deletes the signed-in account, then drops the local session so the app
     /// cannot keep using a token whose user no longer exists.
     func deleteAccount() async throws {
+        // Before the RPC, not after: `source_photo_path` is the only record of
+        // which object belongs to whom, and the rows holding it are about to be
+        // deleted. Afterwards the files would be unreachable -- the bucket's
+        // delete policy is written against a layout row that would no longer
+        // exist -- so this is the last moment they can be removed at all.
+        await layoutService.deleteCurrentUserPhotos()
         try await profileRepository.deleteAccount()
         try await authenticationService.signOut()
     }

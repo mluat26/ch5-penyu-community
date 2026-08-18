@@ -188,7 +188,11 @@ struct ProfileSheetView: View {
 
     private func body(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
-            section(title: "Personal information", scale: scale) {
+            section(
+                title: "Personal information",
+                scale: scale,
+                isPlaceholder: controller.isLoadingProfile
+            ) {
                 profileRow(
                     title: "Name",
                     value: controller.displayName,
@@ -196,18 +200,13 @@ struct ProfileSheetView: View {
                     text: $controller.draftName,
                     scale: scale
                 )
-                rowDivider(scale: scale)
-                profileRow(
-                    title: "Apple Account",
-                    value: controller.appleAccount,
-                    // Apple owns this value; never editable here.
-                    isEditable: false,
-                    text: .constant(""),
-                    scale: scale
-                )
             }
 
-            section(title: "Organization", scale: scale) {
+            section(
+                title: "Organization",
+                scale: scale,
+                isPlaceholder: controller.isLoadingProfile
+            ) {
                 roleRow(scale: scale)
                 rowDivider(scale: scale)
                 // 200:4207. Absent from the edit frames (200:4241 / 200:4269):
@@ -246,9 +245,16 @@ struct ProfileSheetView: View {
     }
 
     /// Figma section: 28pt title, then the table 44pt below its own top.
+    ///
+    /// `isPlaceholder` covers the table while the profile is still loading.
+    /// Every value in these two sections has a fallback -- "Not set", "—",
+    /// Agent -- so an unredacted table states them as fact before the answer
+    /// is known, and a slow request is indistinguishable from an empty
+    /// profile. Only the table is redacted; the heading is already true.
     private func section<Content: View>(
         title: String,
         scale: CGFloat,
+        isPlaceholder: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         ZStack(alignment: .topLeading) {
@@ -259,6 +265,10 @@ struct ProfileSheetView: View {
 
             groupedTable(scale: scale, content: content)
                 .offset(y: Layout.tableTop * scale)
+                .redacted(reason: isPlaceholder ? .placeholder : [])
+                // Redaction only greys the rows out; the invite row is still a
+                // live button underneath one.
+                .disabled(isPlaceholder)
         }
     }
 

@@ -91,6 +91,30 @@ final class NestController {
         }
     }
 
+    /// The next identifier in a hatchery's sequence: one past the highest
+    /// number already issued, three digits, starting at 001.
+    nonisolated static func nextIdentifier(after existing: [String?]) -> String {
+        let highest = existing.compactMap { $0.flatMap(Int.init) }.max() ?? 0
+        return String(format: "%03d", highest + 1)
+    }
+
+    /// Issues both identifiers for a new nest. Neither is typed: the nest
+    /// number continues the hatchery's sequence, and the bucket ID mirrors it
+    /// until an NFC tag supplies the real one.
+    ///
+    /// A failed lookup leaves the draft's own defaults in place rather than
+    /// blanking the screen, so the form stays saveable offline.
+    // ponytail: numbered client-side from max + 1, and the bucket ID is a
+    // stand-in for the tag payload. Replace that half with the NFC read; move
+    // the nest number to a database sequence if two devices ever register into
+    // one hatchery at the same moment.
+    func prepareIdentifiers() async {
+        guard let nests = try? await nestService.nests(hatcheryID: hatcheryID) else { return }
+        let next = Self.nextIdentifier(after: nests.map(\.nestNumber))
+        draft.nestNumber = next
+        draft.bucketID = next
+    }
+
     func reset() {
         draft = .sample
         errorMessage = nil
@@ -104,24 +128,22 @@ final class NestController {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Both are asked for on the identity screen and both are required: a nest
+    /// with no section cannot be drawn on the grid, and one with no pin cannot
+    /// be found again on the beach.
+    var isSectionMissing: Bool { draft.sectionRow == nil || draft.sectionColumn == nil }
+    var isLocationMissing: Bool { draft.latitude == nil || draft.longitude == nil }
+
+    /// Pure on purpose. It used to write a message into `errorMessage`, which
+    /// nothing erased once the field was filled, so a fixed problem kept
+    /// complaining. The screen now renders one message per missing field
+    /// straight from the flags above, so filling a field clears its own
+    /// message and the two cannot drift apart.
+    ///
+    /// The bucket ID and nest number are no longer checked: both are issued by
+    /// `prepareIdentifiers()` and default to 001, so neither can be empty.
     func validateIdentity() -> Bool {
-        guard !draft.bucketID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a QR or bucket ID."
-            return false
-        }
-
-        guard !draft.nestNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a nest number."
-            return false
-        }
-
-        guard draft.sectionRow != nil, draft.sectionColumn != nil else {
-            errorMessage = "Select a section on the map."
-            return false
-        }
-
-        errorMessage = nil
-        return true
+        !isSectionMissing && !isLocationMissing
     }
 
     /// The reference incubation duration from `SmartNest_Infobook_V01.pdf`,

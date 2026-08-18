@@ -156,13 +156,23 @@ struct NestLocationPickerView: View {
                 MapUserLocationButton()
                 MapCompass()
             }
+            // This gesture belongs to the map, and the map is the whole screen
+            // -- including the area behind the close button. A press there is
+            // delivered to both, so holding the button a moment too long let
+            // the map claim it and the button never fired. Presses inside the
+            // button's own frame are not the map's to handle.
             .gesture(
                 LongPressGesture(minimumDuration: 0.2)
-                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    // Global space, so the press location and the button's
+                    // frame below are measured against the same origin. The
+                    // gesture's own local space is the map's, which the
+                    // overlay's geometry has no way to name.
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
                     .onEnded { value in
                         guard
                             case .second(_, let drag?) = value,
-                            let dropped = proxy.convert(drag.location, from: .local)
+                            !closeButtonFrame.contains(drag.location),
+                            let dropped = proxy.convert(drag.location, from: .global)
                         else {
                             return
                         }
@@ -175,7 +185,12 @@ struct NestLocationPickerView: View {
                 // Nothing to instruct when the pin cannot move.
                 if !isReadOnly { instruction }
             }
-            .overlay(alignment: .topLeading) { closeButton }
+            .overlay(alignment: .topLeading) {
+                closeButton
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .global)
+                    } action: { closeButtonFrame = $0 }
+            }
         }
         .task { userLocation.start() }
         // The card only exists once there is a place to describe. Background
@@ -231,13 +246,21 @@ struct NestLocationPickerView: View {
         .padding(.horizontal, 16)
     }
 
+    /// Where the close button sits in the map's own space, so the press that
+    /// drops a pin can leave it alone. Zero until first laid out, and an empty
+    /// rect contains nothing, so the guard is inert until it is real.
+    @State private var closeButtonFrame: CGRect = .zero
+
     private var closeButton: some View {
-        Button(action: onCancel) {
+        Button(action: cancel) {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.appNeutralBlack)
                 .frame(width: 44, height: 44)
                 .glassEffect(.regular, in: .circle)
+                // `.plain` hit-tests rendered content, so without this the
+                // corners of the frame outside the glass circle are dead.
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .padding(.top, 12)
@@ -259,12 +282,26 @@ struct NestLocationPickerView: View {
         return "\(formatted) away"
     }
 
+    /// Leaving with the pin still set keeps the card presented through the pop,
+    /// so it rides along on top of the form for a moment -- the same way saving
+    /// used to. Clearing first is what takes the card down.
+    private func cancel() {
+        clearPin()
+        onCancel()
+    }
+
     private func save(_ coordinate: CLLocationCoordinate2D) {
-        onSave(
-            coordinate.latitude,
-            coordinate.longitude,
-            addressLines.isEmpty ? nil : addressLines.joined(separator: ", ")
-        )
+        let address = addressLines.isEmpty ? nil : addressLines.joined(separator: ", ")
+
+        // Take the card down before handing the pin back. Its presentation is
+        // derived from `coordinate`, so leaving that set keeps the card on
+        // screen through the pop -- visible for a moment over the form, with a
+        // live Save button. Tapping it again popped a second time and landed
+        // on the bucket screen. Values are read out first; clearing the pin is
+        // what closes the card.
+        clearPin()
+
+        onSave(coordinate.latitude, coordinate.longitude, address)
     }
 
     /// Clearing the pin is what closing the card means, the same way dismissing

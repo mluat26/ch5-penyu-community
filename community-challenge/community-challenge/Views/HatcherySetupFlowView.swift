@@ -18,6 +18,9 @@ struct HatcherySetupFlowView: View {
     let onCancel: () -> Void
 
     @State private var router = HatcherySetupRouter()
+    /// Set once the hatchery is saved, so the confirmation screen holds the
+    /// finished session until the user chooses to go to it.
+    @State private var completedHatchery: HatcherySessionState?
 
     init(
         controller: HatcherySetupController,
@@ -41,6 +44,13 @@ struct HatcherySetupFlowView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        // The session travels inside the presentation item rather than being
+        // read back from state, and a cover rather than another route: setup
+        // is finished and written by this point, so there is nothing left on
+        // the stack worth going back to.
+        .fullScreenCover(item: $completedHatchery) { hatchery in
+            HatcheryReadyView { onSave(hatchery) }
+        }
     }
 
     @ViewBuilder
@@ -202,7 +212,16 @@ struct HatcherySetupFlowView: View {
     private func saveHatchery() {
         Task {
             guard let hatchery = await controller.completeSetup() else { return }
-            onSave(hatchery)
+
+            // A rescan only re-photographs a hatchery the user already has,
+            // so it returns straight to it. "Your hatchery is ready" belongs
+            // to setting one up, not to replacing its photo.
+            guard entryPoint != .rescan else {
+                onSave(hatchery)
+                return
+            }
+
+            completedHatchery = hatchery
         }
     }
 }

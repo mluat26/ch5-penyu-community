@@ -64,6 +64,9 @@ struct AddNestFlowHeader: View {
 struct AddNestFlowTopHeader: View {
     let currentStep: Int
     let onClose: () -> Void
+    /// Passed to the step indicator, which offers only the steps already
+    /// behind this one.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,7 +97,11 @@ struct AddNestFlowTopHeader: View {
             }
             .padding(.horizontal, 16)
 
-            AddNestProgressIndicator(currentStep: currentStep, compact: false)
+            AddNestProgressIndicator(
+                currentStep: currentStep,
+                compact: false,
+                onSelectStep: onSelectStep
+            )
                 .padding(.horizontal, 22)
                 .padding(.top, 24)
         }
@@ -125,6 +132,10 @@ struct AddNestFlowBackground: View {
 struct AddNestProgressIndicator: View {
     let currentStep: Int
     let compact: Bool
+    /// Supplied where an earlier step can be returned to. Steps at or ahead of
+    /// the current one are never offered: nothing has been filled in there yet,
+    /// so there is nothing to go back to.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     private var circleSize: CGFloat { compact ? 24 : 28 }
     private var itemSpacing: CGFloat { compact ? 6 : 6 }
@@ -147,11 +158,32 @@ struct AddNestProgressIndicator: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
+        // The circles are only their own elements once they can be tapped;
+        // otherwise the row reads as one label, as it did before.
+        .accessibilityElement(children: onSelectStep == nil ? .ignore : .contain)
         .accessibilityLabel("Step \(currentStep) of 3")
     }
 
+    @ViewBuilder
     private func stepCircle(_ step: Int) -> some View {
+        if step < currentStep, let onSelectStep {
+            Button { onSelectStep(step) } label: {
+                stepCircleBody(step)
+                    // `.plain` hit-tests rendered content, and the circle is
+                    // the only thing drawn.
+                    // ponytail: that leaves a 28pt target, under the 44pt
+                    // guideline. Padding it out moves the circles off Figma's
+                    // coordinates, so widen it only if it misses in the field.
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to step \(step)")
+        } else {
+            stepCircleBody(step)
+        }
+    }
+
+    private func stepCircleBody(_ step: Int) -> some View {
         let isCurrent = step == currentStep
 
         return ZStack {
@@ -252,17 +284,13 @@ struct AddNestDisclosureRow: View {
     }
 }
 
-struct AddNestLabeledTextField: View {
+/// A read-only identifier: label above, assigned value below, no field
+/// chrome. Both identifiers on the identity screen are issued by the app --
+/// the nest number from the hatchery's sequence, the bucket ID from the NFC
+/// tag once that exists -- so neither is ever typed.
+struct AddNestLabeledValue: View {
     let label: String
-    @Binding var text: String
-    var isMuted = false
-    var controlHeight: CGFloat = 42
-    var cornerRadius: CGFloat = 10
-    var keyboardType: UIKeyboardType = .default
-    /// The screen's own focus flag. Binding every field to the same boolean
-    /// is enough to know "is any field active" -- which field specifically
-    /// doesn't matter for dismissing the keyboard on an outside tap.
-    var focus: FocusState<Bool>.Binding? = nil
+    let value: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -270,32 +298,16 @@ struct AddNestLabeledTextField: View {
                 .font(.subheadline)
                 .foregroundStyle(Color.appNeutralGray2)
 
-            Group {
-                if let focus {
-                    TextField(label, text: $text)
-                        .focused(focus)
-                } else {
-                    TextField(label, text: $text)
-                }
-            }
-                .font(isMuted ? .subheadline : .body)
+            Text(value.isEmpty ? "—" : value)
+                .font(.subheadline)
+                .fontWeight(.regular)
                 .foregroundStyle(.black)
-                .keyboardType(keyboardType)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(10)
-                .frame(maxWidth: .infinity, minHeight: controlHeight, maxHeight: controlHeight, alignment: .leading)
-                .background(fieldBackground, in: RoundedRectangle(cornerRadius: cornerRadius))
-                .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(isMuted ? Color(hex: "#FFFBF7") : Color(hex: "#EBEBEB"), lineWidth: 1)
-                }
+                // Fixed-width digits: the value is re-issued while the screen
+                // is up, and proportional digits reflow the row as it lands.
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var fieldBackground: Color {
-        isMuted ? Color(hex: "#787878").opacity(0.2) : Color.white
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -308,7 +320,7 @@ struct AddNestBigNumberField: View {
     /// above it ("Inspection date will be in ...").
     var label: String? = nil
     @Binding var text: String
-    /// See `AddNestLabeledTextField.focus`.
+    /// The screen's own focus flag; see `AddNestBigNumberField`'s use of it.
     var focus: FocusState<Bool>.Binding? = nil
 
     var body: some View {
@@ -479,18 +491,22 @@ extension View {
     ///
     /// Takes the screen's own `@FocusState` rather than reaching for
     /// `UIResponder.resignFirstResponder()` broadcast to the whole app. That
-    /// call goes to whatever the current first responder is, unscoped -- on a
-    /// screen that also hosts a `.graphical` `DatePicker` (a UIKit
-    /// `UICalendarView` under the hood), firing it on every tap, including
-    /// taps on the calendar's own day cells, is exactly the kind of
-    /// interference that makes an otherwise-working control feel broken.
+    /// call goes to whatever the current first responder is, unscoped.
     /// Clearing a `FocusState` only ever affects the fields actually bound to
     /// it, so it cannot touch anything else on screen.
+    ///
+    /// Masked off whenever no field is focused. "Simultaneous" only holds
+    /// against SwiftUI's own gestures -- the `.graphical` `DatePicker` is a
+    /// UIKit `UICalendarView`, whose day-cell recognizer does not cooperate
+    /// with a foreign one laid over it, so a permanently-installed tap here
+    /// swallowed every date selection. With no keyboard up there is nothing
+    /// to dismiss anyway, so the gesture simply should not exist then.
     func dismissesKeyboardOnTap(_ isFieldFocused: FocusState<Bool>.Binding) -> some View {
         simultaneousGesture(
             TapGesture().onEnded {
                 isFieldFocused.wrappedValue = false
-            }
+            },
+            including: isFieldFocused.wrappedValue ? .all : .subviews
         )
     }
 }
