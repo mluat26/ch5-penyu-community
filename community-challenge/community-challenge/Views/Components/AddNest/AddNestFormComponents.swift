@@ -470,7 +470,7 @@ struct AddNestInlineDatePicker: View {
             .tint(Color.appGreenPrimary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .frame(width: 370)
+            .frame(maxWidth: 370)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
@@ -490,18 +490,22 @@ extension View {
     ///
     /// Takes the screen's own `@FocusState` rather than reaching for
     /// `UIResponder.resignFirstResponder()` broadcast to the whole app. That
-    /// call goes to whatever the current first responder is, unscoped -- on a
-    /// screen that also hosts a `.graphical` `DatePicker` (a UIKit
-    /// `UICalendarView` under the hood), firing it on every tap, including
-    /// taps on the calendar's own day cells, is exactly the kind of
-    /// interference that makes an otherwise-working control feel broken.
+    /// call goes to whatever the current first responder is, unscoped.
     /// Clearing a `FocusState` only ever affects the fields actually bound to
     /// it, so it cannot touch anything else on screen.
+    ///
+    /// Masked off whenever no field is focused. "Simultaneous" only holds
+    /// against SwiftUI's own gestures -- the `.graphical` `DatePicker` is a
+    /// UIKit `UICalendarView`, whose day-cell recognizer does not cooperate
+    /// with a foreign one laid over it, so a permanently-installed tap here
+    /// swallowed every date selection. With no keyboard up there is nothing
+    /// to dismiss anyway, so the gesture simply should not exist then.
     func dismissesKeyboardOnTap(_ isFieldFocused: FocusState<Bool>.Binding) -> some View {
         simultaneousGesture(
             TapGesture().onEnded {
                 isFieldFocused.wrappedValue = false
-            }
+            },
+            including: isFieldFocused.wrappedValue ? .all : .subviews
         )
     }
 }

@@ -176,9 +176,69 @@ struct AddNestFoundLocationCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        // A hairline at 60%, not a full 1pt line. The fill is already within a
+        // couple of percent of the page behind it, so the outline was what
+        // made this read as a box competing with its own text.
         .overlay {
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+                .stroke(Color(hex: "#EBEBEB").opacity(0.6), lineWidth: 0.5)
+        }
+    }
+}
+
+/// The saved pin, full size. Read-only on purpose: the preview is a review
+/// step, so the map can be panned and zoomed to check the pin but not moved.
+/// Changing it means going back to the form through "Edit details".
+struct NestLocationPreviewSheet: View {
+    let latitude: Double
+    let longitude: Double
+    let onClose: () -> Void
+
+    enum Layout {
+        /// Figma 197:4324 draws a 713pt sheet, less the 34pt bottom safe area
+        /// iOS adds to a fixed detent -- the same arithmetic the profile and
+        /// nest-detail sheets use.
+        static let detentHeight: CGFloat = 679
+    }
+
+    private var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var body: some View {
+        Map(
+            initialPosition: .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(
+                        latitudeDelta: 0.004,
+                        longitudeDelta: 0.004
+                    )
+                )
+            )
+        ) {
+            Marker("Nest location", coordinate: coordinate)
+                .tint(Color.appGreenPrimary)
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .topLeading) {
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.appNeutralBlack)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
+                    // Same reason as the picker's close button: `.plain`
+                    // hit-tests rendered content, so the frame's corners
+                    // outside the glass circle are dead without this.
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            // Figma 197:4327 pads its content by 10, and the toolbar's button
+            // group adds its own 16 inside that.
+            .padding(.top, 20)
+            .padding(.leading, 26)
+            .accessibilityLabel("Close map")
         }
     }
 }

@@ -452,6 +452,8 @@ struct AddNestPreviewView: View {
     let onCancel: () -> Void
     let onSave: () -> Void
 
+    @State private var isShowingLocationMap = false
+
     var body: some View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
@@ -514,11 +516,20 @@ struct AddNestPreviewView: View {
                                 .font(.caption)
                                 .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
 
-                            AddNestFoundLocationCard(
-                                latitude: latitude,
-                                longitude: longitude,
-                                address: controller.draft.locationAddress
-                            )
+                            // Tapping the card opens the pin full size. It
+                            // only ever shows the pin -- moving it is the
+                            // form's job, which "Edit details" returns to.
+                            Button {
+                                isShowingLocationMap = true
+                            } label: {
+                                AddNestFoundLocationCard(
+                                    latitude: latitude,
+                                    longitude: longitude,
+                                    address: controller.draft.locationAddress
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows the pin on a map")
                         }
                         .padding(.top, 20)
                         .padding(.horizontal, 16)
@@ -557,6 +568,21 @@ struct AddNestPreviewView: View {
             .padding(.bottom, 8)
             .background(Color.white)
         }
+        .sheet(isPresented: $isShowingLocationMap) {
+            if let latitude = controller.draft.latitude,
+               let longitude = controller.draft.longitude {
+                NestLocationPreviewSheet(
+                    latitude: latitude,
+                    longitude: longitude,
+                    onClose: { isShowingLocationMap = false }
+                )
+                // Not `.large`: Figma's sheet stops 150pt down the screen,
+                // leaving the page visible behind it.
+                .presentationDetents([.height(NestLocationPreviewSheet.Layout.detentHeight)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
     }
@@ -578,7 +604,6 @@ struct NestRegistrationSuccessView: View {
         ZStack(alignment: .top) {
             AddNestFlowBackground(glowColor: temperatureStatus.backgroundGlowColor)
 
-            // TODO: play Resources/success_confetti.lottie here once a
             ScrollView {
                 VStack(spacing: 12) {
                     // The animation is itself a check mark, so it stands in
