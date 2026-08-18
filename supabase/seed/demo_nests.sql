@@ -14,8 +14,9 @@
 
 do $$
 declare
-  -- CHANGE ME: the hatchery to fill.
-  v_hatchery_id uuid := '1192aa1a-ddc9-4acf-b72b-82f6e9837215';
+  -- CHANGE ME: the hatchery to fill. Find it with
+  --   select id, name from public.hatchery where owner_id = '<your profile id>';
+  v_hatchery_id uuid := '00000000-0000-0000-0000-000000000000';
 
   v_founder_id uuid;
   v_columns integer;
@@ -101,5 +102,5 @@ select n.nest_number,
        coalesce(n.success_eggs_hatch::text, '-')       as hatched,
        (select count(*) from public.iotdata i where i.nest_id = n.id) as readings
 from public.nest n
-where n.hatchery_id = '1192aa1a-ddc9-4acf-b72b-82f6e9837215'
+where n.hatchery_id = '00000000-0000-0000-0000-000000000000'
 order by n.nest_number;
