@@ -21,6 +21,11 @@ struct NestFormDraft: Hashable {
     var collectionDate: String
     var inspectionDate: String
     var hatchDate: String
+    /// Set once someone types a hatch date themselves, which stops the
+    /// collection-date estimate replacing it. Nothing on the create form
+    /// offers that yet; the flag exists so adding one cannot silently
+    /// reintroduce the overwrite.
+    var hasManualHatchDate = false
     var inspectionDateMode: NestInspectionDateMode
     /// How long after collection the first inspection is due. Resolved into
     /// `inspectionDate` by the controller; it is not the incubation period,

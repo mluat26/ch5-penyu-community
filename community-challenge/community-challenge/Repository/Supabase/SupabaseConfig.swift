@@ -39,7 +39,10 @@ enum SupabaseConfig {
         supabaseURL: projectURL,
         supabaseKey: anonKey,
         options: SupabaseClientOptions(
-            db: .init(decoder: .postgresDateAware)
+            db: .init(
+                encoder: .postgresDateAware,
+                decoder: .postgresDateAware
+            )
         )
     )
 
@@ -75,19 +78,47 @@ enum SupabaseConfig {
     }
 }
 
+/// The `yyyy-MM-dd` wire format of a Postgres `date` column, read and written
+/// in the device's own time zone.
+///
+/// A `date` column carries no time and no zone: it is a calendar day. Both
+/// halves of the round trip therefore have to agree on which calendar, or the
+/// day shifts. They previously did not -- the decoder read at UTC while the
+/// encoder was the SDK's default, which serialises an instant in GMT with the
+/// zone marker stripped. East of GMT, local midnight went out as the previous
+/// afternoon and Postgres kept the literal date part, losing a day on write;
+/// west of GMT the same mismatch lost one on read instead. Nest detail then
+/// re-encoded what it had decoded, so every save moved the date again.
+private let postgresDateOnlyFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = .current
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+}()
+
+private extension JSONEncoder {
+    /// Writes every `Date` as a bare calendar day, which is what all five date
+    /// columns this app writes actually are: `date_eggs_laid`,
+    /// `date_predicted_hatch`, `next_inspection_date`, `inspected_on` and
+    /// `hatched_on`. Nothing encodes a true timestamp -- `installed_at` and
+    /// `iotdata.timestamp` are read-only here -- so this needs no exceptions.
+    static let postgresDateAware: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(postgresDateOnlyFormatter.string(from: date))
+        }
+        return encoder
+    }()
+}
+
 private extension JSONDecoder {
-    /// Postgres `date` columns (`date_eggs_laid`, `date_predicted_hatch`,
-    /// `next_inspection_date`) come back from PostgREST as plain `yyyy-MM-dd`
+    /// Postgres `date` columns come back from PostgREST as plain `yyyy-MM-dd`
     /// strings. The SDK's default decoder only accepts full ISO8601
     /// timestamps, so a bare date fails to decode without this.
     static let postgresDateAware: JSONDecoder = {
-        let dateOnlyFormatter: DateFormatter = {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(identifier: "UTC")
-            formatter.dateFormat = "yyyy-MM-dd"
-            return formatter
-        }()
+        let dateOnlyFormatter = postgresDateOnlyFormatter
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
