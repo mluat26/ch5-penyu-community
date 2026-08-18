@@ -64,6 +64,9 @@ struct AddNestFlowHeader: View {
 struct AddNestFlowTopHeader: View {
     let currentStep: Int
     let onClose: () -> Void
+    /// Passed to the step indicator, which offers only the steps already
+    /// behind this one.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,7 +97,11 @@ struct AddNestFlowTopHeader: View {
             }
             .padding(.horizontal, 16)
 
-            AddNestProgressIndicator(currentStep: currentStep, compact: false)
+            AddNestProgressIndicator(
+                currentStep: currentStep,
+                compact: false,
+                onSelectStep: onSelectStep
+            )
                 .padding(.horizontal, 22)
                 .padding(.top, 24)
         }
@@ -125,6 +132,10 @@ struct AddNestFlowBackground: View {
 struct AddNestProgressIndicator: View {
     let currentStep: Int
     let compact: Bool
+    /// Supplied where an earlier step can be returned to. Steps at or ahead of
+    /// the current one are never offered: nothing has been filled in there yet,
+    /// so there is nothing to go back to.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     private var circleSize: CGFloat { compact ? 24 : 28 }
     private var itemSpacing: CGFloat { compact ? 6 : 6 }
@@ -147,11 +158,32 @@ struct AddNestProgressIndicator: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
+        // The circles are only their own elements once they can be tapped;
+        // otherwise the row reads as one label, as it did before.
+        .accessibilityElement(children: onSelectStep == nil ? .ignore : .contain)
         .accessibilityLabel("Step \(currentStep) of 3")
     }
 
+    @ViewBuilder
     private func stepCircle(_ step: Int) -> some View {
+        if step < currentStep, let onSelectStep {
+            Button { onSelectStep(step) } label: {
+                stepCircleBody(step)
+                    // `.plain` hit-tests rendered content, and the circle is
+                    // the only thing drawn.
+                    // ponytail: that leaves a 28pt target, under the 44pt
+                    // guideline. Padding it out moves the circles off Figma's
+                    // coordinates, so widen it only if it misses in the field.
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to step \(step)")
+        } else {
+            stepCircleBody(step)
+        }
+    }
+
+    private func stepCircleBody(_ step: Int) -> some View {
         let isCurrent = step == currentStep
 
         return ZStack {

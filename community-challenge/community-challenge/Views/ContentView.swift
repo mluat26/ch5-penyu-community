@@ -213,7 +213,8 @@ struct ContentView: View {
                         AddNestEggInformationView(
                             controller: nestController,
                             onPreview: { router.push(.preview) },
-                            onCancel: finishAddNestFlow
+                            onCancel: finishAddNestFlow,
+                            onSelectStep: goToStep
                         )
                     case .preview:
                         AddNestPreviewView(
@@ -306,6 +307,17 @@ struct ContentView: View {
                 entryPoint: .rescan,
                 onCancel: cancelRescan
             )
+        }
+    }
+
+    /// The indicator only offers steps already behind the current one, so this
+    /// always returns to a page still on the stack rather than pushing a new
+    /// one -- anything above it is dropped, exactly as tapping Back would.
+    private func goToStep(_ step: Int) {
+        switch step {
+        case 1: router.popTo(.identity)
+        case 2: router.popTo(.eggInformation)
+        default: break
         }
     }
 

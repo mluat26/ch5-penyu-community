@@ -128,24 +128,22 @@ final class NestController {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Both are asked for on the identity screen and both are required: a nest
+    /// with no section cannot be drawn on the grid, and one with no pin cannot
+    /// be found again on the beach.
+    var isSectionMissing: Bool { draft.sectionRow == nil || draft.sectionColumn == nil }
+    var isLocationMissing: Bool { draft.latitude == nil || draft.longitude == nil }
+
+    /// Pure on purpose. It used to write a message into `errorMessage`, which
+    /// nothing erased once the field was filled, so a fixed problem kept
+    /// complaining. The screen now renders one message per missing field
+    /// straight from the flags above, so filling a field clears its own
+    /// message and the two cannot drift apart.
+    ///
+    /// The bucket ID and nest number are no longer checked: both are issued by
+    /// `prepareIdentifiers()` and default to 001, so neither can be empty.
     func validateIdentity() -> Bool {
-        guard !draft.bucketID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a QR or bucket ID."
-            return false
-        }
-
-        guard !draft.nestNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a nest number."
-            return false
-        }
-
-        guard draft.sectionRow != nil, draft.sectionColumn != nil else {
-            errorMessage = "Select a section on the map."
-            return false
-        }
-
-        errorMessage = nil
-        return true
+        !isSectionMissing && !isLocationMissing
     }
 
     /// Sea turtle clutches incubate for roughly two months. This is the figure

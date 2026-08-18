@@ -97,6 +97,10 @@ struct AddNestIdentityView: View {
     let onNext: () -> Void
     let onCancel: () -> Void
 
+    /// Set by the first Next press. Until then the screen stays quiet: nothing
+    /// is wrong yet, it is simply unfilled.
+    @State private var showsValidation = false
+
     var body: some View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
@@ -135,6 +139,10 @@ struct AddNestIdentityView: View {
                                 isSelected: !controller.draft.section.isEmpty,
                                 action: onSelectSection
                             )
+
+                            if showsValidation, controller.isSectionMissing {
+                                validationMessage("Select a section on the map.")
+                            }
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
@@ -148,12 +156,10 @@ struct AddNestIdentityView: View {
                                 titleLineLimit: isLocationPinned ? 2 : 1,
                                 action: onPinLocation
                             )
-                        }
 
-                        if let errorMessage = controller.errorMessage {
-                            Text(errorMessage)
-                                .font(.footnote)
-                                .foregroundStyle(Color.appRed)
+                            if showsValidation, controller.isLocationMissing {
+                                validationMessage("Pin where the eggs were found.")
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -170,6 +176,7 @@ struct AddNestIdentityView: View {
         .task { await controller.prepareIdentifiers() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HatcheryPrimaryButton(title: "Next") {
+                showsValidation = true
                 guard controller.validateIdentity() else { return }
                 onNext()
             }
@@ -179,6 +186,14 @@ struct AddNestIdentityView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
+    }
+
+    /// Each message is derived from the field it belongs to, so filling that
+    /// field removes its own message with no separate step to forget.
+    private func validationMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(Color.appRed)
     }
 
     /// The chosen value is emphasized inside the sentence rather than replacing
@@ -230,6 +245,8 @@ struct AddNestEggInformationView: View {
     @Bindable var controller: NestController
     let onPreview: () -> Void
     let onCancel: () -> Void
+    /// Steps already behind this one are tappable in the indicator.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     @State private var datePickerTarget: NestDatePickerTarget?
     @FocusState private var isFieldFocused: Bool
@@ -240,7 +257,11 @@ struct AddNestEggInformationView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    AddNestFlowTopHeader(currentStep: 2, onClose: onCancel)
+                    AddNestFlowTopHeader(
+                        currentStep: 2,
+                        onClose: onCancel,
+                        onSelectStep: onSelectStep
+                    )
 
                     AddNestBigNumberField(
                         label: "Total number of eggs",

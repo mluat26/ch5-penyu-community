@@ -190,6 +190,62 @@ final class NestFlowTests: XCTestCase {
         XCTAssertTrue(router.path.isEmpty)
     }
 
+    func testIdentityNeedsBothASectionAndAPin() {
+        let controller = makeController()
+
+        // A fresh draft has neither, and both must say so at once -- a screen
+        // that only complained about the first would send the ranger round
+        // twice.
+        XCTAssertTrue(controller.isSectionMissing)
+        XCTAssertTrue(controller.isLocationMissing)
+        XCTAssertFalse(controller.validateIdentity())
+
+        controller.draft.section = "B2"
+        controller.draft.sectionRow = 1
+        controller.draft.sectionColumn = 1
+
+        // The section's own message must stop showing the moment it is filled,
+        // while the location's keeps showing.
+        XCTAssertFalse(controller.isSectionMissing)
+        XCTAssertTrue(controller.isLocationMissing)
+        XCTAssertFalse(controller.validateIdentity(), "a pin is required, not optional")
+
+        controller.draft.latitude = -8.7
+        controller.draft.longitude = 115.17
+
+        XCTAssertFalse(controller.isLocationMissing)
+        XCTAssertTrue(controller.validateIdentity())
+    }
+
+    func testValidatingIdentityLeavesNoMessageBehind() {
+        let controller = makeController()
+
+        _ = controller.validateIdentity()
+
+        // The old version wrote into `errorMessage`, which nothing cleared once
+        // the field was filled, so the complaint outlived the problem.
+        XCTAssertNil(controller.errorMessage)
+    }
+
+    func testStepperReturnsToAnEarlierPageAndDropsWhatWasAbove() {
+        let router = NestRouter()
+        router.push(.connectBucket)
+        router.push(.identity)
+        router.push(.eggInformation)
+
+        router.popTo(.identity)
+
+        XCTAssertEqual(router.path, [.connectBucket, .identity])
+
+        // A step that is not on the path must not unwind the flow.
+        router.popTo(.preview)
+        XCTAssertEqual(router.path, [.connectBucket, .identity])
+
+        // Returning to the page already showing is a no-op, not a pop.
+        router.popTo(.identity)
+        XCTAssertEqual(router.path, [.connectBucket, .identity])
+    }
+
     func testNextIdentifierStartsAtOneAndCountsUp() {
         XCTAssertEqual(NestController.nextIdentifier(after: []), "001")
         XCTAssertEqual(NestController.nextIdentifier(after: ["001"]), "002")
