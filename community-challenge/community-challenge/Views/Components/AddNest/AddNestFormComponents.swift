@@ -252,17 +252,13 @@ struct AddNestDisclosureRow: View {
     }
 }
 
-struct AddNestLabeledTextField: View {
+/// A read-only identifier: label above, assigned value below, no field
+/// chrome. Both identifiers on the identity screen are issued by the app --
+/// the nest number from the hatchery's sequence, the bucket ID from the NFC
+/// tag once that exists -- so neither is ever typed.
+struct AddNestLabeledValue: View {
     let label: String
-    @Binding var text: String
-    var isMuted = false
-    var controlHeight: CGFloat = 42
-    var cornerRadius: CGFloat = 10
-    var keyboardType: UIKeyboardType = .default
-    /// The screen's own focus flag. Binding every field to the same boolean
-    /// is enough to know "is any field active" -- which field specifically
-    /// doesn't matter for dismissing the keyboard on an outside tap.
-    var focus: FocusState<Bool>.Binding? = nil
+    let value: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -270,32 +266,16 @@ struct AddNestLabeledTextField: View {
                 .font(.subheadline)
                 .foregroundStyle(Color.appNeutralGray2)
 
-            Group {
-                if let focus {
-                    TextField(label, text: $text)
-                        .focused(focus)
-                } else {
-                    TextField(label, text: $text)
-                }
-            }
-                .font(isMuted ? .subheadline : .body)
+            Text(value.isEmpty ? "—" : value)
+                .font(.subheadline)
+                .fontWeight(.regular)
                 .foregroundStyle(.black)
-                .keyboardType(keyboardType)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(10)
-                .frame(maxWidth: .infinity, minHeight: controlHeight, maxHeight: controlHeight, alignment: .leading)
-                .background(fieldBackground, in: RoundedRectangle(cornerRadius: cornerRadius))
-                .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(isMuted ? Color(hex: "#FFFBF7") : Color(hex: "#EBEBEB"), lineWidth: 1)
-                }
+                // Fixed-width digits: the value is re-issued while the screen
+                // is up, and proportional digits reflow the row as it lands.
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var fieldBackground: Color {
-        isMuted ? Color(hex: "#787878").opacity(0.2) : Color.white
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -308,7 +288,7 @@ struct AddNestBigNumberField: View {
     /// above it ("Inspection date will be in ...").
     var label: String? = nil
     @Binding var text: String
-    /// See `AddNestLabeledTextField.focus`.
+    /// The screen's own focus flag; see `AddNestBigNumberField`'s use of it.
     var focus: FocusState<Bool>.Binding? = nil
 
     var body: some View {

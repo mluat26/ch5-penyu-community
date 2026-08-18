@@ -91,6 +91,30 @@ final class NestController {
         }
     }
 
+    /// The next identifier in a hatchery's sequence: one past the highest
+    /// number already issued, three digits, starting at 001.
+    nonisolated static func nextIdentifier(after existing: [String?]) -> String {
+        let highest = existing.compactMap { $0.flatMap(Int.init) }.max() ?? 0
+        return String(format: "%03d", highest + 1)
+    }
+
+    /// Issues both identifiers for a new nest. Neither is typed: the nest
+    /// number continues the hatchery's sequence, and the bucket ID mirrors it
+    /// until an NFC tag supplies the real one.
+    ///
+    /// A failed lookup leaves the draft's own defaults in place rather than
+    /// blanking the screen, so the form stays saveable offline.
+    // ponytail: numbered client-side from max + 1, and the bucket ID is a
+    // stand-in for the tag payload. Replace that half with the NFC read; move
+    // the nest number to a database sequence if two devices ever register into
+    // one hatchery at the same moment.
+    func prepareIdentifiers() async {
+        guard let nests = try? await nestService.nests(hatcheryID: hatcheryID) else { return }
+        let next = Self.nextIdentifier(after: nests.map(\.nestNumber))
+        draft.nestNumber = next
+        draft.bucketID = next
+    }
+
     func reset() {
         draft = .sample
         errorMessage = nil

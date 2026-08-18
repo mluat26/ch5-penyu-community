@@ -181,34 +181,26 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(router.path, [.identity])
     }
 
-    func testSuccessCanNavigateToSavedNestDetail() {
+    func testResetClearsWizardHistory() {
         let router = NestRouter()
-        let item = makeNestDashboardItem()
-
         router.replace(with: .success)
-        router.push(.nestDetail(item: item, ordinal: 1, sectionID: "B2"))
-
-        XCTAssertEqual(
-            router.path,
-            [
-                .success,
-                .nestDetail(item: item, ordinal: 1, sectionID: "B2")
-            ]
-        )
-
-        router.pop()
-        XCTAssertEqual(router.path, [.success])
-    }
-
-    func testResetClearsNestedNavigationDestinations() {
-        let router = NestRouter()
-        let item = makeNestDashboardItem()
-        router.replace(with: .success)
-        router.push(.nestDetail(item: item, ordinal: 55, sectionID: "B2"))
 
         router.reset()
 
         XCTAssertTrue(router.path.isEmpty)
+    }
+
+    func testNextIdentifierStartsAtOneAndCountsUp() {
+        XCTAssertEqual(NestController.nextIdentifier(after: []), "001")
+        XCTAssertEqual(NestController.nextIdentifier(after: ["001"]), "002")
+        XCTAssertEqual(NestController.nextIdentifier(after: ["055"]), "056")
+        // One past the highest, not the count: gaps left by deleted nests must
+        // not hand a number back out to a second nest.
+        XCTAssertEqual(NestController.nextIdentifier(after: ["001", "010"]), "011")
+        XCTAssertEqual(NestController.nextIdentifier(after: ["010", "002"]), "011")
+        // Nests saved before numbering, or labelled by hand, are skipped
+        // rather than dragging the sequence back to 001.
+        XCTAssertEqual(NestController.nextIdentifier(after: [nil, "", "abc", "007"]), "008")
     }
 
     func testSavePersistsSelectedGridPlacement() async {

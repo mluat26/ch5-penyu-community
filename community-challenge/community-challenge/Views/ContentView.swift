@@ -229,7 +229,7 @@ struct ContentView: View {
                         }
                     case .success:
                         NestRegistrationSuccessView(
-                            nestNumber: nestController.draft.nestNumber,
+                            nestNumber: savedNestNumber,
                             eggCount: savedEggCount,
                             hatchDate: savedHatchDate,
                             temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
@@ -334,6 +334,13 @@ struct ContentView: View {
 
     private var menuAnimation: Animation? {
         reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12)
+    }
+
+    /// The number the database settled on, not the one the form proposed. Two
+    /// rangers can compute the same next number offline; the server moves the
+    /// later insert on, and this screen has to report what was actually saved.
+    private var savedNestNumber: String {
+        nestController.lastSavedNest?.nestNumber ?? nestController.draft.nestNumber
     }
 
     private var savedEggCount: String {

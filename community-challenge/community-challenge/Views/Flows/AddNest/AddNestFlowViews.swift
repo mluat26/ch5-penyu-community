@@ -97,8 +97,6 @@ struct AddNestIdentityView: View {
     let onNext: () -> Void
     let onCancel: () -> Void
 
-    @FocusState private var isFieldFocused: Bool
-
     var body: some View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
@@ -110,26 +108,18 @@ struct AddNestIdentityView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         AddNestSectionTitle(title: "Nest identity")
 
-                        // Two short identifiers read as one line in the field,
-                        // so they share a row rather than stacking.
+                        // Figma 188:4127 drops the field boxes: both values are
+                        // issued by the app, so showing them as editable
+                        // controls invited edits that would break the sequence.
                         HStack(alignment: .top, spacing: 10) {
-                            AddNestLabeledTextField(
+                            AddNestLabeledValue(
                                 label: "Bucket ID",
-                                text: $controller.draft.bucketID,
-                                isMuted: true,
-                                controlHeight: 48,
-                                cornerRadius: 16,
-                                focus: $isFieldFocused
+                                value: controller.draft.bucketID
                             )
 
-                            AddNestLabeledTextField(
+                            AddNestLabeledValue(
                                 label: "Nest Number",
-                                text: $controller.draft.nestNumber,
-                                isMuted: true,
-                                controlHeight: 48,
-                                cornerRadius: 16,
-                                keyboardType: .numberPad,
-                                focus: $isFieldFocused
+                                value: controller.draft.nestNumber
                             )
                         }
 
@@ -174,9 +164,10 @@ struct AddNestIdentityView: View {
                 .padding(.top, 12)
             }
             .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
         }
-        .dismissesKeyboardOnTap($isFieldFocused)
+        // Issued here rather than when the flow starts, so the number reflects
+        // any nest saved since -- and so returning to this screen re-reads it.
+        .task { await controller.prepareIdentifiers() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HatcheryPrimaryButton(title: "Next") {
                 guard controller.validateIdentity() else { return }
