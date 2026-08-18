@@ -10,9 +10,21 @@ struct HatcheryManagementView: View {
     let onCreateNew: () -> Void
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
+    /// Drives the profile sheet this screen presents itself, so opening it
+    /// does not have to bounce back through the dashboard first.
+    var profileController: ProfileController?
+    /// Profile actions that outlive this screen. Each one has to unwind the
+    /// management cover before it can run, so they are handed upward rather
+    /// than presented here: the invite screen is a full page, and signing out
+    /// or deleting the account tears down the session this cover sits in.
+    var onShowInvite: ((OrganizationInviteEntity) -> Void)?
+    var onSignOut: (() -> Void)?
+    var onDeleteAccount: (() async throws -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedHatchery: HatcheryEntity?
+    /// Both sheets share one modifier: SwiftUI keeps only the last `.sheet`
+    /// attached to a view, so a second one would silently never present.
+    @State private var presentedSheet: ManagementSheet?
     @State private var selectedHatcheryStartsEditing = false
     @State private var isShowingHatcheryMenu = false
 
@@ -21,13 +33,21 @@ struct HatcheryManagementView: View {
         onSelect: @escaping (HatcherySessionState) -> Void,
         onCreateNew: @escaping () -> Void,
         onRescan: @escaping (HatcheryEntity) -> Void = { _ in },
-        onRename: @escaping (HatcheryEntity) -> Void = { _ in }
+        onRename: @escaping (HatcheryEntity) -> Void = { _ in },
+        profileController: ProfileController? = nil,
+        onShowInvite: ((OrganizationInviteEntity) -> Void)? = nil,
+        onSignOut: (() -> Void)? = nil,
+        onDeleteAccount: (() async throws -> Void)? = nil
     ) {
         self.controller = controller
         self.onSelect = onSelect
         self.onCreateNew = onCreateNew
         self.onRescan = onRescan
         self.onRename = onRename
+        self.profileController = profileController
+        self.onShowInvite = onShowInvite
+        self.onSignOut = onSignOut
+        self.onDeleteAccount = onDeleteAccount
     }
 
     var body: some View {
@@ -73,21 +93,46 @@ struct HatcheryManagementView: View {
         .preferredColorScheme(.light)
         .toolbar(.hidden, for: .navigationBar)
         .task { await controller.loadManagement() }
-        .sheet(item: $selectedHatchery) { hatchery in
-            HatcheryManagementDetailSheet(
-                hatchery: hatchery,
-                controller: controller,
-                onRescan: onRescan,
-                onRename: onRename,
-                startsEditing: selectedHatcheryStartsEditing
-            )
-            // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
-            // fixed detent. 679pt of content therefore produces the Figma
-            // reference's 713pt visible sheet.
-            .presentationDetents([.height(679)])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(34)
-            .presentationSizing(.page)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .hatcheryDetail(let hatchery):
+                HatcheryManagementDetailSheet(
+                    hatchery: hatchery,
+                    controller: controller,
+                    onRescan: onRescan,
+                    onRename: onRename,
+                    startsEditing: selectedHatcheryStartsEditing
+                )
+                // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
+                // fixed detent. 679pt of content therefore produces the Figma
+                // reference's 713pt visible sheet.
+                .presentationDetents([.height(679)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+
+            case .profile(let profileController):
+                ProfileSheetView(
+                    controller: profileController,
+                    onClose: { presentedSheet = nil },
+                    onSignOut: {
+                        presentedSheet = nil
+                        onSignOut?()
+                    },
+                    onShowInvite: { invite in
+                        presentedSheet = nil
+                        onShowInvite?(invite)
+                    },
+                    onDeleteAccount: {
+                        try await onDeleteAccount?()
+                        presentedSheet = nil
+                    }
+                )
+                .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+            }
         }
     }
 
@@ -154,7 +199,12 @@ struct HatcheryManagementView: View {
 
             Spacer(minLength: 0)
 
-            HatcheryToolbarAccessories(scale: scale)
+            HatcheryToolbarAccessories(
+                scale: scale,
+                onProfile: profileController.map { controller in
+                    { presentedSheet = .profile(controller) }
+                }
+            )
         }
         .frame(width: 386 * scale, height: 48 * scale)
     }
@@ -302,7 +352,7 @@ struct HatcheryManagementView: View {
         startsEditing: Bool = false
     ) {
         selectedHatcheryStartsEditing = startsEditing
-        selectedHatchery = hatchery
+        presentedSheet = .hatcheryDetail(hatchery)
     }
 
     private func temperaturePill(_ value: Double?, scale: CGFloat) -> some View {
@@ -362,7 +412,12 @@ struct HatcheryQuickMenu: View {
 
     private let referenceCanvasWidth: CGFloat = 402
     private let menuWidth: CGFloat = 250
-    private let menuHeight: CGFloat = 241
+    /// The hatchery list grows as hatcheries are added, so the menu sizes to
+    /// its content rather than to Figma's three-hatchery height. Past this cap
+    /// the list scrolls, which keeps Management and Add hatchery reachable
+    /// instead of pushing them off the bottom.
+    private let maxHatcheryListHeight: CGFloat = 264
+    @State private var hatcheryListHeight: CGFloat = 0
 
     var body: some View {
         GeometryReader { geometry in
@@ -409,13 +464,25 @@ struct HatcheryQuickMenu: View {
 
     private func menu(width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            ForEach(displayedHatcheries) { hatchery in
-                hatcheryRow(hatchery)
-            }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(displayedHatcheries) { hatchery in
+                        hatcheryRow(hatchery)
+                    }
 
-            ForEach(unavailableHatcheryNames, id: \.self) { name in
-                unavailableRow(name)
+                    ForEach(unavailableHatcheryNames, id: \.self) { name in
+                        unavailableRow(name)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    hatcheryListHeight = height
+                }
             }
+            // Sizes to the rows until they would overflow, then scrolls.
+            .frame(height: min(max(hatcheryListHeight, 44), maxHatcheryListHeight))
+            .scrollBounceBehavior(.basedOnSize)
 
             Divider()
                 .padding(.horizontal, 16)
@@ -436,7 +503,8 @@ struct HatcheryQuickMenu: View {
             }
         }
         .padding(.vertical, 4)
-        .frame(width: width, height: menuHeight)
+        // Height follows the content; only the width is fixed.
+        .frame(width: width)
         // Node 94:1440 uses Apple's "Liquid Glass Regular Medium" surface.
         // `glassEffect` owns the system border, blur, and shadow together;
         // combining it with a Material/hand-drawn border double-renders glass.
@@ -515,6 +583,20 @@ struct HatcheryQuickMenu: View {
 }
 
 /// Management's Figma detail/edit sheet pair:
+/// The sheets this screen can show, as one value, so they can share a single
+/// `.sheet` modifier.
+private enum ManagementSheet: Identifiable {
+    case hatcheryDetail(HatcheryEntity)
+    case profile(ProfileController)
+
+    var id: String {
+        switch self {
+        case .hatcheryDetail(let hatchery): hatchery.id.uuidString
+        case .profile: "profile"
+        }
+    }
+}
+
 /// 122:3437 is the read-only hatchery detail, and 122:3333 is its edit state.
 /// Both modes live in one native sheet so the edit transition keeps the same
 /// presentation, drag affordance, and underlying Management context.
