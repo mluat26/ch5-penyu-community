@@ -2,6 +2,10 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
+/// Figma 193:4230. The card leads with what it is -- a prediction, not a
+/// record -- and says whose algorithm produced it, so the numbers below are
+/// read as an estimate. The nest number moves to the right of the title: it
+/// identifies the card rather than heading it.
 struct AddNestPreviewCard: View {
     let nestNumber: String
     let eggCount: String
@@ -11,45 +15,46 @@ struct AddNestPreviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.black)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Hatching prediction")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.black)
+
+                        Spacer(minLength: 8)
+
+                        Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
+                            .font(.footnote)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.black.opacity(0.5))
+                    }
+
+                    Text("The data is computed using the Penyu team's algorithm")
+                        .font(.caption)
+                        .foregroundStyle(Color(hex: "#0088FF").opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Rectangle()
                     .fill(Color(hex: "#EBEBEB"))
                     .frame(height: 1)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    AddNestPreviewMetric(value: eggCount, label: "Eggs")
-                        .frame(width: 108)
+            // Equal thirds. The estimate in the middle is the longest value, and
+            // the metric shrinks its own text rather than stealing width from
+            // the two counts either side.
+            HStack(spacing: 12) {
+                AddNestPreviewMetric(value: eggCount, label: "Eggs")
 
-                    // "Month day, year" (Mar 01, 2026), not the field's own
-                    // storage format (dd.MM.yyyy) that the raw draft holds.
-                    AddNestPreviewMetric(
-                        value: AppDateFormatting.longNestDraftDate(hatchDate),
-                        label: "Ets. hatch *"
-                    )
-                    .frame(width: 112)
-
-                    AddNestPreviewMetric(value: daysLeft, label: "Days left")
-                }
-
-                // The "Auto" badge on the hatch-date field already says this
-                // once; the card presenting the whole set says it once more
-                // for all of them, rather than repeating it per field.
-                //
-                // Interpolating a styled `Text` rather than `Text + Text`,
-                // which is deprecated on this SDK.
-                Text(
-                    "* \(Text("Auto, the content auto generate by AI").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
+                // "Month day, year" (Mar 01, 2026), not the field's own
+                // storage format (dd.MM.yyyy) that the raw draft holds.
+                AddNestPreviewMetric(
+                    value: AppDateFormatting.longNestDraftDate(hatchDate),
+                    label: "Ets. hatch"
                 )
-                .font(.caption2)
-                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 8)
+
+                AddNestPreviewMetric(value: daysLeft, label: "Days left")
             }
         }
         .padding(16)
@@ -73,7 +78,13 @@ struct AddNestPreviewDetailRow: View {
             divider
             item(systemImage: "square.grid.3x3.square", label: "Section", value: section)
             divider
-            item(systemImage: "dot.circle.viewfinder", label: "Inspection", value: inspectionDate)
+            // "Apr 1, 2026", the same reading format the card's hatch date
+            // uses -- not the dd.MM.yyyy the draft stores mid-edit.
+            item(
+                systemImage: "dot.circle.viewfinder",
+                label: "Inspection",
+                value: AppDateFormatting.longNestDraftDate(inspectionDate)
+            )
         }
         .frame(maxWidth: .infinity)
     }
@@ -186,7 +197,7 @@ private struct AddNestPreviewMetric: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(value)
                 .font(.title3)
                 .fontWeight(.semibold)
@@ -276,6 +287,10 @@ struct AddNestPrimaryButton: View {
     /// text link -- it needed the same shape as "Save nest", just muted.
     var isSecondary = false
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 26)
+    }
+
     var body: some View {
         Button(action: action) {
             Text(title)
@@ -283,12 +298,17 @@ struct AddNestPrimaryButton: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(isSecondary ? Color(hex: "#8E8E93") : Color(hex: "#FAF8F4"))
                 .frame(maxWidth: .infinity, minHeight: 55)
+                // Both inside the label, as `HatcheryPrimaryButton` does it.
+                // `.plain` hit-tests rendered content, and the label was bare
+                // text -- the pill was drawn by a view wrapping the button, so
+                // it was never the button's to hit and only the word responded.
+                .background(
+                    isSecondary ? Color(hex: "#F2F2F7") : Color.appGreenPrimary,
+                    in: shape
+                )
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .background(
-            isSecondary ? Color(hex: "#F2F2F7") : Color.appGreenPrimary,
-            in: RoundedRectangle(cornerRadius: 26)
-        )
         .opacity(isDisabled ? 0.5 : 1)
         .disabled(isDisabled)
     }

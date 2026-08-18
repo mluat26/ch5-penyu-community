@@ -483,19 +483,21 @@ struct AddNestPreviewView: View {
                     .frame(width: 321, alignment: .top)
                     .padding(.top, 78)
 
+                    // Figma 193:4207 stacks them this way round: what was
+                    // entered first, then what was predicted from it.
+                    AddNestPreviewDetailRow(
+                        bucketID: controller.draft.bucketID,
+                        section: controller.draft.section,
+                        inspectionDate: controller.draft.inspectionDate
+                    )
+                    .padding(.top, 10)
+                    .padding(.horizontal, 16)
+
                     AddNestPreviewCard(
                         nestNumber: controller.draft.nestNumber,
                         eggCount: controller.draft.numberOfEggs,
                         hatchDate: controller.draft.hatchDate,
                         daysLeft: controller.daysUntilHatchDisplay
-                    )
-                    .padding(.top, 10)
-                    .padding(.horizontal, 16)
-
-                    AddNestPreviewDetailRow(
-                        bucketID: controller.draft.bucketID,
-                        section: controller.draft.section,
-                        inspectionDate: controller.draft.inspectionDate
                     )
                     .padding(.top, 16)
                     .padding(.horizontal, 16)
