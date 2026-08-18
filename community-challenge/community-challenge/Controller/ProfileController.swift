@@ -44,7 +44,20 @@ final class ProfileController {
         defer { isLoading = false }
 
         do {
-            let profile = try await repository.fetchCurrentProfile()
+            var profile = try await repository.fetchCurrentProfile()
+
+            // Sign-in never recorded the Apple address, so fill it from the
+            // session the first time this screen is opened. Only ever written
+            // when the row has none: a person may have edited it since.
+            if profile != nil, profile?.appleEmail?.isEmpty ?? true,
+               let sessionEmail = await repository.currentSessionEmail(),
+               !sessionEmail.isEmpty {
+                profile = try await repository.updateCurrentProfile(
+                    displayName: profile?.displayName,
+                    appleEmail: sessionEmail
+                )
+            }
+
             self.profile = profile
             draftName = profile?.displayName ?? ""
 
