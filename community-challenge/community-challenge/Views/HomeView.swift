@@ -36,6 +36,12 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header(screenWidth: screenWidth)
                         .padding(.top, 87)
+                        // The scanned grid below draws outside its own bounds
+                        // (`scaledToFill` on the photo), and a sibling drawn
+                        // later still takes the touches there. Without this the
+                        // profile button is unpressable on any hatchery that
+                        // has a scan, while looking perfectly normal.
+                        .zIndex(1)
 
                     if hatchery.hasBeenScanned {
                         hatcheryGrid(width: gridWidth, height: gridHeight)

@@ -19,14 +19,10 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var router = NestRouter()
-    /// The section grid is a modal choice over the form, not a step in the
-    /// flow, so it is presented rather than pushed.
-    @State private var isPickingSection = false
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
     @State private var hatcheryListController: HatcheryListController
     @State private var isShowingHatcheryMenu = false
-    @State private var isShowingHatcheryManagement = false
     @State private var rescanRequest: RescanRequest?
     /// Held while the management cover dismisses.
     ///
@@ -36,18 +32,21 @@ struct ContentView: View {
     /// in flight on a view that no longer exists, and the next sheet — the
     /// profile button — then silently refuses to open.
     @State private var pendingManagementAction: PendingManagementAction?
-    @State private var isShowingProfile = false
+    /// Every sheet this screen owns, in one place. SwiftUI keeps only the
+    /// last `.sheet` attached to a view, so they cannot be separate modifiers.
+    @State private var presentedSheet: HomeSheet?
     @State private var profileController: ProfileController
     /// Held while the profile sheet dismisses, then promoted to
-    /// `presentedInvite` — the same wait-for-dismissal rule every other
+    /// `presentedCover` — the same wait-for-dismissal rule every other
     /// presentation here follows.
     @State private var pendingInvite: OrganizationInviteEntity?
-    @State private var presentedInvite: OrganizationInviteEntity?
+    /// Every full-screen cover this screen owns, for the same reason as
+    /// `presentedSheet`.
+    @State private var presentedCover: HomeCover?
     /// A nest to show after the Add Nest flow closes. Held rather than
     /// presented immediately: the flow has to finish popping first, or the
     /// sheet is presented on a stack that is still unwinding.
     @State private var pendingNestDetail: NestDetailPresentation?
-    @State private var presentedNestDetail: NestDetailPresentation?
 
     init(
         hatchery: HatcherySessionState,
@@ -90,95 +89,140 @@ struct ContentView: View {
                     onOpenHatcheryMenu: {
                         presentHatcheryMenu()
                     },
-                    onOpenProfile: { isShowingProfile = true },
+                    onOpenProfile: { presentedSheet = .profile },
                     // Same route as rescanning from the management sheet: the
                     // hatchery exists, it just has no photographed area yet.
                     onScanHatchery: { beginRescan(hatchery.hatchery) }
                 )
-                .sheet(
-                    isPresented: $isShowingProfile,
-                    onDismiss: presentPendingInvite
-                ) {
-                    ProfileSheetView(
-                        controller: profileController,
-                        onClose: { isShowingProfile = false },
-                        onSignOut: {
-                            isShowingProfile = false
-                            Task { await signOut() }
-                        },
-                        onShowInvite: { invite in
-                            // The invite screen is a full page, so the sheet
-                            // has to be gone before it can be presented.
-                            pendingInvite = invite
-                            isShowingProfile = false
-                        },
-                        onDeleteAccount: {
-                            try await container.deleteAccount()
-                            isShowingProfile = false
-                            // The account is gone; the next request mints a
-                            // fresh anonymous identity, so send the app back
-                            // to the empty-account route.
-                            onAccountEnded()
-                        }
-                    )
-                    // Figma 158:2283 draws an 801pt sheet; iOS adds the 34pt
-                    // bottom safe area to a fixed detent, so the content is 767.
-                    .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
-                    .presentationDragIndicator(.visible)
-                    .presentationCornerRadius(34)
-                    .presentationSizing(.page)
-                }
-                .sheet(item: $presentedNestDetail) { selection in
-                    NestDetailSheet(
-                        item: selection.item,
-                        ordinal: selection.ordinal,
-                        sectionLabel: selection.sectionID,
-                        controller: container.makeNestDetailController(nestID: selection.item.id),
-                        onClose: { presentedNestDetail = nil },
-                        onDelete: {
-                            Task {
-                                try? await container.makeNestService().deleteNest(id: selection.item.id)
-                                presentedNestDetail = nil
-                                await hatcheryController.load()
+                // One sheet modifier, not two. Chaining a second `.sheet` onto
+                // the same view leaves only the later one live, which is why
+                // the profile button set its flag and then nothing opened.
+                .sheet(item: $presentedSheet, onDismiss: presentPendingInvite) { sheet in
+                    switch sheet {
+                    case .profile:
+                        ProfileSheetView(
+                            controller: profileController,
+                            onClose: { presentedSheet = nil },
+                            onSignOut: {
+                                presentedSheet = nil
+                                Task { await signOut() }
+                            },
+                            onShowInvite: { invite in
+                                // The invite screen is a full page, so the
+                                // sheet has to be gone before it can be
+                                // presented.
+                                pendingInvite = invite
+                                presentedSheet = nil
+                            },
+                            onDeleteAccount: {
+                                try await container.deleteAccount()
+                                presentedSheet = nil
+                                // The account is gone; the next request mints
+                                // a fresh anonymous identity, so send the app
+                                // back to the empty-account route.
+                                onAccountEnded()
                             }
-                        }
-                    )
-                    .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
-                    .presentationDragIndicator(.visible)
-                    .presentationCornerRadius(34)
-                    .presentationSizing(.page)
-                }
-                .fullScreenCover(item: $presentedInvite) { invite in
-                    InvitationCodeView(
-                        invite: invite,
-                        onBack: { presentedInvite = nil },
-                        onRegenerate: {
-                            await profileController.generateInvite()
-                            if let refreshed = profileController.invite {
-                                presentedInvite = refreshed
+                        )
+                        // Figma 158:2283 draws an 801pt sheet; iOS adds the
+                        // 34pt bottom safe area to a fixed detent, so the
+                        // content is 767.
+                        .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                        .presentationDragIndicator(.visible)
+                        .presentationCornerRadius(34)
+                        .presentationSizing(.page)
+
+                    case .nestDetail(let selection):
+                        NestDetailSheet(
+                            item: selection.item,
+                            ordinal: selection.ordinal,
+                            sectionLabel: selection.sectionID,
+                            controller: container.makeNestDetailController(nestID: selection.item.id),
+                            onClose: { presentedSheet = nil },
+                            onDelete: {
+                                Task {
+                                    try? await container.makeNestService().deleteNest(id: selection.item.id)
+                                    presentedSheet = nil
+                                    await hatcheryController.load()
+                                }
                             }
-                        }
-                    )
+                        )
+                        .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
+                        .presentationDragIndicator(.visible)
+                        .presentationCornerRadius(34)
+                        .presentationSizing(.page)
+
+                    case .sectionPicker:
+                        NestSectionPickerView(
+                            controller: nestController,
+                            grid: hatchery.grid,
+                            mapImage: hatchery.rectifiedPhoto,
+                            usesMockMapCrop: hatchery.usesMockImage,
+                            dashboard: hatcheryController.dashboard,
+                            onCancel: { presentedSheet = nil },
+                            onConfirm: { presentedSheet = nil }
+                        )
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.hidden)
+                        .presentationCornerRadius(34)
+                    }
                 }
+                // Same single-modifier rule as the sheet above: the last
+                // `.fullScreenCover` on a view is the only live one.
                 .fullScreenCover(
-                    isPresented: $isShowingHatcheryManagement,
-                    onDismiss: performPendingManagementAction
-                ) {
-                    HatcheryManagementView(
-                        controller: hatcheryListController,
-                        onSelect: { session in
-                            if session.hatchery.id != hatchery.hatchery.id {
-                                pendingManagementAction = .switchHatchery(session)
+                    item: $presentedCover,
+                    onDismiss: {
+                        performPendingManagementAction()
+                        presentPendingInvite()
+                    }
+                ) { cover in
+                    switch cover {
+                    case .invite(let invite):
+                        InvitationCodeView(
+                            invite: invite,
+                            onBack: { presentedCover = nil },
+                            onRegenerate: {
+                                await profileController.generateInvite()
+                                if let refreshed = profileController.invite {
+                                    presentedCover = .invite(refreshed)
+                                }
                             }
-                            isShowingHatcheryManagement = false
-                        },
-                        onCreateNew: {
-                            pendingManagementAction = .createHatchery
-                            isShowingHatcheryManagement = false
-                        },
-                        onRescan: beginRescan,
-                        onRename: updateActiveHatchery
-                    )
+                        )
+
+                    case .management:
+                        HatcheryManagementView(
+                            controller: hatcheryListController,
+                            onSelect: { session in
+                                if session.hatchery.id != hatchery.hatchery.id {
+                                    pendingManagementAction = .switchHatchery(session)
+                                }
+                                presentedCover = nil
+                            },
+                            onCreateNew: {
+                                pendingManagementAction = .createHatchery
+                                presentedCover = nil
+                            },
+                            onRescan: beginRescan,
+                            onRename: updateActiveHatchery,
+                            // Management presents the profile sheet itself, so
+                            // opening it no longer bounces through the
+                            // dashboard. Only the exits that outlive that cover
+                            // come back here.
+                            profileController: profileController,
+                            onShowInvite: { invite in
+                                pendingInvite = invite
+                                presentedCover = nil
+                            },
+                            onSignOut: {
+                                pendingManagementAction = .signOut
+                                presentedCover = nil
+                            },
+                            onDeleteAccount: {
+                                try await container.deleteAccount()
+                                pendingManagementAction = .accountEnded
+                                presentedCover = nil
+                            }
+                        )
+                    }
                 }
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: NestRoute.self) { route in
@@ -191,7 +235,7 @@ struct ContentView: View {
                     case .identity:
                         AddNestIdentityView(
                             controller: nestController,
-                            onSelectSection: { isPickingSection = true },
+                            onSelectSection: { presentedSheet = .sectionPicker },
                             onPinLocation: { router.push(.locationPicker) },
                             onNext: { router.push(.eggInformation) },
                             onCancel: finishAddNestFlow
@@ -253,20 +297,6 @@ struct ContentView: View {
                         )
                     }
                 }
-                .sheet(isPresented: $isPickingSection) {
-                    NestSectionPickerView(
-                        controller: nestController,
-                        grid: hatchery.grid,
-                        mapImage: hatchery.rectifiedPhoto,
-                        usesMockMapCrop: hatchery.usesMockImage,
-                        dashboard: hatcheryController.dashboard,
-                        onCancel: { isPickingSection = false },
-                        onConfirm: { isPickingSection = false }
-                    )
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationCornerRadius(34)
-                }
             }
 
             if isShowingHatcheryMenu {
@@ -279,7 +309,7 @@ struct ContentView: View {
                         onSwitchHatchery(session)
                     },
                     onManagement: {
-                        isShowingHatcheryManagement = true
+                        presentedCover = .management
                     },
                     onCreateNew: onCreateHatchery,
                     onDismiss: {
@@ -315,7 +345,7 @@ struct ContentView: View {
 
         guard let pending = pendingNestDetail else { return }
         pendingNestDetail = nil
-        presentedNestDetail = pending
+        presentedSheet = .nestDetail(pending)
     }
 
     private func presentHatcheryMenu() {
@@ -353,15 +383,23 @@ struct ContentView: View {
     /// is genuinely finished. Presenting the scanner on a fixed delay instead
     /// raced that teardown and left an empty cover on screen.
     private func beginRescan(_ hatchery: HatcheryEntity) {
-        pendingManagementAction = .rescan(
-            RescanRequest(
-                hatchery: hatchery,
-                controller: container.makeHatcherySetupController(
-                    editingHatchery: hatchery
-                )
+        let request = RescanRequest(
+            hatchery: hatchery,
+            controller: container.makeHatcherySetupController(
+                editingHatchery: hatchery
             )
         )
-        isShowingHatcheryManagement = false
+
+        // From the dashboard's scan prompt there is no cover to wait for, and
+        // holding the request for an `onDismiss` that never fires is why that
+        // prompt did nothing. Only defer when something is actually on screen.
+        guard presentedCover != nil else {
+            rescanRequest = request
+            return
+        }
+
+        pendingManagementAction = .rescan(request)
+        presentedCover = nil
     }
 
     /// Runs once the profile sheet is genuinely gone. Closing it without
@@ -378,7 +416,7 @@ struct ContentView: View {
     private func presentPendingInvite() {
         guard let invite = pendingInvite else { return }
         pendingInvite = nil
-        presentedInvite = invite
+        presentedCover = .invite(invite)
     }
 
     /// Runs once the management cover is genuinely gone. Closing it without
@@ -394,6 +432,12 @@ struct ContentView: View {
             onCreateHatchery()
         case .rescan(let request):
             rescanRequest = request
+        case .signOut:
+            Task { await signOut() }
+        case .accountEnded:
+            // The account is gone; the next request mints a fresh anonymous
+            // identity, so send the app back to the empty-account route.
+            onAccountEnded()
         }
     }
 
@@ -436,9 +480,46 @@ struct NestDetailPresentation: Identifiable {
     var id: UUID { item.id }
 }
 
+/// The sheets the dashboard can show, as one value.
+///
+/// They share a single `.sheet` modifier because SwiftUI keeps only the last
+/// one attached to a given view: as two modifiers, the profile sheet was
+/// silently dropped and its button did nothing.
+private enum HomeSheet: Identifiable {
+    case profile
+    case nestDetail(NestDetailPresentation)
+    /// The section grid is a modal choice over the Add Nest form, not a step
+    /// in the flow, so it is presented rather than pushed.
+    case sectionPicker
+
+    var id: String {
+        switch self {
+        case .profile: "profile"
+        case .nestDetail(let selection): selection.id.uuidString
+        case .sectionPicker: "sectionPicker"
+        }
+    }
+}
+
+/// The full-screen covers the dashboard can show, as one value — same
+/// single-modifier rule as `HomeSheet`.
+private enum HomeCover: Identifiable {
+    case invite(OrganizationInviteEntity)
+    case management
+
+    var id: String {
+        switch self {
+        case .invite(let invite): invite.id
+        case .management: "management"
+        }
+    }
+}
+
 private enum PendingManagementAction {
     case switchHatchery(HatcherySessionState)
     case createHatchery
+    case signOut
+    case accountEnded
     case rescan(RescanRequest)
 }
 
