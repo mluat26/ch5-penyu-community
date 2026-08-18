@@ -458,8 +458,8 @@ private struct SectionOverviewSheet: View {
     }
 
     private var nestList: some View {
-        // The card stays 464pt because the sheet is a fixed 707 and this list
-        // starts 167 down; what changed is that its contents scroll.
+        // Figma 199:3473 makes the list 371x508 at y=167 in the 713pt sheet:
+        // four 118pt cards with 12pt gutters, so four fit without scrolling.
         //
         // It used to render `section.nests.prefix(4)` into exactly four 116pt
         // rows with no scroll view, so a section's fifth nest was counted in
@@ -478,12 +478,11 @@ private struct SectionOverviewSheet: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.vertical, 2)
         }
-        // Four or fewer nests fill the card exactly, so leave those sections
+        // Four or fewer nests fill the list exactly, so leave those sections
         // feeling fixed rather than springy.
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 371, height: 464)
+        .frame(width: 371, height: 508)
     }
 
     private func nestRow(
@@ -498,10 +497,9 @@ private struct SectionOverviewSheet: View {
 
                 Spacer(minLength: 0)
 
-                NestStatusPill.battery(level: item.batteryLevel)
-
                 // A logger with no battery reading needs servicing rather than
-                // opening, so Figma swaps the chevron for a wrench.
+                // opening, so Figma swaps the chevron for a wrench. The
+                // battery pill itself is not on the card.
                 Image(systemName: item.batteryLevel == nil ? "wrench.and.screwdriver" : "chevron.right")
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Color(hex: "#8E8E93"))

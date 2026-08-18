@@ -155,6 +155,20 @@ struct CreateFirstHatchView: View {
                     if style == .additionalHatch {
                         additionalChrome(scale: scale, contentWidth: contentWidth)
                             .offset(y: canvasOffset)
+                    } else if let onBack {
+                        HatcherySetupBackButton(scale: scale) {
+                            cancelNameValidation()
+                            isNameFocused = false
+                            onBack()
+                        }
+                        .frame(
+                            width: max(0, contentWidth - 16 * scale),
+                            height: 48 * scale,
+                            alignment: .leading
+                        )
+                        .padding(.leading, 16 * scale)
+                        .padding(.top, 87 * scale)
+                        .offset(y: canvasOffset)
                     }
                 }
             }

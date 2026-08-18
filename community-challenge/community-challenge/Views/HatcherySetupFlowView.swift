@@ -47,9 +47,12 @@ struct HatcherySetupFlowView: View {
     private func rootView(router: HatcherySetupRouter) -> some View {
         switch entryPoint {
         case .firstHatch:
-            CreateFirstHatchView { name in
-                await continueWithNewHatchery(named: name, router: router)
-            }
+            CreateFirstHatchView(
+                onCreate: { name in
+                    await continueWithNewHatchery(named: name, router: router)
+                },
+                onBack: onCancel
+            )
 
         case .additionalHatch:
             CreateFirstHatchView(
@@ -153,7 +156,9 @@ struct HatcherySetupFlowView: View {
                 controller.skipScanning()
                 router.push(.dimensions)
             },
-            onCancel: entryPoint == .rescan ? onCancel : nil
+            // `.scan` is this flow's root only for a rescan; the two creation
+            // entry points always push it on top of their name screen.
+            onBack: entryPoint == .rescan ? onCancel : router.pop
         )
     }
 

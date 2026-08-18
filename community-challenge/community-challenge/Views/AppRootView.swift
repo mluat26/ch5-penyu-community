@@ -19,6 +19,13 @@ struct AppRootView: View {
     @State private var hatcheryBeforeCreation: HatcherySessionState?
     @State private var rescanRequest: RescanRequest?
     @State private var initialHatcheryOpeningState = InitialHatcheryOpeningState.idle
+    /// Set when someone backs out of first-hatch setup.
+    ///
+    /// Without it the root falls through its routing chain, which opens the
+    /// first hatchery in the list rather than returning to the screen they
+    /// came from. Back should land where the person was, not wherever the
+    /// data happens to point.
+    @State private var isShowingOnboarding = false
     /// The rich scan session can change even when a hatchery's UUID does not
     /// (for example, after re-scanning). This forces ContentView to rebuild
     /// its stateful dashboard controllers for that fresh session.
@@ -71,7 +78,7 @@ struct AppRootView: View {
                         Task { await hatcheryListController.load() }
                     }
                 )
-            } else if hatcheryListController.hatcheries.isEmpty {
+            } else if isShowingOnboarding || hatcheryListController.hatcheries.isEmpty {
                 // The introductory pair of Figma screens is only for a
                 // genuinely empty account. Its Create action preserves the
                 // established setup controller and routing below.
@@ -112,6 +119,7 @@ struct AppRootView: View {
     }
 
     private func startNewHatchery() {
+        isShowingOnboarding = false
         hatcheryBeforeCreation = session.activeHatchery
         hatcherySetupController = container.makeHatcherySetupController()
         session.startNewHatchery()
@@ -144,6 +152,7 @@ struct AppRootView: View {
     private func joinWithCode(_ code: String) async throws {
         try await container.redeemInvite(code: code)
         await hatcheryListController.load()
+        isShowingOnboarding = false
 
         guard hatcheryListController.hasSuccessfulLoad else {
             throw AppleSignInFlowError.hatcheriesCouldNotLoad
@@ -163,6 +172,7 @@ struct AppRootView: View {
 
     private func finishHatcheryCreation(_ hatchery: HatcherySessionState) {
         isCreatingHatchery = false
+        isShowingOnboarding = false
         hatcheryBeforeCreation = nil
         activateHatchery(hatchery)
         refreshHatcheryList()
@@ -170,9 +180,17 @@ struct AppRootView: View {
 
     private func cancelHatcheryCreation() {
         isCreatingHatchery = false
+
         if let hatcheryBeforeCreation {
+            // Creating an additional hatchery: back returns to the one that
+            // was open before.
             activateHatchery(hatcheryBeforeCreation)
+        } else {
+            // First-hatch setup was entered from the create-or-join screen,
+            // so that is where back belongs.
+            isShowingOnboarding = true
         }
+
         self.hatcheryBeforeCreation = nil
     }
 

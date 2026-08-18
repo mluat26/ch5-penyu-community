@@ -141,3 +141,26 @@ struct HatcherySetupButton: View {
         }
     }
 }
+
+/// The setup flow's top-left back control, matched to Figma's 16 × 87pt slot.
+/// The presenting screen owns its position; `scale` follows that screen's
+/// canvas, as `HatcheryToolbarAccessories` does.
+struct HatcherySetupBackButton: View {
+    var scale: CGFloat = 1
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6 * scale) {
+                Image(systemName: "chevron.left")
+                Text("Back")
+            }
+            .font(.system(size: 17 * scale, weight: .semibold))
+            .foregroundStyle(Color.appGreenPrimary)
+            .frame(width: 84 * scale, height: 44 * scale, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Back")
+    }
+}

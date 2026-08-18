@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Figma 166:3082 (unscrolled) and 166:3244 (full content). One screen: the
-/// second frame is the first scrolled down, not a separate destination.
+/// Figma 199:3729 (read) and 199:3595 (edit). One screen in two states, not
+/// two destinations.
 ///
 /// Laid out against Figma's 390pt sheet frame by coordinate, taken from node
-/// geometry rather than a screenshot — the row height (68), section header
-/// (28pt title + 20pt subtitle), and chart bar pitch all come from there.
+/// geometry rather than a screenshot — the row heights (68 tall / 52 regular),
+/// section header (28pt title + 20pt subtitle), and chart bar pitch all come
+/// from there.
 struct NestDetailSheet: View {
     let item: NestDashboardItem
     let ordinal: Int
@@ -18,21 +19,28 @@ struct NestDetailSheet: View {
         static let sheetWidth: CGFloat = 390
         /// 801pt of visible sheet less the 34pt bottom safe area iOS adds.
         static let detentHeight: CGFloat = 767
+        /// The "Tall" Row variant, which every section but the read-mode
+        /// inspection list uses.
         static let rowHeight: CGFloat = 68
+        /// The "Regular" Row variant — Figma 199:3855, read mode only.
+        static let compactRowHeight: CGFloat = 52
         static let sectionInset: CGFloat = 16
         static let sectionWidth: CGFloat = 358
     }
 
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var isConfirmingDelete = false
-    /// Figma 175:3948 (view) vs 175:4110 (edit). The frames differ in more
-    /// than styling: editing drops the battery pill and the Hatched bar, adds
-    /// the Data logger row, and is the only place Delete nest appears.
+    /// Figma 199:3729 (read) vs 199:3595 (edit). The frames differ in more
+    /// than styling: editing turns every detail value into a date-picker pill,
+    /// grows the inspection rows to the tall variant, and is the only place
+    /// Delete nest appears.
     @State private var isEditing = false
     /// Holds the nest after a save so the rows show the new values without
     /// refetching the section behind this sheet.
     @State private var editedNest: NestEntity?
-    @State private var isPickingLocation = false
+    /// Drives one full-screen map for both modes: editing picks a pin,
+    /// reading only looks at the stored one.
+    @State private var isShowingLocationMap = false
 
     private var nest: NestEntity { editedNest ?? item.nest }
 
@@ -46,8 +54,10 @@ struct NestDetailSheet: View {
                 ScrollView {
                     content(scale: scale)
                         .frame(width: Layout.sheetWidth * scale, alignment: .topLeading)
-                        // Clears the floating Hatched bar from Figma 166:3082.
-                        .padding(.bottom, 96 * scale)
+                        // Clears the floating Hatched bar in read mode; in edit
+                        // mode only the home indicator has to be cleared, since
+                        // the sheet ignores the safe area.
+                        .padding(.bottom, (isEditing ? 34 : 96) * scale)
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     toolbar(scale: scale)
@@ -55,6 +65,9 @@ struct NestDetailSheet: View {
                         .background(Color(uiColor: .systemGroupedBackground))
                 }
 
+                // Not in 199:3729, but kept deliberately: the action it stands
+                // for is still to be built, and dropping it would lose the
+                // placeholder rather than a decoration.
                 if !isEditing {
                     hatchedBar(scale: scale)
                         .frame(width: geometry.size.width, alignment: .center)
@@ -69,17 +82,24 @@ struct NestDetailSheet: View {
             await controller.load()
             await controller.loadDataLogger(founderID: nest.founderID)
         }
-        .fullScreenCover(isPresented: $isPickingLocation) {
+        // One cover for both modes: reading opens the same map locked down to
+        // a preview, editing opens it as the picker the add-nest flow uses.
+        // Presenting from inside this sheet is the pattern already in use, so
+        // nothing has to wait on another screen's dismissal.
+        .fullScreenCover(isPresented: $isShowingLocationMap) {
             NestLocationPickerView(
-                initialLatitude: controller.draftLatitude,
-                initialLongitude: controller.draftLongitude,
-                initialAddress: controller.draftLocation.isEmpty ? nil : controller.draftLocation,
-                onCancel: { isPickingLocation = false },
+                initialLatitude: isEditing ? controller.draftLatitude : nest.latitude,
+                initialLongitude: isEditing ? controller.draftLongitude : nest.longitude,
+                initialAddress: isEditing
+                    ? (controller.draftLocation.isEmpty ? nil : controller.draftLocation)
+                    : nest.locationAddress,
+                isReadOnly: !isEditing,
+                onCancel: { isShowingLocationMap = false },
                 onSave: { latitude, longitude, address in
                     controller.draftLatitude = latitude
                     controller.draftLongitude = longitude
                     controller.draftLocation = address ?? ""
-                    isPickingLocation = false
+                    isShowingLocationMap = false
                 }
             )
         }
@@ -131,11 +151,16 @@ struct NestDetailSheet: View {
                     isEditing = true
                 }
             } label: {
+                // Only the edit-mode confirm is the prominent button variant
+                // (199:3599); the pencil matches the close button (199:3733).
                 Image(systemName: isEditing ? "checkmark" : "pencil")
                     .font(.system(size: 17 * scale, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(isEditing ? .white : .black)
                     .frame(width: 44 * scale, height: 44 * scale)
-                    .background(Color.accentColor, in: Circle())
+                    .background(
+                        isEditing ? Color.accentColor : Color(hex: "#E9E9EB"),
+                        in: Circle()
+                    )
             }
             .buttonStyle(.plain)
             .disabled(controller.isSaving)
@@ -145,49 +170,41 @@ struct NestDetailSheet: View {
         .frame(width: Layout.sheetWidth * scale, height: 54 * scale, alignment: .topLeading)
     }
 
-    // MARK: - Content (166:3252 — sections at fixed y offsets)
+    // MARK: - Content (199:3737 / 199:3603 — sections at fixed y offsets)
 
-    /// The battery pill occupies 36pt above the image in view mode, so every
-    /// section below it moves down by that much. Edit mode starts at the image.
-    private var sectionShift: CGFloat { isEditing ? 0 : 36 }
-
+    /// Both frames put every section at the same y; only the tail differs, so
+    /// the read frame is 1573 tall (199:3737) and the edit frame 1707 with the
+    /// taller inspection rows and the Delete nest button (199:3603).
     private func content(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
-            if !isEditing {
-                batteryPill(scale: scale)
-                    .offset(x: 16 * scale)
-            }
-
             heroAndStats(scale: scale)
-                .offset(x: 16 * scale, y: isEditing ? 0 : 36 * scale)
+                .offset(x: 16 * scale)
 
             weekAndChart(scale: scale)
-                .offset(x: 10 * scale, y: (273.09 + sectionShift) * scale)
+                .offset(x: 10 * scale, y: 273.09 * scale)
 
             informationSection(scale: scale)
-                .offset(x: 16 * scale, y: (619.09 + sectionShift) * scale)
+                .offset(x: 16 * scale, y: 619.09 * scale)
 
             timelineSection(scale: scale)
-                .offset(x: 16 * scale, y: (983.09 + sectionShift) * scale)
+                .offset(x: 16 * scale, y: 983.09 * scale)
 
             inspectionSection(scale: scale)
-                .offset(x: 16 * scale, y: (1321.09 + sectionShift) * scale)
+                .offset(x: 16 * scale, y: 1321.09 * scale)
 
             if isEditing {
                 deleteButton(scale: scale)
-                    .offset(x: 16 * scale, y: (1617.09 + sectionShift) * scale)
+                    .offset(x: 16 * scale, y: 1617.09 * scale)
             }
         }
-        .frame(width: Layout.sheetWidth * scale, height: 1707 * scale, alignment: .topLeading)
+        .frame(
+            width: Layout.sheetWidth * scale,
+            height: (isEditing ? 1707 : 1573) * scale,
+            alignment: .topLeading
+        )
     }
 
-    /// 175:3981 — an 87 × 36 pill centred over the image, view mode only.
-    private func batteryPill(scale: CGFloat) -> some View {
-        NestStatusPill.battery(level: item.batteryLevel)
-            .frame(width: Layout.sectionWidth * scale, height: 36 * scale)
-    }
-
-    /// 166:3253 — image 294 × 164 centred at x32, then a 85pt stat row.
+    /// 199:3738 — image 294 × 164 centred at x32, then a 85pt stat row.
     private func heroAndStats(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Image("NestImage")
@@ -204,6 +221,7 @@ struct NestDetailSheet: View {
                     value: temperatureText,
                     unit: "°C",
                     tint: Color(hex: "#0C7C4D"),
+                    weight: .bold,
                     width: 157,
                     scale: scale
                 )
@@ -213,6 +231,7 @@ struct NestDetailSheet: View {
                     value: "\(nest.numberOfEggs)",
                     unit: nil,
                     tint: .black,
+                    weight: .semibold,
                     width: 88.5,
                     scale: scale
                 )
@@ -222,12 +241,13 @@ struct NestDetailSheet: View {
                     value: sectionLabel,
                     unit: nil,
                     tint: .black,
+                    weight: .semibold,
                     width: 88.5,
                     scale: scale
                 )
             }
             .frame(width: Layout.sectionWidth * scale, height: 85 * scale)
-            .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
+            .background(.white, in: RoundedRectangle(cornerRadius: 26 * scale))
             .offset(y: 164.09 * scale)
         }
         .frame(width: Layout.sectionWidth * scale, height: 249.09 * scale, alignment: .topLeading)
@@ -238,12 +258,14 @@ struct NestDetailSheet: View {
         return value.map { String(format: "%.1f", $0) } ?? "--"
     }
 
-    /// Label at y16 (16pt tall), value at y44 (25pt tall) — 166:3257 / 166:3259.
+    /// Label at y16 (16pt tall), value at y44 (25pt tall) — 199:3742 / 199:3744.
+    /// The temperature is Bold; Eggs and Sections are Semibold (199:3750).
     private func statColumn(
         title: String,
         value: String,
         unit: String?,
         tint: Color,
+        weight: Font.Weight,
         width: CGFloat,
         scale: CGFloat
     ) -> some View {
@@ -257,10 +279,10 @@ struct NestDetailSheet: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(value)
-                    .font(.system(size: 20 * scale, weight: .bold))
+                    .font(.system(size: 20 * scale, weight: weight))
                 if let unit {
                     Text(unit)
-                        .font(.system(size: 12 * scale, weight: .bold))
+                        .font(.system(size: 12 * scale, weight: weight))
                 }
             }
             .foregroundStyle(tint)
@@ -298,32 +320,33 @@ struct NestDetailSheet: View {
         .frame(width: 370 * scale, height: 322 * scale, alignment: .topLeading)
     }
 
-    /// Day columns sit on a 55.67pt pitch (166:3283), not an even division.
+    /// Two pitches, not one: the 38pt weekday labels sit 54.333pt apart
+    /// (199:3760) while the 30pt day circles sit 55.667pt apart (199:3768),
+    /// because each row spreads its own item width across the same 364pt.
     private func weekStrip(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(Array(weekDays.enumerated()), id: \.offset) { index, day in
-                let x = 55.666_664 * CGFloat(index)
                 let isSelected = Calendar.current.isDate(day, inSameDayAs: selectedDay)
 
                 Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                    .font(.system(size: 13 * scale, weight: .regular))
-                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundStyle(Color(uiColor: .tertiaryLabel))
                     .frame(width: 38 * scale, height: 18 * scale)
-                    .offset(x: (x - 1.33) * scale, y: 1 * scale)
+                    .offset(x: 54.333_333 * CGFloat(index) * scale, y: 1 * scale)
 
                 Button {
                     selectedDay = day
                 } label: {
                     Text(day.formatted(.dateTime.day()))
                         .font(.system(size: 17 * scale, weight: .regular))
-                        .foregroundStyle(isSelected ? .white : .black)
+                        .foregroundStyle(isSelected ? Color(hex: "#F2F2F7") : .black)
                         .frame(width: 30 * scale, height: 30 * scale)
                         .background {
-                            if isSelected { Circle().fill(Color(hex: "#8E8E93")) }
+                            if isSelected { Circle().fill(Color(hex: "#999999")) }
                         }
                 }
                 .buttonStyle(.plain)
-                .offset(x: x * scale, y: 27 * scale)
+                .offset(x: 55.666_664 * CGFloat(index) * scale, y: 27 * scale)
             }
         }
         .frame(width: 364 * scale, height: 64 * scale, alignment: .topLeading)
@@ -332,25 +355,25 @@ struct NestDetailSheet: View {
     private func temperatureNow(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Text("Temperature now")
-                .font(.system(size: 13 * scale, weight: .regular))
-                .foregroundStyle(Color(hex: "#8E8E93"))
+                .font(.system(size: 12 * scale, weight: .regular))
+                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
                 .frame(width: 348 * scale, height: 16 * scale, alignment: .leading)
                 .offset(x: 8 * scale)
 
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(controller.latestTemperatureC.map { String(format: "%.1f", $0) } ?? "--")
+                Text(NestTemperature.text(controller.latestTemperatureC))
                     .font(.system(size: 20 * scale, weight: .bold))
                 Text("°C")
                     .font(.system(size: 12 * scale, weight: .bold))
             }
-            .foregroundStyle(Color(hex: "#E5399B"))
+            .foregroundStyle(Color(hex: "#D9538E"))
             .frame(height: 25 * scale, alignment: .leading)
             .offset(x: 8 * scale, y: 20 * scale)
         }
         .frame(width: 364 * scale, height: 45 * scale, alignment: .topLeading)
     }
 
-    /// 166:3304 — 28 bars 8.458pt wide on a 14.458pt pitch, 173pt tall, with
+    /// 199:3788 — 24 bars 8.458pt wide on a 14.458pt pitch, 173pt tall, with
     /// the 18–33° axis column at x349.
     private func chart(scale: CGFloat) -> some View {
         let readings = controller.readings(on: selectedDay)
@@ -359,8 +382,8 @@ struct NestDetailSheet: View {
             NestTemperatureChart(readings: readings, scale: scale)
                 .frame(width: 341 * scale, height: 173 * scale, alignment: .bottomLeading)
 
-            // 175:4060 — 12pt bold on a 152pt column, evenly spaced. The
-            // labels were 13pt in a 21pt box, which clipped the degree sign.
+            // 199:3814 — 12pt bold on a 21pt × 152pt column at x349, evenly
+            // spaced. `fixedSize` keeps the degree sign from clipping.
             VStack(spacing: 0) {
                 ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
                     Text("\(degrees)°")
@@ -372,17 +395,19 @@ struct NestDetailSheet: View {
                     if degrees != 18 { Spacer(minLength: 0) }
                 }
             }
-            .frame(width: 24 * scale, height: 152 * scale, alignment: .leading)
-            .offset(x: 346 * scale)
+            .frame(width: 21 * scale, height: 152 * scale)
+            .offset(x: 349 * scale)
         }
         .frame(width: 370 * scale, height: 173 * scale, alignment: .topLeading)
     }
 
+    /// 199:3821 — 12pt bold. The design carries a fifth label at x326 but
+    /// leaves it at zero opacity, so the axis stops at 18.
     private func hourAxis(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
-            ForEach([(0.0, "0"), (78.75, "6"), (157.5, "12"), (241.25, "18"), (326.0, "24")], id: \.0) { x, label in
+            ForEach([(0.0, "0"), (78.75, "6"), (157.5, "12"), (241.25, "18")], id: \.0) { x, label in
                 Text(label)
-                    .font(.system(size: 13 * scale, weight: .regular))
+                    .font(.system(size: 12 * scale, weight: .bold))
                     .foregroundStyle(Color(hex: "#8E8E93"))
                     .frame(height: 16 * scale)
                     .offset(x: x * scale)
@@ -391,11 +416,12 @@ struct NestDetailSheet: View {
         .frame(width: 341 * scale, height: 16 * scale, alignment: .topLeading)
     }
 
-    // MARK: - Grouped sections (166:3342 / 3351 / 3365)
+    // MARK: - Grouped sections (199:3827 / 3836 / 3850)
 
     private func informationSection(scale: CGFloat) -> some View {
         detailSection(title: "Information", subtitle: "Nest detail information", scale: scale) {
             infoRow(title: "Bucket ID", value: nest.bucketID ?? "—", scale: scale)
+            rowSeparator(scale: scale)
             // Shown in both modes: it is read-only either way, and who logged
             // the nest is reference information worth having while reading the
             // record, not only while changing it.
@@ -404,12 +430,14 @@ struct NestDetailSheet: View {
                 value: controller.dataLoggerName ?? "—",
                 scale: scale
             )
+            rowSeparator(scale: scale)
             dateRow(
                 title: "Collection date",
                 stored: nest.dateEggsLaid,
                 draft: $controller.draftCollectionDate,
                 scale: scale
             )
+            rowSeparator(scale: scale)
             locationRow(scale: scale)
         }
     }
@@ -432,6 +460,7 @@ struct NestDetailSheet: View {
                     draft: $controller.draftInspectionDate,
                     scale: scale
                 )
+                rowSeparator(scale: scale)
                 dateRow(
                     title: "Prediction",
                     subtitle: "Hatching date",
@@ -447,20 +476,27 @@ struct NestDetailSheet: View {
         .frame(width: Layout.sectionWidth * scale, alignment: .topLeading)
     }
 
+    /// The one section whose rows change height between the frames: 52pt
+    /// plain rows while reading (199:3855), 68pt while editing (199:3721).
     private func inspectionSection(scale: CGFloat) -> some View {
-        detailSection(title: "Inspection list", subtitle: "Hatching timeline", scale: scale) {
+        let height = isEditing ? Layout.rowHeight : Layout.compactRowHeight
+
+        return detailSection(title: "Inspection list", subtitle: "Hatching timeline", scale: scale) {
             if controller.inspections.isEmpty {
                 Text("No inspections recorded yet")
                     .font(.system(size: 15 * scale, weight: .regular))
                     .foregroundStyle(Color(hex: "#8E8E93"))
-                    .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale, alignment: .leading)
+                    .frame(width: Layout.sectionWidth * scale, height: height * scale, alignment: .leading)
                     .padding(.leading, 16 * scale)
             } else {
                 ForEach(Array(controller.inspections.enumerated()), id: \.element.id) { index, inspection in
+                    if index > 0 { rowSeparator(scale: scale) }
+
                     infoRow(
                         title: "#\(index + 1)",
                         value: formatted(inspection.inspectedOn),
-                        isBadge: true,
+                        isBadge: isEditing,
+                        height: height,
                         scale: scale
                     )
                 }
@@ -468,6 +504,7 @@ struct NestDetailSheet: View {
         }
     }
 
+    /// 199:3725 — a 358 × 55 button, corner 26, Accents/Red.
     private func deleteButton(scale: CGFloat) -> some View {
         Button(role: .destructive) {
             isConfirmingDelete = true
@@ -481,6 +518,9 @@ struct NestDetailSheet: View {
         .buttonStyle(.plain)
     }
 
+    /// The floating "Hatched" action, with a notes button beside it.
+    ///
+    /// Read mode only: recording the result is not an edit to the record.
     private func hatchedBar(scale: CGFloat) -> some View {
         HStack(spacing: 12 * scale) {
             Image(systemName: "text.bubble")
@@ -500,6 +540,16 @@ struct NestDetailSheet: View {
 
     // MARK: - Building blocks
 
+    /// The Row component's Separator (I199:3832;5534:22504): a 1pt hairline
+    /// inset 16pt at both ends. Figma puts one at the top of every row; the
+    /// first would land on the card's own edge, so it is drawn between rows.
+    private func rowSeparator(scale: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator))
+            .frame(width: (Layout.sectionWidth - 32) * scale, height: 1)
+            .frame(width: Layout.sectionWidth * scale)
+    }
+
     private func detailSection<Content: View>(
         title: String,
         subtitle: String,
@@ -517,7 +567,7 @@ struct NestDetailSheet: View {
         .frame(width: Layout.sectionWidth * scale, alignment: .topLeading)
     }
 
-    /// 166:3343 — 28pt title with a 20pt subtitle 32pt below its top.
+    /// 199:3828 — 28pt title with a 20pt subtitle 32pt below its top.
     private func sectionHeader(title: String, subtitle: String, scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Text(title)
@@ -540,6 +590,7 @@ struct NestDetailSheet: View {
         value: String,
         isBadge: Bool = false,
         showsChevron: Bool = false,
+        height: CGFloat = Layout.rowHeight,
         scale: CGFloat
     ) -> some View {
         HStack(spacing: 0) {
@@ -577,12 +628,13 @@ struct NestDetailSheet: View {
             }
         }
         .padding(.horizontal, 16 * scale)
-        .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
+        .frame(width: Layout.sectionWidth * scale, height: height * scale)
         .accessibilityElement(children: .combine)
     }
 
-    /// Reads as a badge, edits as a wheel-free compact picker. Figma marks
-    /// these rows "Picker - Date", which is what `.compact` renders.
+    /// Reads as plain detail text (199:3834 is a Default row) and edits as a
+    /// wheel-free compact picker — the edit frame marks the same rows
+    /// "Picker - Date" (199:3700), which is what `.compact` renders.
     private func dateRow(
         title: String,
         subtitle: String? = nil,
@@ -610,48 +662,34 @@ struct NestDetailSheet: View {
                     .datePickerStyle(.compact)
             } else {
                 Text(stored.map(formatted) ?? "—")
-                    .font(.system(size: 15 * scale, weight: .semibold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 12 * scale)
-                    .padding(.vertical, 6 * scale)
-                    .background {
-                        RoundedRectangle(cornerRadius: 10 * scale)
-                            .fill(Color(hex: "#F1F1F1"))
-                    }
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .lineLimit(1)
             }
         }
         .padding(.horizontal, 16 * scale)
         .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
     }
 
-    /// The stored address is a string resolved once at capture time, so it is
-    /// edited as text here rather than re-running the map picker.
+    /// 199:3835 / 199:3701 draw this row identically in both frames: grey
+    /// detail text and a drill-in chevron. Only the destination changes —
+    /// editing opens the map picker, reading opens the same map as a preview.
     private func locationRow(scale: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            Text("Location")
-                .font(.system(size: 17 * scale, weight: .regular))
-                .foregroundStyle(.black)
+        let address = isEditing
+            ? (controller.draftLocation.isEmpty ? "Set location" : controller.draftLocation)
+            : (nest.locationAddress ?? "—")
 
-            Spacer(minLength: 12 * scale)
+        return Button {
+            isShowingLocationMap = true
+        } label: {
+            HStack(spacing: 0) {
+                Text("Location")
+                    .font(.system(size: 17 * scale, weight: .regular))
+                    .foregroundStyle(.black)
 
-            if isEditing {
-                // Same map the add-nest flow uses, so a pin edited here is
-                // resolved to an address the same way it was captured.
-                Button {
-                    isPickingLocation = true
-                } label: {
-                    HStack(spacing: 4 * scale) {
-                        Text(controller.draftLocation.isEmpty ? "Set location" : controller.draftLocation)
-                            .font(.system(size: 15 * scale, weight: .regular))
-                            .lineLimit(1)
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(.system(size: 13 * scale, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(nest.locationAddress ?? "—")
+                Spacer(minLength: 12 * scale)
+
+                Text(address)
                     .font(.system(size: 15 * scale, weight: .regular))
                     .foregroundStyle(Color(hex: "#8E8E93"))
                     .lineLimit(1)
@@ -661,28 +699,36 @@ struct NestDetailSheet: View {
                     .foregroundStyle(Color(hex: "#8E8E93"))
                     .padding(.leading, 8 * scale)
             }
+            .padding(.horizontal, 16 * scale)
+            .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
         }
-        .padding(.horizontal, 16 * scale)
-        .frame(width: Layout.sectionWidth * scale, height: Layout.rowHeight * scale)
+        .buttonStyle(.plain)
+        // Nothing to preview when the nest was recorded without a pin.
+        .disabled(!isEditing && (nest.latitude == nil || nest.longitude == nil))
     }
 
-    /// 166:3356 — 174 × 94 card, label at y17, value at y43.
+    /// 199:3841 — 174 × 94 card, label at y17, value at y43, on Gray 6 with a
+    /// hairline border rather than the white the other cards use.
     private func timelineStat(title: String, value: String, scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Text(title)
-                .font(.system(size: 15 * scale, weight: .regular))
-                .foregroundStyle(Color(hex: "#8E8E93"))
+                .font(.system(size: 15 * scale, weight: .semibold))
+                .foregroundStyle(Color(hex: "#2A2A2A"))
                 .frame(width: 174 * scale, height: 20 * scale)
                 .offset(y: 17 * scale)
 
             Text(value)
-                .font(.system(size: 26 * scale, weight: .bold))
-                .foregroundStyle(.black)
+                .font(.system(size: 28 * scale, weight: .bold))
+                .foregroundStyle(Color(hex: "#4A4A4A"))
                 .frame(width: 174 * scale, height: 34 * scale)
                 .offset(y: 43 * scale)
         }
         .frame(width: 174 * scale, height: 94 * scale, alignment: .topLeading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 24 * scale))
+        .background(Color(hex: "#F1F1F1"), in: RoundedRectangle(cornerRadius: 24 * scale))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24 * scale)
+                .strokeBorder(Color(hex: "#EBEBEB"), lineWidth: 1)
+        }
     }
 
     private func formatted(_ date: Date) -> String {
@@ -703,7 +749,7 @@ struct NestDetailSheet: View {
     }
 }
 
-/// Figma 175:4035. The bars are not individually tinted: one continuous
+/// Figma 199:3789. The bars are not individually tinted: one continuous
 /// gradient spans the whole plot and every bar samples it at its own height,
 /// which is why a tall bar reaches purple while a short one stays green.
 ///
@@ -714,8 +760,7 @@ private struct NestTemperatureChart: View {
     let readings: [IoTDataEntity]
     let scale: CGFloat
 
-    /// 175:4035 draws 24 bars — one per hour of the day. 28 produced extra
-    /// empty stubs trailing off the end of the plot.
+    /// 199:3789 draws 24 bars — one per hour of the day.
     private static let barCount = 24
     private static let barWidth: CGFloat = 8.458_333
     private static let pitch: CGFloat = 14.458_333
@@ -723,12 +768,14 @@ private struct NestTemperatureChart: View {
     private static let stubHeight: CGFloat = 7.75
     private static let axisRange: ClosedRange<Double> = 18...33
 
-    /// Bottom to top, matching the axis labels 18° through 33°.
+    /// Bottom to top, matching the axis labels 18° through 33°. The stops are
+    /// 199:3799's fill (the one bar that spans the full plot) read upwards:
+    /// purple 0%, red 13.553%, yellow 49.412%, green 100.68% top-down.
     private static let heatGradient = LinearGradient(
         stops: [
             .init(color: Color(red: 50 / 255, green: 200 / 255, blue: 89 / 255), location: 0),
-            .init(color: Color(red: 254 / 255, green: 201 / 255, blue: 1 / 255), location: 0.49),
-            .init(color: Color(red: 246 / 255, green: 73 / 255, blue: 70 / 255), location: 0.86),
+            .init(color: Color(red: 254 / 255, green: 201 / 255, blue: 1 / 255), location: 0.505_88),
+            .init(color: Color(red: 246 / 255, green: 73 / 255, blue: 70 / 255), location: 0.864_47),
             .init(color: Color(red: 119 / 255, green: 62 / 255, blue: 141 / 255), location: 1),
         ],
         startPoint: .bottom,
