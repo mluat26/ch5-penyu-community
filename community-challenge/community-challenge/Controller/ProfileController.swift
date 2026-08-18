@@ -7,6 +7,9 @@ import Foundation
 final class ProfileController {
     private(set) var profile: ProfileEntity?
     private(set) var organization: OrganizationEntity?
+    /// Everyone in the organization, for the Members list row and screen
+    /// (Figma 200:4184 row 2, 200:4212).
+    private(set) var members: [ProfileEntity] = []
     private(set) var invite: OrganizationInviteEntity?
     private(set) var isLoading = false
     private(set) var isSaving = false
@@ -63,8 +66,12 @@ final class ProfileController {
 
             if let organizationID = profile?.organizationID {
                 organization = try await repository.fetchOrganization(id: organizationID)
+                members = try await repository.fetchOrganizationMembers(
+                    organizationID: organizationID
+                )
             } else {
                 organization = nil
+                members = []
             }
         } catch {
             errorMessage = error.localizedDescription
