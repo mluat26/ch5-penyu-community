@@ -27,9 +27,13 @@ struct ProfileSheetView: View {
     /// Figma's sheet frame. Every offset below is relative to it.
     enum Layout {
         static let sheetWidth: CGFloat = 390
-        /// 801pt of visible sheet, less the 34pt bottom safe area iOS adds to
-        /// a fixed detent.
-        static let detentHeight: CGFloat = 767
+        /// Figma puts the sheet's top edge at y=73 on an 874pt screen.
+        ///
+        /// iOS 26 floats a sheet 8pt above the bottom rather than adding a
+        /// safe-area inset, so the top lands at `874 - 8 - height`, and the
+        /// presented height runs ~2pt over the detent. Measured on device:
+        /// a detent of 791 puts the top at 73.
+        static let detentHeight: CGFloat = 791
         static let contentInset: CGFloat = 14
         static let contentWidth: CGFloat = 362
         static let rowHeight: CGFloat = 52

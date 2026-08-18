@@ -131,7 +131,6 @@ struct HatcheryManagementView: View {
                 .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(34)
-                .presentationSizing(.page)
             }
         }
     }
