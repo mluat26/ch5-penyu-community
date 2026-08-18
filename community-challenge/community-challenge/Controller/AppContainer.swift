@@ -159,22 +159,37 @@ final class AppContainer {
             nonce: nonce
         )
 
-        // Apple supplies the name only on a person's first authorization, so
-        // this is the one chance to keep it. Never overwrite an existing name
-        // with nil: a returning user sends no name, and blanking what they
-        // already set would be worse than leaving it.
-        guard let fullName, !fullName.isEmpty else { return }
-
         // These reads and writes are deliberately not swallowed. The earlier
-        // `try?` here turned a failed name save into a blank Data logger row
-        // with nothing to diagnose from — the one chance to keep the name had
+        // `try?` here turned a failed save into a blank profile with nothing to
+        // diagnose from — and for the name, the one chance to keep it had
         // already passed by the time anyone noticed.
         let existing = try await profileRepository.fetchCurrentProfile()
-        guard existing?.displayName?.isEmpty ?? true else { return }
+
+        // Apple supplies the name only on a person's first authorization, so
+        // this is the one chance to keep it. A returning user sends none, and
+        // blanking what is already stored would be worse than leaving it.
+        var displayName = existing?.displayName
+        if displayName?.isEmpty ?? true, let fullName, !fullName.isEmpty {
+            displayName = fullName
+        }
+
+        // The address rides in the identity token on every sign-in, not just
+        // the first, so it can always be recovered from the session. Fill it
+        // only when the row has none, in case it was edited since.
+        var appleEmail = existing?.appleEmail
+        if appleEmail?.isEmpty ?? true,
+           let sessionEmail = await profileRepository.currentSessionEmail(),
+           !sessionEmail.isEmpty {
+            appleEmail = sessionEmail
+        }
+
+        guard
+            displayName != existing?.displayName || appleEmail != existing?.appleEmail
+        else { return }
 
         _ = try await profileRepository.updateCurrentProfile(
-            displayName: fullName,
-            appleEmail: existing?.appleEmail
+            displayName: displayName,
+            appleEmail: appleEmail
         )
     }
 

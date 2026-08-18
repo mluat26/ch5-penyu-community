@@ -136,6 +136,10 @@ private struct SheetHost<Content: View>: View {
 
 /// Returns the profile the Figma frames show, without touching the network.
 private struct StubProfileRepository: ProfileRepository {
+    /// The harness renders frames from fixed data, so there is no session to
+    /// read an address from.
+    func currentSessionEmail() async -> String? { nil }
+
     func fetchCurrentProfile() async throws -> ProfileEntity? {
         ProfileEntity(
             id: UUID(),

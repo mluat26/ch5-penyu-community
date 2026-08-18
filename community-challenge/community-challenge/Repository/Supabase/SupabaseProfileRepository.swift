@@ -13,6 +13,12 @@ protocol ProfileRepository: Sendable {
     /// is not readable, which the read policy scopes to one organization.
     func fetchProfile(id: UUID) async throws -> ProfileEntity?
     func updateCurrentProfile(displayName: String?, appleEmail: String?) async throws -> ProfileEntity
+    /// The Apple address on the current session.
+    ///
+    /// Apple hands the address to the app only on a person's first
+    /// authorization, which is unrecoverable once missed. Supabase keeps it on
+    /// the identity instead, so reading it here works on every sign-in.
+    func currentSessionEmail() async -> String?
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity
     func generateInvite() async throws -> OrganizationInviteEntity
     @discardableResult func redeemInvite(code: String) async throws -> UUID
@@ -75,6 +81,15 @@ actor SupabaseProfileRepository: ProfileRepository {
             throw RepositoryError.notFound(resource: "Profile", id: userID)
         }
         return try dto.toEntity()
+    }
+
+    /// The Apple address on the current session.
+    ///
+    /// Apple hands the address to the app only on a person's first
+    /// authorization, which is unrecoverable once missed. Supabase keeps it on
+    /// the identity instead, so reading it here works on every sign-in.
+    func currentSessionEmail() async -> String? {
+        client.auth.currentSession?.user.email
     }
 
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity {
