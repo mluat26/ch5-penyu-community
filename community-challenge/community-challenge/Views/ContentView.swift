@@ -257,7 +257,8 @@ struct ContentView: View {
                         AddNestEggInformationView(
                             controller: nestController,
                             onPreview: { router.push(.preview) },
-                            onCancel: finishAddNestFlow
+                            onCancel: finishAddNestFlow,
+                            onSelectStep: goToStep
                         )
                     case .preview:
                         AddNestPreviewView(
@@ -273,7 +274,7 @@ struct ContentView: View {
                         }
                     case .success:
                         NestRegistrationSuccessView(
-                            nestNumber: nestController.draft.nestNumber,
+                            nestNumber: savedNestNumber,
                             eggCount: savedEggCount,
                             hatchDate: savedHatchDate,
                             temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
@@ -339,6 +340,17 @@ struct ContentView: View {
         }
     }
 
+    /// The indicator only offers steps already behind the current one, so this
+    /// always returns to a page still on the stack rather than pushing a new
+    /// one -- anything above it is dropped, exactly as tapping Back would.
+    private func goToStep(_ step: Int) {
+        switch step {
+        case 1: router.popTo(.identity)
+        case 2: router.popTo(.eggInformation)
+        default: break
+        }
+    }
+
     private func finishAddNestFlow() {
         nestController.reset()
         router.reset()
@@ -364,6 +376,13 @@ struct ContentView: View {
 
     private var menuAnimation: Animation? {
         reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12)
+    }
+
+    /// The number the database settled on, not the one the form proposed. Two
+    /// rangers can compute the same next number offline; the server moves the
+    /// later insert on, and this screen has to report what was actually saved.
+    private var savedNestNumber: String {
+        nestController.lastSavedNest?.nestNumber ?? nestController.draft.nestNumber
     }
 
     private var savedEggCount: String {

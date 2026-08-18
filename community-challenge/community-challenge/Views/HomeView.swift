@@ -226,37 +226,16 @@ struct HomeView: View {
 
     private func overview(width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 4) {
-                    overviewKicker
-                        .font(.footnote)
-                        .tracking(-0.08)
-                        .lineLimit(1)
-
-                    Text("Check the status of the hatchery")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .tracking(-0.43)
-                        .foregroundStyle(Color(hex: "#575757"))
+            // The whole row opens the section, not just the chevron. With no
+            // section chosen there is nothing to open, so it stays inert text.
+            if let section = selectedSection {
+                Button { presentedSection = section } label: {
+                    overviewHeaderRow
                 }
-
-                Spacer(minLength: 0)
-
-                if selectedSection != nil {
-                    Button {
-                        presentedSection = selectedSection
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.body)
-                            .foregroundStyle(Color(hex: "#0C7C4D"))
-                            .accessibilityHidden(true)
-                            .frame(width: 44, height: 44, alignment: .trailing)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Show section overview")
-                }
+                .buttonStyle(.plain)
+            } else {
+                overviewHeaderRow
             }
-            .frame(height: 44)
 
             VStack(spacing: 12) {
                 temperatureCard(value: temperatureText(
@@ -360,6 +339,38 @@ struct HomeView: View {
         if controller.selectedSection == nil {
             presentedSection = nil
         }
+    }
+
+    /// `.plain` hit-tests rendered content, and most of this row is the gap
+    /// between the text and the chevron -- `.contentShape` makes that gap part
+    /// of the target rather than a dead strip down the middle.
+    private var overviewHeaderRow: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                overviewKicker
+                    .font(.footnote)
+                    .tracking(-0.08)
+                    .lineLimit(1)
+
+                Text("Check the status of the hatchery")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .tracking(-0.43)
+                    .foregroundStyle(Color(hex: "#575757"))
+            }
+
+            Spacer(minLength: 0)
+
+            if selectedSection != nil {
+                Image(systemName: "chevron.right")
+                    .font(.body)
+                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .accessibilityHidden(true)
+                    .frame(width: 44, height: 44, alignment: .trailing)
+            }
+        }
+        .frame(height: 44)
+        .contentShape(Rectangle())
     }
 
     private var overviewKicker: Text {

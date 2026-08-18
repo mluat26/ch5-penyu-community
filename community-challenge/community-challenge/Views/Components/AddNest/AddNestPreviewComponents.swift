@@ -2,6 +2,10 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
+/// Figma 193:4230. The card leads with what it is -- a prediction, not a
+/// record -- and says whose algorithm produced it, so the numbers below are
+/// read as an estimate. The nest number moves to the right of the title: it
+/// identifies the card rather than heading it.
 struct AddNestPreviewCard: View {
     let nestNumber: String
     let eggCount: String
@@ -11,45 +15,46 @@ struct AddNestPreviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.black)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Hatching prediction")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.black)
+
+                        Spacer(minLength: 8)
+
+                        Text("Nest #\(nestNumber.isEmpty ? "—" : nestNumber)")
+                            .font(.footnote)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.black.opacity(0.5))
+                    }
+
+                    Text("The data is computed using the Penyu team's algorithm")
+                        .font(.caption)
+                        .foregroundStyle(Color(hex: "#0088FF").opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Rectangle()
                     .fill(Color(hex: "#EBEBEB"))
                     .frame(height: 1)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    AddNestPreviewMetric(value: eggCount, label: "Eggs")
-                        .frame(width: 108)
+            // Equal thirds. The estimate in the middle is the longest value, and
+            // the metric shrinks its own text rather than stealing width from
+            // the two counts either side.
+            HStack(spacing: 12) {
+                AddNestPreviewMetric(value: eggCount, label: "Eggs")
 
-                    // "Month day, year" (Mar 01, 2026), not the field's own
-                    // storage format (dd.MM.yyyy) that the raw draft holds.
-                    AddNestPreviewMetric(
-                        value: AppDateFormatting.longNestDraftDate(hatchDate),
-                        label: "Ets. hatch *"
-                    )
-                    .frame(width: 112)
-
-                    AddNestPreviewMetric(value: daysLeft, label: "Days left")
-                }
-
-                // The "Auto" badge on the hatch-date field already says this
-                // once; the card presenting the whole set says it once more
-                // for all of them, rather than repeating it per field.
-                //
-                // Interpolating a styled `Text` rather than `Text + Text`,
-                // which is deprecated on this SDK.
-                Text(
-                    "* \(Text("Auto, the content auto generate by AI").foregroundStyle(Color.appGreenPrimary).fontWeight(.medium))"
+                // "Month day, year" (Mar 01, 2026), not the field's own
+                // storage format (dd.MM.yyyy) that the raw draft holds.
+                AddNestPreviewMetric(
+                    value: AppDateFormatting.longNestDraftDate(hatchDate),
+                    label: "Ets. hatch"
                 )
-                .font(.caption2)
-                .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 8)
+
+                AddNestPreviewMetric(value: daysLeft, label: "Days left")
             }
         }
         .padding(16)
@@ -73,7 +78,13 @@ struct AddNestPreviewDetailRow: View {
             divider
             item(systemImage: "square.grid.3x3.square", label: "Section", value: section)
             divider
-            item(systemImage: "dot.circle.viewfinder", label: "Inspection", value: inspectionDate)
+            // "Apr 1, 2026", the same reading format the card's hatch date
+            // uses -- not the dd.MM.yyyy the draft stores mid-edit.
+            item(
+                systemImage: "dot.circle.viewfinder",
+                label: "Inspection",
+                value: AppDateFormatting.longNestDraftDate(inspectionDate)
+            )
         }
         .frame(maxWidth: .infinity)
     }
@@ -165,9 +176,69 @@ struct AddNestFoundLocationCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        // A hairline at 60%, not a full 1pt line. The fill is already within a
+        // couple of percent of the page behind it, so the outline was what
+        // made this read as a box competing with its own text.
         .overlay {
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
+                .stroke(Color(hex: "#EBEBEB").opacity(0.6), lineWidth: 0.5)
+        }
+    }
+}
+
+/// The saved pin, full size. Read-only on purpose: the preview is a review
+/// step, so the map can be panned and zoomed to check the pin but not moved.
+/// Changing it means going back to the form through "Edit details".
+struct NestLocationPreviewSheet: View {
+    let latitude: Double
+    let longitude: Double
+    let onClose: () -> Void
+
+    enum Layout {
+        /// Figma 197:4324 draws a 713pt sheet, less the 34pt bottom safe area
+        /// iOS adds to a fixed detent -- the same arithmetic the profile and
+        /// nest-detail sheets use.
+        static let detentHeight: CGFloat = 679
+    }
+
+    private var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var body: some View {
+        Map(
+            initialPosition: .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(
+                        latitudeDelta: 0.004,
+                        longitudeDelta: 0.004
+                    )
+                )
+            )
+        ) {
+            Marker("Nest location", coordinate: coordinate)
+                .tint(Color.appGreenPrimary)
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .topLeading) {
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.appNeutralBlack)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular, in: .circle)
+                    // Same reason as the picker's close button: `.plain`
+                    // hit-tests rendered content, so the frame's corners
+                    // outside the glass circle are dead without this.
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            // Figma 197:4327 pads its content by 10, and the toolbar's button
+            // group adds its own 16 inside that.
+            .padding(.top, 20)
+            .padding(.leading, 26)
+            .accessibilityLabel("Close map")
         }
     }
 }
@@ -186,7 +257,7 @@ private struct AddNestPreviewMetric: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(value)
                 .font(.title3)
                 .fontWeight(.semibold)
@@ -276,6 +347,10 @@ struct AddNestPrimaryButton: View {
     /// text link -- it needed the same shape as "Save nest", just muted.
     var isSecondary = false
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 26)
+    }
+
     var body: some View {
         Button(action: action) {
             Text(title)
@@ -283,12 +358,17 @@ struct AddNestPrimaryButton: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(isSecondary ? Color(hex: "#8E8E93") : Color(hex: "#FAF8F4"))
                 .frame(maxWidth: .infinity, minHeight: 55)
+                // Both inside the label, as `HatcheryPrimaryButton` does it.
+                // `.plain` hit-tests rendered content, and the label was bare
+                // text -- the pill was drawn by a view wrapping the button, so
+                // it was never the button's to hit and only the word responded.
+                .background(
+                    isSecondary ? Color(hex: "#F2F2F7") : Color.appGreenPrimary,
+                    in: shape
+                )
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .background(
-            isSecondary ? Color(hex: "#F2F2F7") : Color.appGreenPrimary,
-            in: RoundedRectangle(cornerRadius: 26)
-        )
         .opacity(isDisabled ? 0.5 : 1)
         .disabled(isDisabled)
     }

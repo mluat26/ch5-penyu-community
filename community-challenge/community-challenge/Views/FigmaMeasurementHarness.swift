@@ -48,6 +48,17 @@ enum FigmaMeasurementHarness {
                 .presentationSizing(.page)
             }
 
+        // Figma 188:4127 — the identity step, whose two identifiers the app
+        // issues rather than asking for.
+        case "nest-identity":
+            AddNestIdentityView(
+                controller: Fixtures.nestController,
+                onSelectSection: {},
+                onPinLocation: {},
+                onNext: {},
+                onCancel: {}
+            )
+
         case "nest-detail":
             SheetHost {
                 NestDetailSheet(
@@ -104,6 +115,16 @@ enum FigmaMeasurementHarness {
                 nest: nest,
                 latestTemperatureC: 29.0,
                 latestBatteryVoltage: 4.2
+            )
+        }
+
+        /// An empty hatchery, so the identity screen issues the first pair of
+        /// identifiers rather than continuing someone else's sequence.
+        @MainActor
+        static var nestController: NestController {
+            NestController(
+                hatcheryID: UUID(),
+                nestService: NestService(repository: InMemoryNestRepository())
             )
         }
 

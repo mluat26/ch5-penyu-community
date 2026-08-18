@@ -97,7 +97,9 @@ struct AddNestIdentityView: View {
     let onNext: () -> Void
     let onCancel: () -> Void
 
-    @FocusState private var isFieldFocused: Bool
+    /// Set by the first Next press. Until then the screen stays quiet: nothing
+    /// is wrong yet, it is simply unfilled.
+    @State private var showsValidation = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -110,26 +112,18 @@ struct AddNestIdentityView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         AddNestSectionTitle(title: "Nest identity")
 
-                        // Two short identifiers read as one line in the field,
-                        // so they share a row rather than stacking.
+                        // Figma 188:4127 drops the field boxes: both values are
+                        // issued by the app, so showing them as editable
+                        // controls invited edits that would break the sequence.
                         HStack(alignment: .top, spacing: 10) {
-                            AddNestLabeledTextField(
+                            AddNestLabeledValue(
                                 label: "Bucket ID",
-                                text: $controller.draft.bucketID,
-                                isMuted: true,
-                                controlHeight: 48,
-                                cornerRadius: 16,
-                                focus: $isFieldFocused
+                                value: controller.draft.bucketID
                             )
 
-                            AddNestLabeledTextField(
+                            AddNestLabeledValue(
                                 label: "Nest Number",
-                                text: $controller.draft.nestNumber,
-                                isMuted: true,
-                                controlHeight: 48,
-                                cornerRadius: 16,
-                                keyboardType: .numberPad,
-                                focus: $isFieldFocused
+                                value: controller.draft.nestNumber
                             )
                         }
 
@@ -145,6 +139,10 @@ struct AddNestIdentityView: View {
                                 isSelected: !controller.draft.section.isEmpty,
                                 action: onSelectSection
                             )
+
+                            if showsValidation, controller.isSectionMissing {
+                                validationMessage("Select a section on the map.")
+                            }
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
@@ -158,12 +156,10 @@ struct AddNestIdentityView: View {
                                 titleLineLimit: isLocationPinned ? 2 : 1,
                                 action: onPinLocation
                             )
-                        }
 
-                        if let errorMessage = controller.errorMessage {
-                            Text(errorMessage)
-                                .font(.footnote)
-                                .foregroundStyle(Color.appRed)
+                            if showsValidation, controller.isLocationMissing {
+                                validationMessage("Pin where the eggs were found.")
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -174,11 +170,13 @@ struct AddNestIdentityView: View {
                 .padding(.top, 12)
             }
             .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
         }
-        .dismissesKeyboardOnTap($isFieldFocused)
+        // Issued here rather than when the flow starts, so the number reflects
+        // any nest saved since -- and so returning to this screen re-reads it.
+        .task { await controller.prepareIdentifiers() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HatcheryPrimaryButton(title: "Next") {
+                showsValidation = true
                 guard controller.validateIdentity() else { return }
                 onNext()
             }
@@ -188,6 +186,14 @@ struct AddNestIdentityView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
+    }
+
+    /// Each message is derived from the field it belongs to, so filling that
+    /// field removes its own message with no separate step to forget.
+    private func validationMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(Color.appRed)
     }
 
     /// The chosen value is emphasized inside the sentence rather than replacing
@@ -239,6 +245,8 @@ struct AddNestEggInformationView: View {
     @Bindable var controller: NestController
     let onPreview: () -> Void
     let onCancel: () -> Void
+    /// Steps already behind this one are tappable in the indicator.
+    var onSelectStep: ((Int) -> Void)? = nil
 
     @State private var datePickerTarget: NestDatePickerTarget?
     @FocusState private var isFieldFocused: Bool
@@ -249,7 +257,11 @@ struct AddNestEggInformationView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    AddNestFlowTopHeader(currentStep: 2, onClose: onCancel)
+                    AddNestFlowTopHeader(
+                        currentStep: 2,
+                        onClose: onCancel,
+                        onSelectStep: onSelectStep
+                    )
 
                     AddNestBigNumberField(
                         label: "Total number of eggs",
@@ -440,6 +452,8 @@ struct AddNestPreviewView: View {
     let onCancel: () -> Void
     let onSave: () -> Void
 
+    @State private var isShowingLocationMap = false
+
     var body: some View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
@@ -471,19 +485,21 @@ struct AddNestPreviewView: View {
                     .frame(width: 321, alignment: .top)
                     .padding(.top, 78)
 
+                    // Figma 193:4207 stacks them this way round: what was
+                    // entered first, then what was predicted from it.
+                    AddNestPreviewDetailRow(
+                        bucketID: controller.draft.bucketID,
+                        section: controller.draft.section,
+                        inspectionDate: controller.draft.inspectionDate
+                    )
+                    .padding(.top, 10)
+                    .padding(.horizontal, 16)
+
                     AddNestPreviewCard(
                         nestNumber: controller.draft.nestNumber,
                         eggCount: controller.draft.numberOfEggs,
                         hatchDate: controller.draft.hatchDate,
                         daysLeft: controller.daysUntilHatchDisplay
-                    )
-                    .padding(.top, 10)
-                    .padding(.horizontal, 16)
-
-                    AddNestPreviewDetailRow(
-                        bucketID: controller.draft.bucketID,
-                        section: controller.draft.section,
-                        inspectionDate: controller.draft.inspectionDate
                     )
                     .padding(.top, 16)
                     .padding(.horizontal, 16)
@@ -500,11 +516,20 @@ struct AddNestPreviewView: View {
                                 .font(.caption)
                                 .foregroundStyle(Color(hex: "#8E8E93").opacity(0.8))
 
-                            AddNestFoundLocationCard(
-                                latitude: latitude,
-                                longitude: longitude,
-                                address: controller.draft.locationAddress
-                            )
+                            // Tapping the card opens the pin full size. It
+                            // only ever shows the pin -- moving it is the
+                            // form's job, which "Edit details" returns to.
+                            Button {
+                                isShowingLocationMap = true
+                            } label: {
+                                AddNestFoundLocationCard(
+                                    latitude: latitude,
+                                    longitude: longitude,
+                                    address: controller.draft.locationAddress
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows the pin on a map")
                         }
                         .padding(.top, 20)
                         .padding(.horizontal, 16)
@@ -543,6 +568,21 @@ struct AddNestPreviewView: View {
             .padding(.bottom, 8)
             .background(Color.white)
         }
+        .sheet(isPresented: $isShowingLocationMap) {
+            if let latitude = controller.draft.latitude,
+               let longitude = controller.draft.longitude {
+                NestLocationPreviewSheet(
+                    latitude: latitude,
+                    longitude: longitude,
+                    onClose: { isShowingLocationMap = false }
+                )
+                // Not `.large`: Figma's sheet stops 150pt down the screen,
+                // leaving the page visible behind it.
+                .presentationDetents([.height(NestLocationPreviewSheet.Layout.detentHeight)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
     }
@@ -564,7 +604,6 @@ struct NestRegistrationSuccessView: View {
         ZStack(alignment: .top) {
             AddNestFlowBackground(glowColor: temperatureStatus.backgroundGlowColor)
 
-            // TODO: play Resources/success_confetti.lottie here once a
             ScrollView {
                 VStack(spacing: 12) {
                     // The animation is itself a check mark, so it stands in

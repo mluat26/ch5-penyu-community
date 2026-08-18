@@ -26,11 +26,14 @@ final class ProfileController {
         profile?.displayName?.isEmpty == false ? profile!.displayName! : "Not set"
     }
 
-    var appleAccount: String {
-        profile?.appleEmail?.isEmpty == false ? profile!.appleEmail! : "Not set"
-    }
-
     var role: OrganizationRole { profile?.role ?? .agent }
+
+    /// True only while the first load is still in flight. Every value on this
+    /// screen falls back to "Not set", "—", or Agent when `profile` is nil, so
+    /// without this the sheet renders a confident wrong answer for as long as
+    /// the network takes and an empty profile is indistinguishable from one
+    /// that simply has not arrived.
+    var isLoadingProfile: Bool { isLoading && profile == nil }
 
     var organizationCode: String { organization?.displayCode ?? "—" }
 
@@ -44,31 +47,63 @@ final class ProfileController {
         defer { isLoading = false }
 
         do {
-            var profile = try await repository.fetchCurrentProfile()
+            let fetched = try await repository.fetchCurrentProfile()
 
-            // Sign-in never recorded the Apple address, so fill it from the
-            // session the first time this screen is opened. Only ever written
-            // when the row has none: a person may have edited it since.
-            if profile != nil, profile?.appleEmail?.isEmpty ?? true,
-               let sessionEmail = await repository.currentSessionEmail(),
-               !sessionEmail.isEmpty {
-                profile = try await repository.updateCurrentProfile(
-                    displayName: profile?.displayName,
-                    appleEmail: sessionEmail
-                )
-            }
+            // Published before anything optional runs, so a later step failing
+            // cannot discard a profile that already arrived. Both the Apple
+            // address backfill and the organization read used to sit ahead of
+            // this assignment, which meant either one throwing blanked the
+            // name as well -- over something that had nothing to do with it.
+            profile = fetched
+            draftName = fetched?.displayName ?? ""
 
-            self.profile = profile
-            draftName = profile?.displayName ?? ""
-
-            if let organizationID = profile?.organizationID {
+            if let organizationID = fetched?.organizationID {
                 organization = try await repository.fetchOrganization(id: organizationID)
             } else {
                 organization = nil
             }
         } catch {
+            // Dismissing the sheet cancels this task mid-request. That is the
+            // person closing a screen, not a failure to report back on it.
+            guard !Self.isCancellation(error) else { return }
             errorMessage = error.localizedDescription
+            return
         }
+
+        await backfillAppleEmail()
+    }
+
+    /// Sign-in never recorded the Apple address, so fill it from the session
+    /// the first time this screen is opened. Only ever written when the row has
+    /// none: a person may have edited it since.
+    ///
+    /// Deliberately silent, and deliberately last. The profile is already on
+    /// screen by now, and the database refusing this write -- an update policy
+    /// that does not match the row the read policy allowed, which comes back as
+    /// zero updated rows -- is not worth replacing a loaded profile with an
+    /// error.
+    private func backfillAppleEmail() async {
+        guard
+            let current = profile,
+            current.appleEmail?.isEmpty ?? true,
+            let sessionEmail = await repository.currentSessionEmail(),
+            !sessionEmail.isEmpty,
+            let updated = try? await repository.updateCurrentProfile(
+                displayName: current.displayName,
+                appleEmail: sessionEmail
+            )
+        else {
+            return
+        }
+
+        profile = updated
+    }
+
+    /// URLSession reports a cancelled request as `URLError.cancelled` rather
+    /// than `CancellationError`, so checking only the latter still surfaced
+    /// "cancelled" to the person who did the cancelling.
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     func save() async {
