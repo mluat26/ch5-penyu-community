@@ -518,24 +518,15 @@ struct NestDetailSheet: View {
         .buttonStyle(.plain)
     }
 
-    /// The floating "Hatched" action, with a notes button beside it.
+    /// The floating "Hatched" action, full width like the other section cards.
     ///
     /// Read mode only: recording the result is not an edit to the record.
     private func hatchedBar(scale: CGFloat) -> some View {
-        HStack(spacing: 12 * scale) {
-            Image(systemName: "text.bubble")
-                .font(.system(size: 17 * scale, weight: .regular))
-                .foregroundStyle(.black)
-                .frame(width: 55 * scale, height: 55 * scale)
-                .background(.white, in: Circle())
-                .accessibilityLabel("Notes")
-
-            Text("Hatched")
-                .font(.system(size: 17 * scale, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 291 * scale, height: 55 * scale)
-                .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
-        }
+        Text("Hatched")
+            .font(.system(size: 17 * scale, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
+            .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
     }
 
     // MARK: - Building blocks
