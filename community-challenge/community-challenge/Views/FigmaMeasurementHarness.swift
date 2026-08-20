@@ -71,7 +71,8 @@ enum FigmaMeasurementHarness {
                     hatcheryName: "Hatchery_01",
                     onClose: {},
                     onDelete: {},
-                    onNestChanged: {}
+                    onNestChanged: {},
+                    onReturnToHatchery: {}
                 )
                 .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                 .presentationDragIndicator(.visible)

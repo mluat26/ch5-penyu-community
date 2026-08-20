@@ -95,7 +95,8 @@ struct HomeView: View {
                         .section(row: section.row, column: section.column) {
                         presentedSection = refreshed
                     }
-                }
+                },
+                onReturnToHatchery: { presentedSection = nil }
             )
                 .presentationDetents([.height(707)])
                 .presentationDragIndicator(.visible)
@@ -457,6 +458,7 @@ private struct SectionOverviewSheet: View {
     let hatcheryName: String
     let onNestDeleted: () async -> Void
     let onNestChanged: () async -> Void
+    let onReturnToHatchery: () -> Void
 
     @State private var selectedNest: NestDetailSelection?
     @State private var filter: NestHatchFilter = .all
@@ -502,7 +504,11 @@ private struct SectionOverviewSheet: View {
                         await onNestDeleted()
                     }
                 },
-                onNestChanged: onNestChanged
+                onNestChanged: onNestChanged,
+                // Dismissing this sheet alone would only fall back to the
+                // section list, which is itself a sheet over the hatchery. The
+                // host closes the section instead, and this one goes with it.
+                onReturnToHatchery: onReturnToHatchery
             )
             // Figma 166:3244 draws the same 801pt sheet frame as the profile.
             .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])

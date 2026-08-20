@@ -22,6 +22,14 @@ struct NestDetailSheet: View {
     /// Called once a hatch is recorded. The nest's own row changes server-side,
     /// so every list holding a copy of it needs to hear about it.
     let onNestChanged: () async -> Void
+    /// "Back to Hatchery" -- all the way, not just off this sheet.
+    ///
+    /// Separate from `onClose` because the two differ by caller: reached from
+    /// ContentView this sheet sits directly on the hatchery, but reached
+    /// through the section list it sits on a sheet that is itself over the
+    /// hatchery, and closing one leaves the other up. Only the host knows how
+    /// deep it is.
+    let onReturnToHatchery: () -> Void
 
     enum Layout {
         static let sheetWidth: CGFloat = 390
@@ -74,6 +82,12 @@ struct NestDetailSheet: View {
     }
 
     @State private var presentedCover: Cover?
+    /// Set when the flow asks to return to the hatchery, read once the cover
+    /// has actually gone. Dismissing this sheet while its own cover is still on
+    /// screen does nothing, and the report adds a third layer -- it presents a
+    /// sheet of its own -- so there is no interval worth guessing at. The
+    /// cover's own onDismiss is the event, so wait for it.
+    @State private var isReturningToHatchery = false
     /// Built on demand: it needs the nest, and a nest that is never hatched
     /// should never pay for one.
     @State private var hatchingController: HatchingController?
@@ -121,7 +135,11 @@ struct NestDetailSheet: View {
         // a preview, editing opens it as the picker the add-nest flow uses.
         // Presenting from inside this sheet is the pattern already in use, so
         // nothing has to wait on another screen's dismissal.
-        .fullScreenCover(item: $presentedCover) { cover in
+        .fullScreenCover(item: $presentedCover) {
+            guard isReturningToHatchery else { return }
+            isReturningToHatchery = false
+            onReturnToHatchery()
+        } content: { cover in
             switch cover {
             case .locationMap:
                 NestLocationPickerView(
@@ -151,14 +169,8 @@ struct NestDetailSheet: View {
                     onClose: { presentedCover = nil },
                     onSaved: onNestChanged,
                     onFinish: {
+                        isReturningToHatchery = true
                         presentedCover = nil
-                        // The sheet cannot be dismissed while its own cover is
-                        // still on screen, so the close waits a tick for the
-                        // cover to come down.
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(350))
-                            onClose()
-                        }
                     }
                 )
             }
