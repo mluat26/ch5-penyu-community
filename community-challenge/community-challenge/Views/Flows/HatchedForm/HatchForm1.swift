@@ -20,6 +20,11 @@ struct HatchedForm1: View {
     /// The only genuinely local state left. Everything a person types belongs
     /// to the controller, so the review screen reads the same numbers.
     @State private var showDatePicker = false
+    /// These are number pads, which have no Return key, so tapping away is the
+    /// only way out of one.
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable { case rotten, unhatched, hatched }
 
     private let accentGreen = Color(red: 0.29, green: 0.45, blue: 0.34)
 
@@ -99,9 +104,9 @@ struct HatchedForm1: View {
                     // Hatching result
                     sectionLabel("Hatching result")
                     VStack(spacing: 0) {
-                        resultRow(title: "Rotten eggs", text: $controller.draft.rottenEggs)
+                        resultRow(title: "Rotten eggs", text: $controller.draft.rottenEggs, field: .rotten)
                         Divider()
-                        resultRow(title: "Unhatched eggs", text: $controller.draft.unhatchedEggs)
+                        resultRow(title: "Unhatched eggs", text: $controller.draft.unhatchedEggs, field: .unhatched)
                         Divider()
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
@@ -124,6 +129,7 @@ struct HatchedForm1: View {
                             .multilineTextAlignment(.trailing)
                             .foregroundColor(.blue)
                             .frame(width: 70)
+                            .focused($focusedField, equals: .hatched)
                         }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 16)
@@ -144,6 +150,7 @@ struct HatchedForm1: View {
                 .padding(.horizontal)
                 .padding(.top, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             // Next button
             Button {
@@ -164,6 +171,11 @@ struct HatchedForm1: View {
             .padding(.bottom, 16)
         }
         .background(Color.white.ignoresSafeArea())
+        // The background is only hit-testable once it has a shape, so without
+        // contentShape a tap on the empty area falls through and the number pad
+        // stays up.
+        .contentShape(Rectangle())
+        .onTapGesture { focusedField = nil }
     }
 
     @ViewBuilder
@@ -174,7 +186,7 @@ struct HatchedForm1: View {
     }
 
     @ViewBuilder
-    private func resultRow(title: String, text: Binding<String>) -> some View {
+    private func resultRow(title: String, text: Binding<String>, field: Field) -> some View {
         HStack {
             Text(title)
                 .foregroundColor(.black)
@@ -184,6 +196,7 @@ struct HatchedForm1: View {
                 .multilineTextAlignment(.trailing)
                 .foregroundColor(.blue)
                 .frame(width: 70)
+                .focused($focusedField, equals: field)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)

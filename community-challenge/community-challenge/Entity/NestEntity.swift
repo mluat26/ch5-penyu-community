@@ -58,6 +58,15 @@ struct NestEntity: Identifiable, Hashable, Sendable {
         nextInspectionDate == nil && (successEggsHatch != nil || failEggsHatch != nil)
     }
 
+    /// Whether the final tally has been recorded.
+    ///
+    /// `eggsUnhatched` is the tell: `refresh_nest_summary` sets it only from a
+    /// hatching row and nulls it again if that row is deleted, so nothing else
+    /// in the schema can put a value here. Narrower than `isComplete`, which is
+    /// also true for a nest an inspection closed without a tally -- finished,
+    /// but not hatched, and the two are different questions.
+    var hasHatched: Bool { eggsUnhatched != nil }
+
     /// Some hatchlings are out, but eggs remain and another visit is expected.
     var isPartiallyHatched: Bool {
         (successEggsHatch ?? 0) > 0 && !isComplete

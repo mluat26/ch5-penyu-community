@@ -19,6 +19,9 @@ struct NestDetailSheet: View {
     let hatcheryName: String
     let onClose: () -> Void
     let onDelete: () -> Void
+    /// Called once a hatch is recorded. The nest's own row changes server-side,
+    /// so every list holding a copy of it needs to hear about it.
+    let onNestChanged: () async -> Void
 
     enum Layout {
         static let sheetWidth: CGFloat = 390
@@ -146,6 +149,7 @@ struct NestDetailSheet: View {
                     hatcheryName: hatcheryName,
                     startAt: step,
                     onClose: { presentedCover = nil },
+                    onSaved: onNestChanged,
                     onFinish: {
                         presentedCover = nil
                         // The sheet cannot be dismissed while its own cover is

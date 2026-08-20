@@ -70,7 +70,8 @@ enum FigmaMeasurementHarness {
                     makeHatchingController: { HatchingPreviewFixtures.controller(for: $0) },
                     hatcheryName: "Hatchery_01",
                     onClose: {},
-                    onDelete: {}
+                    onDelete: {},
+                    onNestChanged: {}
                 )
                 .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                 .presentationDragIndicator(.visible)

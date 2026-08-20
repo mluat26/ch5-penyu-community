@@ -144,7 +144,8 @@ struct ContentView: View {
                                     presentedSheet = nil
                                     await hatcheryController.load()
                                 }
-                            }
+                            },
+                            onNestChanged: { await hatcheryController.load() }
                         )
                         .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                         .presentationDragIndicator(.visible)

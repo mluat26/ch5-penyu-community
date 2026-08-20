@@ -84,6 +84,17 @@ struct HomeView: View {
                 onNestDeleted: {
                     presentedSection = nil
                     await controller.load()
+                },
+                onNestChanged: {
+                    await controller.load()
+                    // The sheet holds a copy of its section, so reloading the
+                    // dashboard alone would leave the list underneath showing
+                    // the nest exactly as it was. Re-read the same section from
+                    // the refreshed dashboard instead of dismissing.
+                    if let refreshed = controller.dashboard?
+                        .section(row: section.row, column: section.column) {
+                        presentedSection = refreshed
+                    }
                 }
             )
                 .presentationDetents([.height(707)])
@@ -412,10 +423,10 @@ struct HomeView: View {
 
 /// Which nests the section list shows.
 ///
-/// "Hatched" reads `NestEntity.isComplete`, which is already exactly this
-/// question: `refresh_nest_summary` writes the tally onto the nest and clears
-/// its inspection date the moment a hatching row lands, and `isComplete` is
-/// that pair of conditions. No extra query, and nothing new to keep in sync.
+/// "Hatched" reads `NestEntity.hasHatched` -- the nest carries a tally --
+/// rather than `isComplete`, which is also true for a nest an inspection closed
+/// without one. No extra query either way; this is data the dashboard already
+/// holds.
 private enum NestHatchFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case unhatched = "Unhatched"
@@ -426,8 +437,8 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
     func matches(_ nest: NestEntity) -> Bool {
         switch self {
         case .all: true
-        case .hatched: nest.isComplete
-        case .unhatched: !nest.isComplete
+        case .hatched: nest.hasHatched
+        case .unhatched: !nest.hasHatched
         }
     }
 
@@ -445,6 +456,7 @@ private struct SectionOverviewSheet: View {
     let container: AppContainer
     let hatcheryName: String
     let onNestDeleted: () async -> Void
+    let onNestChanged: () async -> Void
 
     @State private var selectedNest: NestDetailSelection?
     @State private var filter: NestHatchFilter = .all
@@ -489,7 +501,8 @@ private struct SectionOverviewSheet: View {
                         selectedNest = nil
                         await onNestDeleted()
                     }
-                }
+                },
+                onNestChanged: onNestChanged
             )
             // Figma 166:3244 draws the same 801pt sheet frame as the profile.
             .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])

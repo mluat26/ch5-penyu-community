@@ -38,11 +38,24 @@ struct NestReportView: View {
     // active.
     @State private var sheetDetent: PresentationDetent = .fraction(0.6)
 
-    // NestEntity already carries these -- no separate params needed.
-    private var hatchedCount: Int? { nest.successEggsHatch }
-    private var unhatchedCount: Int? { nest.eggsUnhatched }
-    private var rottenCount: Int? { nest.failEggsHatch }
-    private var successRatePercent: Double? { nest.hatchRate.map { $0 * 100 } }
+    // The tally first, the nest second.
+    //
+    // refresh_nest_summary copies one onto the other, so they agree -- but only
+    // after a round trip. The `nest` here is whatever snapshot the caller was
+    // holding, and the flow arrives straight from recording a hatch, so its
+    // copy still predates the save and every figure below reads nil. The
+    // hatching record on the controller is reloaded as part of that save, so it
+    // is the one that is current.
+    private var hatchedCount: Int? { controller.hatching?.eggsHatched ?? nest.successEggsHatch }
+    private var unhatchedCount: Int? { controller.hatching?.eggsUnhatched ?? nest.eggsUnhatched }
+    private var rottenCount: Int? { controller.hatching?.eggsRotten ?? nest.failEggsHatch }
+
+    private var successRatePercent: Double? {
+        if let hatching = controller.hatching {
+            return hatching.hatchRate(clutchSize: nest.numberOfEggs).map { $0 * 100 }
+        }
+        return nest.hatchRate.map { $0 * 100 }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {

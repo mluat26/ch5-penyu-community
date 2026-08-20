@@ -30,6 +30,9 @@ struct HatchedFlowView: View {
     let hatcheryName: String
     /// Closes the flow, leaving the nest detail sheet up.
     let onClose: () -> Void
+    /// A tally was written, so anything showing this nest is now out of date --
+    /// the section list filters on it, and the dashboard counts it.
+    let onSaved: () async -> Void
     /// Closes the flow *and* the sheet beneath it, landing on the hatchery.
     let onFinish: () -> Void
 
@@ -43,6 +46,7 @@ struct HatchedFlowView: View {
         hatcheryName: String,
         startAt: Step,
         onClose: @escaping () -> Void,
+        onSaved: @escaping () async -> Void,
         onFinish: @escaping () -> Void
     ) {
         self.controller = controller
@@ -51,6 +55,7 @@ struct HatchedFlowView: View {
         self.sectionLabel = sectionLabel
         self.hatcheryName = hatcheryName
         self.onClose = onClose
+        self.onSaved = onSaved
         self.onFinish = onFinish
         _step = State(initialValue: startAt)
     }
@@ -110,6 +115,8 @@ struct HatchedFlowView: View {
         // Refreshes the sheet underneath, so its action has already become
         // "View report" by the time the flow is dismissed.
         await detailController.load()
+        // And the screens behind that, which hold their own copies of the nest.
+        await onSaved()
 
         step = .recorded
     }
