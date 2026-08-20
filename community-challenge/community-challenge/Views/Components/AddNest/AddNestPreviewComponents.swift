@@ -68,23 +68,25 @@ struct AddNestPreviewCard: View {
 /// it. Confirming these is the point of this screen, so they are shown rather
 /// than trusted.
 struct AddNestPreviewDetailRow: View {
-    let bucketID: String
-    let section: String
-    let inspectionDate: String
+    struct Item: Identifiable {
+        let id = UUID()
+        let systemImage: String
+        let label: String
+        let value: String
+    }
+
+    let items: [Item]
 
     var body: some View {
         HStack(spacing: 0) {
-            item(systemImage: "arrow.up.bin", label: "Bucket ID", value: bucketID)
-            divider
-            item(systemImage: "square.grid.3x3.square", label: "Section", value: section)
-            divider
-            // "Apr 1, 2026", the same reading format the card's hatch date
-            // uses -- not the dd.MM.yyyy the draft stores mid-edit.
-            item(
-                systemImage: "dot.circle.viewfinder",
-                label: "Inspection",
-                value: AppDateFormatting.longNestDraftDate(inspectionDate)
-            )
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, entry in
+                if index > 0 { divider }
+                item(
+                    systemImage: entry.systemImage,
+                    label: entry.label,
+                    value: entry.value
+                )
+            }
         }
         .frame(maxWidth: .infinity)
     }

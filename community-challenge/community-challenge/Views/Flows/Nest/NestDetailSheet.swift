@@ -59,6 +59,7 @@ struct NestDetailSheet: View {
                         // the sheet ignores the safe area.
                         .padding(.bottom, (isEditing ? 34 : 96) * scale)
                 }
+                .scrollIndicators(.hidden)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     toolbar(scale: scale)
                         .padding(.top, 16 * scale)
@@ -747,7 +748,7 @@ struct NestDetailSheet: View {
 /// This is a heat map over the 18–33°C axis, deliberately distinct from the
 /// discrete `NestTemperature.Band` colours used by the pills — the pills
 /// answer "is this nest healthy", the chart shows the shape of the day.
-private struct NestTemperatureChart: View {
+struct NestTemperatureChart: View {
     let readings: [IoTDataEntity]
     let scale: CGFloat
 
@@ -854,3 +855,5 @@ private struct NestTemperatureChart: View {
         return String(format: "From %.1f to %.1f degrees", low, high)
     }
 }
+
+
