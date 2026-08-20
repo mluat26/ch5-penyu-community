@@ -427,7 +427,7 @@ struct AddNestInspectionModeControl: View {
         .padding(4)
         .frame(maxWidth: .infinity)
         .frame(height: 50)
-        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 120))
     }
 
     private func segment(
@@ -450,7 +450,7 @@ struct AddNestInspectionModeControl: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 isSelected ? Color.white : Color.clear,
-                in: RoundedRectangle(cornerRadius: 12)
+                in: RoundedRectangle(cornerRadius: 120)
             )
             .shadow(color: .black.opacity(isSelected ? 0.08 : 0), radius: 4, y: 1)
         }
@@ -474,7 +474,7 @@ struct AddNestInlineDatePicker: View {
             .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
             .overlay {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 120)
                     .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
