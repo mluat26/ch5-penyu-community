@@ -488,11 +488,26 @@ struct AddNestPreviewView: View {
 
                     // Figma 193:4207 stacks them this way round: what was
                     // entered first, then what was predicted from it.
-                    AddNestPreviewDetailRow(
-                        bucketID: controller.draft.bucketID,
-                        section: controller.draft.section,
-                        inspectionDate: controller.draft.inspectionDate
-                    )
+                    AddNestPreviewDetailRow(items: [
+                        .init(
+                            systemImage: "arrow.up.bin",
+                            label: "Bucket ID",
+                            value: controller.draft.bucketID
+                        ),
+                        .init(
+                            systemImage: "square.grid.3x3.square",
+                            label: "Section",
+                            value: controller.draft.section
+                        ),
+                        // "Apr 1, 2026", the same reading format the card's
+                        // hatch date uses -- not the dd.MM.yyyy the draft
+                        // stores mid-edit.
+                        .init(
+                            systemImage: "dot.circle.viewfinder",
+                            label: "Inspection",
+                            value: AppDateFormatting.longNestDraftDate(controller.draft.inspectionDate)
+                        ),
+                    ])
                     .padding(.top, 10)
                     .padding(.horizontal, 16)
 

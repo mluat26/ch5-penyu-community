@@ -59,19 +59,17 @@ struct HatcheryBoundaryAdjustmentView: View {
                     isEditable: !isConfirming
                 )
 
-                GlassEffectContainer(spacing: 20) {
-                    VStack(spacing: 0) {
-                        HatcheryScanInstructionBanner(
-                            systemName: "hand.draw.fill",
-                            text: "Adjust the sand area to fit inside your hatchery area"
-                        )
-                        .padding(.top, 68)
+                VStack(spacing: 0) {
+                    HatcheryScanInstructionBanner(
+                        systemName: "hand.draw.fill",
+                        text: "Adjust the sand area to fit inside your hatchery area"
+                    )
+                    .padding(.top, 68)
 
-                        Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                        adjustmentControls
-                            .padding(.bottom, 59)
-                    }
+                    adjustmentControls
+                        .padding(.bottom, 59)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
