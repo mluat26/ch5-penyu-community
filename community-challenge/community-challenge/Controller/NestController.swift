@@ -146,13 +146,19 @@ final class NestController {
         !isSectionMissing && !isLocationMissing
     }
 
-    /// Sea turtle clutches incubate for roughly two months. This is the figure
-    /// behind the "Auto" estimate on the hatch card -- an estimate, not a
-    /// promise, which is why it is not asked for.
+    /// The reference incubation duration from `SmartNest_Infobook_V01.pdf`,
+    /// which gives roughly 80-82 days at 26C, 56 at 30C and 45-48 at 32C.
     ///
-    /// ponytail: one constant for every species; split per species if the app
-    /// ever tracks more than one.
-    static let estimatedIncubationDays = 59
+    /// 56 is the 30C figure, and this stays a single number on purpose: the
+    /// infobook wants the duration configurable rather than derived, and an
+    /// estimate that moved with every logged reading would be a promise the app
+    /// cannot keep. It seeds the estimate; nothing recalculates it afterwards,
+    /// per the infobook's "never overwrite the original estimate".
+    ///
+    /// ponytail: one constant for every species and temperature; split when
+    /// the app tracks more than one species, or when the team wants the
+    /// duration to follow the nest's own average.
+    static let estimatedIncubationDays = 56
 
     /// The hatch estimate follows the collection date alone.
     ///
@@ -160,6 +166,11 @@ final class NestController {
     /// to the inspection interval: choosing to inspect in 5 days also claimed
     /// the eggs would hatch in 5 days.
     func updateEstimatedHatchDate() {
+        // A date entered by hand wins. The infobook is explicit that the
+        // estimate must never be overwritten once recorded, and 56 days is a
+        // reference figure for 30C, not a fact about this nest.
+        guard !draft.hasManualHatchDate else { return }
+
         guard
             let collectionDate = AppDateFormatting.parseNestDraftDate(draft.collectionDate),
             let estimatedDate = Calendar.current.date(

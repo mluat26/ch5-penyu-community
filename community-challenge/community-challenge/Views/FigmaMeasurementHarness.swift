@@ -32,7 +32,7 @@ enum FigmaMeasurementHarness {
         // Presented as real sheets rather than framed views: `.ignoresSafeArea`
         // inside them defeats an outer frame, and only a genuine presentation
         // reproduces Figma's 6pt inset and corner radius.
-        case "profile-view", "profile-edit":
+        case "profile-view", "profile-edit", "profile-members":
             SheetHost {
                 ProfileSheetView(
                     controller: Fixtures.profileController,
@@ -40,7 +40,8 @@ enum FigmaMeasurementHarness {
                     onSignOut: {},
                     onShowInvite: { _ in },
                     onDeleteAccount: {},
-                    startsEditing: screen == "profile-edit"
+                    startsEditing: screen == "profile-edit",
+                    startsShowingMembers: screen == "profile-members"
                 )
                 .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
                 .presentationDragIndicator(.visible)
@@ -173,6 +174,26 @@ private struct StubProfileRepository: ProfileRepository {
 
     func fetchProfile(id: UUID) async throws -> ProfileEntity? {
         try await fetchCurrentProfile()
+    }
+
+    /// The five members Figma 200:4212 draws, in the order it draws them.
+    func fetchOrganizationMembers(organizationID: UUID) async throws -> [ProfileEntity] {
+        let sample: [(String, OrganizationRole)] = [
+            ("Rizky", .manager),
+            ("Dewi", .coordinator),
+            ("Budi", .officer),
+            ("Sari", .coordinator),
+            ("Andi", .agent)
+        ]
+        return sample.map { name, role in
+            ProfileEntity(
+                id: UUID(),
+                displayName: name,
+                appleEmail: nil,
+                organizationID: organizationID,
+                role: role
+            )
+        }
     }
 
     func updateCurrentProfile(displayName: String?, appleEmail: String?) async throws -> ProfileEntity {

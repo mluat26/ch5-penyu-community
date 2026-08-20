@@ -15,7 +15,9 @@ struct SheetChrome<Content: View>: View {
             let contentScale = geometry.size.width / sheetWidth
 
             ZStack(alignment: .topLeading) {
-                Color.white
+                // Figma 199:3449 grounds the sheet in the grouped grey so the
+                // white nest cards read as cards; on white they disappeared.
+                Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
                 header(width: sheetWidth)
                     .frame(height: 54)

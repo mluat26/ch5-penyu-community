@@ -356,7 +356,7 @@ struct AddNestPrimaryButton: View {
             Text(title)
                 .font(.body)
                 .fontWeight(.semibold)
-                .foregroundStyle(isSecondary ? Color(hex: "#8E8E93") : Color(hex: "#FAF8F4"))
+                .foregroundStyle(isSecondary ? Color.black : Color(hex: "#FAF8F4"))
                 .frame(maxWidth: .infinity, minHeight: 55)
                 // Both inside the label, as `HatcheryPrimaryButton` does it.
                 // `.plain` hit-tests rendered content, and the label was bare

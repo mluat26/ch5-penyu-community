@@ -123,13 +123,11 @@ struct ContentView: View {
                                 onAccountEnded()
                             }
                         )
-                        // Figma 158:2283 draws an 801pt sheet; iOS adds the
-                        // 34pt bottom safe area to a fixed detent, so the
-                        // content is 767.
+                        // Height lives on `ProfileSheetView.Layout`, which
+                        // carries the measured derivation.
                         .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
                         .presentationDragIndicator(.visible)
                         .presentationCornerRadius(34)
-                        .presentationSizing(.page)
 
                     case .nestDetail(let selection):
                         NestDetailSheet(

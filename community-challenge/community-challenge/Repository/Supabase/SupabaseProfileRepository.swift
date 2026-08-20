@@ -12,6 +12,12 @@ protocol ProfileRepository: Sendable {
     /// Another member of the same organization. Returns nil when the profile
     /// is not readable, which the read policy scopes to one organization.
     func fetchProfile(id: UUID) async throws -> ProfileEntity?
+    /// Everyone in one organization, for the members list.
+    ///
+    /// The `Organization members can read each other` policy already limits
+    /// this to the caller's own organization, so passing another id returns
+    /// nothing rather than leaking.
+    func fetchOrganizationMembers(organizationID: UUID) async throws -> [ProfileEntity]
     func updateCurrentProfile(displayName: String?, appleEmail: String?) async throws -> ProfileEntity
     /// The Apple address on the current session.
     ///
@@ -61,6 +67,20 @@ actor SupabaseProfileRepository: ProfileRepository {
             .value
 
         return try rows.first?.toEntity()
+    }
+
+    func fetchOrganizationMembers(organizationID: UUID) async throws -> [ProfileEntity] {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        let rows: [ProfileDTO] = try await client
+            .from("profile")
+            .select()
+            .eq("organization_id", value: organizationID)
+            .order("display_name")
+            .execute()
+            .value
+
+        return try rows.map { try $0.toEntity() }
     }
 
     func updateCurrentProfile(

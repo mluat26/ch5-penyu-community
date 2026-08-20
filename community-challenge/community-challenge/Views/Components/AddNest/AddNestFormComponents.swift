@@ -406,8 +406,9 @@ struct AddNestTimelineDateBlock: View {
             controlHeight: 50,
             action: action
         )
-        .frame(width: 341)
-        .frame(width: 370, height: 90)
+        // Figma 199:3321 -- the block is the full content width with 10 pt
+        // above and below, same as the inspection block underneath it.
+        .padding(.vertical, 10)
     }
 }
 
@@ -470,7 +471,7 @@ struct AddNestInlineDatePicker: View {
             .tint(Color.appGreenPrimary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .frame(maxWidth: 370)
+            .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)

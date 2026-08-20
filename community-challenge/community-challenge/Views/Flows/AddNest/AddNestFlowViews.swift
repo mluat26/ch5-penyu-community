@@ -304,6 +304,7 @@ struct AddNestEggInformationView: View {
                                 controller.updateInspectionDateFromDays()
                             }
                         }
+                        .padding(.vertical, 10)
 
                         HStack {
                             Text(inspectionRowLabel)
@@ -349,7 +350,7 @@ struct AddNestEggInformationView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 28)
+                    .padding(.top, 34)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .containerRelativeFrame(.horizontal)

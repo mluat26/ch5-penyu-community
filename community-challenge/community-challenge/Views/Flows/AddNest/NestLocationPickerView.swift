@@ -86,6 +86,10 @@ struct NestLocationPickerView: View {
     let initialLatitude: Double?
     let initialLongitude: Double?
     let initialAddress: String?
+    /// Preview mode: the pin can be looked at, panned around and shared, but
+    /// not moved, cleared or saved. Used by the nest detail sheet when it is
+    /// not in edit mode.
+    let isReadOnly: Bool
     let onCancel: () -> Void
     /// Hands back the dropped pin and the address resolved for it, so this
     /// screen works for editing a saved nest as well as creating one.
@@ -106,12 +110,14 @@ struct NestLocationPickerView: View {
         initialLatitude: Double? = nil,
         initialLongitude: Double? = nil,
         initialAddress: String? = nil,
+        isReadOnly: Bool = false,
         onCancel: @escaping () -> Void,
         onSave: @escaping (Double, Double, String?) -> Void
     ) {
         self.initialLatitude = initialLatitude
         self.initialLongitude = initialLongitude
         self.initialAddress = initialAddress
+        self.isReadOnly = isReadOnly
         self.onCancel = onCancel
         self.onSave = onSave
 
@@ -171,10 +177,14 @@ struct NestLocationPickerView: View {
                             return
                         }
                         drop(dropped)
-                    }
+                    },
+                isEnabled: !isReadOnly
             )
             .ignoresSafeArea()
-            .overlay(alignment: .top) { instruction }
+            .overlay(alignment: .top) {
+                // Nothing to instruct when the pin cannot move.
+                if !isReadOnly { instruction }
+            }
             .overlay(alignment: .topLeading) {
                 closeButton
                     .onGeometryChange(for: CGRect.self) { geometry in
@@ -195,6 +205,8 @@ struct NestLocationPickerView: View {
                     addressLines: addressLines,
                     isResolvingAddress: isResolvingAddress,
                     distanceText: distanceText(to: coordinate),
+                    isReadOnly: isReadOnly,
+                    onClose: onCancel,
                     onClear: clearPin,
                     onSave: { save(coordinate) }
                 )
@@ -374,6 +386,12 @@ struct PinnedLocationSheet: View {
     let addressLines: [String]
     let isResolvingAddress: Bool
     let distanceText: String?
+    /// Preview mode: the card describes the pin but offers no way to change
+    /// or commit it, so both actions are dropped.
+    var isReadOnly = false
+    /// Leaves a read-only preview. Unused while editing, where Save and the
+    /// clear button are present instead.
+    var onClose: () -> Void = {}
     let onClear: () -> Void
     let onSave: () -> Void
 
@@ -398,9 +416,11 @@ struct PinnedLocationSheet: View {
             }
             .scrollBounceBehavior(.basedOnSize)
 
-            AddNestPrimaryButton(title: "Save", action: onSave)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+            if !isReadOnly {
+                AddNestPrimaryButton(title: "Save", action: onSave)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+            }
         }
         .background(Color.white)
     }
@@ -430,15 +450,30 @@ struct PinnedLocationSheet: View {
             }
             .frame(maxWidth: .infinity)
 
-            Button(action: onClear) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.appNeutralBlack)
-                    .frame(width: 36, height: 36)
-                    .background(Color(hex: "#EBEBEB"), in: Circle())
+            if isReadOnly {
+                // A preview has no Save and no pin to clear, and the sheet
+                // cannot be swiped away, so without this there is no way out:
+                // the map's own close button sits behind this sheet.
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "#EBEBEB"), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            } else {
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "#EBEBEB"), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove this pin")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove this pin")
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
