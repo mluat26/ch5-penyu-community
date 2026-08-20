@@ -9,29 +9,19 @@
 import SwiftUI
 
 struct HatchedForm1: View {
-    @Environment(\.dismiss) private var dismiss
+    @Bindable var controller: HatchingController
+    let onNext: () -> Void
+    /// Explicit rather than `@Environment(\.dismiss)`: this screen is shown in
+    /// a cover presented from inside a sheet, where `dismiss` is ambiguous
+    /// about which of the two it means. The Add Nest flow uses callbacks for
+    /// the same reason.
+    let onCancel: () -> Void
 
-    let totalEggs: Int = 225
-    @State private var hatchingDate: Date = Calendar.current.date(from: DateComponents(year: 2026, month: 6, day: 20)) ?? Date()
+    /// The only genuinely local state left. Everything a person types belongs
+    /// to the controller, so the review screen reads the same numbers.
     @State private var showDatePicker = false
 
-    @State private var rottenEggsText: String = "90"
-    @State private var unhatchedEggsText: String = "12"
-    @State private var hatchedEggsText: String = ""
-
     private let accentGreen = Color(red: 0.29, green: 0.45, blue: 0.34)
-
-    private var rottenEggs: Int { Int(rottenEggsText) ?? 0 }
-    private var unhatchedEggs: Int { Int(unhatchedEggsText) ?? 0 }
-    private var autoHatchedEggs: Int {
-        max(totalEggs - rottenEggs - unhatchedEggs, 0)
-    }
-
-    private var dateFormatter: DateFormatter {
-        let f = DateFormatter()
-        f.dateFormat = "d'th' MMMM, yyyy"
-        return f
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -46,7 +36,7 @@ struct HatchedForm1: View {
                         .foregroundColor(.gray)
                 }
                 Spacer()
-                Button(action: { dismiss() }) {
+                Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
@@ -62,7 +52,7 @@ struct HatchedForm1: View {
 
                     // Total eggs
                     sectionLabel("Total eggs")
-                    Text("\(totalEggs)")
+                    Text("\(controller.nest.numberOfEggs)")
                         .font(.system(size: 28, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 18)
@@ -80,7 +70,7 @@ struct HatchedForm1: View {
                             Text("Hatching date")
                                 .foregroundColor(.black)
                             Spacer()
-                            Text(dateFormatter.string(from: hatchingDate))
+                            Text(controller.hatchedOnOrdinalText)
                                 .foregroundColor(.gray)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 13, weight: .semibold))
@@ -97,7 +87,7 @@ struct HatchedForm1: View {
                     .buttonStyle(.plain)
                     .sheet(isPresented: $showDatePicker) {
                         VStack {
-                            DatePicker("Hatching date", selection: $hatchingDate, displayedComponents: .date)
+                            DatePicker("Hatching date", selection: $controller.draft.hatchedOn, displayedComponents: .date)
                                 .datePickerStyle(.graphical)
                                 .padding()
                             Button("Done") { showDatePicker = false }
@@ -109,9 +99,9 @@ struct HatchedForm1: View {
                     // Hatching result
                     sectionLabel("Hatching result")
                     VStack(spacing: 0) {
-                        resultRow(title: "Rotten eggs", text: $rottenEggsText)
+                        resultRow(title: "Rotten eggs", text: $controller.draft.rottenEggs)
                         Divider()
-                        resultRow(title: "Unhatched eggs", text: $unhatchedEggsText)
+                        resultRow(title: "Unhatched eggs", text: $controller.draft.unhatchedEggs)
                         Divider()
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
@@ -123,8 +113,12 @@ struct HatchedForm1: View {
                             }
                             Spacer()
                             TextField("", text: Binding(
-                                get: { hatchedEggsText.isEmpty ? "\(autoHatchedEggs)" : hatchedEggsText },
-                                set: { hatchedEggsText = $0 }
+                                get: {
+                                    controller.draft.hatchedEggs.isEmpty
+                                        ? "\(controller.suggestedHatchedCount)"
+                                        : controller.draft.hatchedEggs
+                                },
+                                set: { controller.draft.hatchedEggs = $0 }
                             ))
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
@@ -139,6 +133,12 @@ struct HatchedForm1: View {
                             .stroke(Color(.systemGray4).opacity(0.4), lineWidth: 1)
                     )
 
+                    if controller.exceedsClutch {
+                        Text("That totals \(controller.totalAccountedFor) eggs, but the nest holds \(controller.nest.numberOfEggs).")
+                            .font(.footnote)
+                            .foregroundColor(Color(hex: "#FF383C"))
+                    }
+
                     Spacer(minLength: 40)
                 }
                 .padding(.horizontal)
@@ -147,15 +147,19 @@ struct HatchedForm1: View {
 
             // Next button
             Button {
-                // handle next
+                onNext()
             } label: {
                 Text("Next")
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(RoundedRectangle(cornerRadius: 28).fill(accentGreen))
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(controller.canSubmit ? accentGreen : Color(.systemGray3))
+                    )
             }
+            .disabled(!controller.canSubmit)
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -201,5 +205,9 @@ private struct GlassCloseButtonModifier: ViewModifier {
 }
 
 #Preview {
-    HatchedForm1()
+    HatchedForm1(
+        controller: HatchingPreviewFixtures.controller(),
+        onNext: {},
+        onCancel: {}
+    )
 }

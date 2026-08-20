@@ -135,6 +135,8 @@ struct ContentView: View {
                             ordinal: selection.ordinal,
                             sectionLabel: selection.sectionID,
                             controller: container.makeNestDetailController(nestID: selection.item.id),
+                            makeHatchingController: { container.makeHatchingController(nest: $0) },
+                            hatcheryName: hatchery.hatchery.name,
                             onClose: { presentedSheet = nil },
                             onDelete: {
                                 Task {

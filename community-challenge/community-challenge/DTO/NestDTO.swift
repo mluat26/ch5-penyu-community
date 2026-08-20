@@ -19,6 +19,11 @@ struct NestDTO: Codable, Sendable {
     let placementColumn: Int?
     let founderID: UUID?
     let nextInspectionDate: Date?
+    /// Read-only. Deliberately absent from the insert and update payloads: this
+    /// is a `timestamptz`, and the shared encoder writes every Date as
+    /// `yyyy-MM-dd` (SupabaseConfig.swift), so sending it would truncate an
+    /// audit timestamp to local midnight. Postgres supplies it.
+    let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -38,6 +43,7 @@ struct NestDTO: Codable, Sendable {
         case placementColumn = "placement_col"
         case founderID = "founder_id"
         case nextInspectionDate = "next_inspection_date"
+        case createdAt = "created_at"
     }
 }
 
@@ -129,7 +135,8 @@ extension NestDTO {
             eggsUnhatched: eggsUnhatched,
             placementRow: placementRow,
             placementColumn: placementColumn,
-            nextInspectionDate: nextInspectionDate
+            nextInspectionDate: nextInspectionDate,
+            createdAt: createdAt
         )
     }
 }

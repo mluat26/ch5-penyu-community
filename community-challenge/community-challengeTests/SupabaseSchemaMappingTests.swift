@@ -104,7 +104,8 @@ final class SupabaseSchemaMappingTests: XCTestCase {
             placementRow: 1,
             placementColumn: 2,
             founderID: nil,
-            nextInspectionDate: nextInspection
+            nextInspectionDate: nextInspection,
+            createdAt: nil
         )
 
         let nest = try dto.toEntity()
@@ -239,6 +240,92 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         XCTAssertEqual(reading.temperatureC, 31.2)
         XCTAssertNil(reading.alert)
         XCTAssertNil(reading.sensorStatus)
+    }
+
+    // MARK: - Hatching audit columns
+
+    func testNestDTOMapsCreatedAt() throws {
+        let data = Data(
+            """
+            {
+              "id": "\(UUID().uuidString)",
+              "hatchery_id": "\(UUID().uuidString)",
+              "number_of_eggs": 100,
+              "placement_row": 0,
+              "placement_col": 0,
+              "created_at": "2026-06-15T00:00:00Z"
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let nest = try decoder.decode(NestDTO.self, from: data).toEntity()
+
+        XCTAssertEqual(nest.createdAt, Date(timeIntervalSince1970: 1_781_481_600))
+    }
+
+    func testHatchingDTOMapsRecorderAndCreatedAt() throws {
+        let recorder = UUID()
+        let data = Data(
+            """
+            {
+              "id": "\(UUID().uuidString)",
+              "nest_id": "\(UUID().uuidString)",
+              "hatched_on": "2026-06-20T00:00:00Z",
+              "eggs_hatched": 90,
+              "eggs_rotten": 5,
+              "eggs_unhatched": 5,
+              "recorded_by": "\(recorder.uuidString)",
+              "created_at": "2026-06-21T00:00:00Z"
+            }
+            """.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let hatching = try decoder.decode(HatchingDTO.self, from: data).toEntity()
+
+        XCTAssertEqual(hatching.recordedBy, recorder)
+        XCTAssertNotNil(hatching.createdAt)
+    }
+
+    /// `recorded_by` is stamped by the assign_hatching_recorder trigger from
+    /// `auth.uid()`, and `created_at` by a column default. Sending either would
+    /// be ignored by Postgres -- and `created_at` is a `timestamptz` the shared
+    /// encoder would flatten to a bare `yyyy-MM-dd` on the way out. This is the
+    /// regression that would otherwise reach production in silence.
+    func testHatchingInsertOmitsServerOwnedColumns() throws {
+        let dto = RecordHatchingInput(
+            nestID: UUID(),
+            hatchedOn: Date(),
+            eggsHatched: 90,
+            eggsRotten: 5,
+            eggsUnhatched: 5
+        ).toDTO()
+
+        let object = try encodedObject(dto)
+
+        XCTAssertNil(object["recorded_by"])
+        XCTAssertNil(object["created_at"])
+        XCTAssertEqual(object["eggs_hatched"] as? Int, 90)
+    }
+
+    func testNestInsertAndUpdateOmitCreatedAt() throws {
+        let insert = try encodedObject(
+            CreateNestInput(
+                hatcheryID: UUID(),
+                founderID: nil,
+                numberOfEggs: 100,
+                dateEggsLaid: Date(),
+                datePredictedHatch: nil,
+                placementRow: 0,
+                placementColumn: 0,
+                nextInspectionDate: nil
+            ).toDTO()
+        )
+
+        XCTAssertNil(insert["created_at"])
     }
 
     private func encodedObject<T: Encodable>(_ value: T) throws -> [String: Any] {

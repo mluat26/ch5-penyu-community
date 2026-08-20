@@ -12,6 +12,11 @@ struct NestDetailSheet: View {
     let ordinal: Int
     let sectionLabel: String
     @Bindable var controller: NestDetailController
+    /// Just the one thing this sheet needs from the composition root, rather
+    /// than the root itself: the measurement harness has no AppContainer and
+    /// should not have to build a Supabase client to lay out a sheet.
+    let makeHatchingController: (NestEntity) -> HatchingController
+    let hatcheryName: String
     let onClose: () -> Void
     let onDelete: () -> Void
 
@@ -38,9 +43,28 @@ struct NestDetailSheet: View {
     /// Holds the nest after a save so the rows show the new values without
     /// refetching the section behind this sheet.
     @State private var editedNest: NestEntity?
-    /// Drives one full-screen map for both modes: editing picks a pin,
-    /// reading only looks at the stored one.
-    @State private var isShowingLocationMap = false
+    /// Every full-screen destination this sheet owns, in one enum.
+    ///
+    /// SwiftUI honours a single `.fullScreenCover` per view -- a second
+    /// modifier silently loses -- so the map and the hatchling flow have to
+    /// share one, the same way ContentView funnels its sheets through
+    /// `HomeSheet`.
+    private enum Cover: Identifiable {
+        case locationMap
+        case hatchFlow(HatchedFlowView.Step)
+
+        var id: String {
+            switch self {
+            case .locationMap: "locationMap"
+            case let .hatchFlow(step): "hatchFlow-\(step)"
+            }
+        }
+    }
+
+    @State private var presentedCover: Cover?
+    /// Built on demand: it needs the nest, and a nest that is never hatched
+    /// should never pay for one.
+    @State private var hatchingController: HatchingController?
 
     private var nest: NestEntity { editedNest ?? item.nest }
 
@@ -54,10 +78,9 @@ struct NestDetailSheet: View {
                 ScrollView {
                     content(scale: scale)
                         .frame(width: Layout.sheetWidth * scale, alignment: .topLeading)
-                        // Clears the floating Hatched bar in read mode; in edit
-                        // mode only the home indicator has to be cleared, since
-                        // the sheet ignores the safe area.
-                        .padding(.bottom, (isEditing ? 34 : 96) * scale)
+                        // Clears the floating Hatched bar, which both modes
+                        // now show.
+                        .padding(.bottom, 96 * scale)
                 }
                 .scrollIndicators(.hidden)
                 .safeAreaInset(edge: .top, spacing: 0) {
@@ -66,14 +89,13 @@ struct NestDetailSheet: View {
                         .background(Color(uiColor: .systemGroupedBackground))
                 }
 
-                // Not in 199:3729, but kept deliberately: the action it stands
-                // for is still to be built, and dropping it would lose the
-                // placeholder rather than a decoration.
-                if !isEditing {
-                    hatchedBar(scale: scale)
-                        .frame(width: geometry.size.width, alignment: .center)
-                        .offset(y: geometry.size.height - 96 * scale)
-                }
+                // Shown in both modes. It was read-only while it did nothing;
+                // now it is the only way into the hatchling flow, and hiding it
+                // behind edit mode would make a recorded hatch unreachable for
+                // anyone who happened to be editing.
+                hatchedBar(scale: scale)
+                    .frame(width: geometry.size.width, alignment: .center)
+                    .offset(y: geometry.size.height - 96 * scale)
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
@@ -87,22 +109,49 @@ struct NestDetailSheet: View {
         // a preview, editing opens it as the picker the add-nest flow uses.
         // Presenting from inside this sheet is the pattern already in use, so
         // nothing has to wait on another screen's dismissal.
-        .fullScreenCover(isPresented: $isShowingLocationMap) {
-            NestLocationPickerView(
-                initialLatitude: isEditing ? controller.draftLatitude : nest.latitude,
-                initialLongitude: isEditing ? controller.draftLongitude : nest.longitude,
-                initialAddress: isEditing
-                    ? (controller.draftLocation.isEmpty ? nil : controller.draftLocation)
-                    : nest.locationAddress,
-                isReadOnly: !isEditing,
-                onCancel: { isShowingLocationMap = false },
-                onSave: { latitude, longitude, address in
-                    controller.draftLatitude = latitude
-                    controller.draftLongitude = longitude
-                    controller.draftLocation = address ?? ""
-                    isShowingLocationMap = false
+        .fullScreenCover(item: $presentedCover) { cover in
+            switch cover {
+            case .locationMap:
+                NestLocationPickerView(
+                    initialLatitude: isEditing ? controller.draftLatitude : nest.latitude,
+                    initialLongitude: isEditing ? controller.draftLongitude : nest.longitude,
+                    initialAddress: isEditing
+                        ? (controller.draftLocation.isEmpty ? nil : controller.draftLocation)
+                        : nest.locationAddress,
+                    isReadOnly: !isEditing,
+                    onCancel: { presentedCover = nil },
+                    onSave: { latitude, longitude, address in
+                        controller.draftLatitude = latitude
+                        controller.draftLongitude = longitude
+                        controller.draftLocation = address ?? ""
+                        presentedCover = nil
+                    }
+                )
+
+            case let .hatchFlow(step):
+                if let hatchingController {
+                    HatchedFlowView(
+                        controller: hatchingController,
+                        detailController: controller,
+                        item: item,
+                        ordinal: ordinal,
+                        sectionLabel: sectionLabel,
+                        hatcheryName: hatcheryName,
+                        startAt: step,
+                        onClose: { presentedCover = nil },
+                        onFinish: {
+                            presentedCover = nil
+                            // The sheet cannot be dismissed while its own cover
+                            // is still on screen, so the close waits a tick for
+                            // the cover to come down.
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(350))
+                                onClose()
+                            }
+                        }
+                    )
                 }
-            )
+            }
         }
         .confirmationDialog(
             "Delete this nest?",
@@ -519,15 +568,26 @@ struct NestDetailSheet: View {
         .buttonStyle(.plain)
     }
 
-    /// The floating "Hatched" action, full width like the other section cards.
+    /// The floating action, full width like the other section cards.
     ///
-    /// Read mode only: recording the result is not an edit to the record.
+    /// One button, two jobs, because a nest has only one final tally: before
+    /// there is one it records the hatch, afterwards it opens the report. The
+    /// database refuses a second tally outright, so offering "Hatched" again
+    /// would be offering something that cannot happen.
     private func hatchedBar(scale: CGFloat) -> some View {
-        Text("Hatched")
-            .font(.system(size: 17 * scale, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
-            .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
+        Button {
+            if hatchingController == nil {
+                hatchingController = makeHatchingController(nest)
+            }
+            presentedCover = .hatchFlow(controller.hatching == nil ? .details : .report)
+        } label: {
+            Text(controller.hatching == nil ? "Hatched" : "View report")
+                .font(.system(size: 17 * scale, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
+                .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Building blocks
@@ -672,7 +732,7 @@ struct NestDetailSheet: View {
             : (nest.locationAddress ?? "—")
 
         return Button {
-            isShowingLocationMap = true
+            presentedCover = .locationMap
         } label: {
             HStack(spacing: 0) {
                 Text("Location")

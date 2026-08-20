@@ -95,6 +95,11 @@ private actor StubProfileRepository: ProfileRepository {
 
     func fetchProfile(id: UUID) async throws -> ProfileEntity? { nil }
 
+    /// Added to `ProfileRepository` for the members list without reaching this
+    /// double, which left the whole test target unbuildable. Unrelated to the
+    /// hatching work; fixed here because nothing else could run until it was.
+    func fetchOrganizationMembers(organizationID: UUID) async throws -> [ProfileEntity] { [] }
+
     func updateCurrentProfile(
         displayName: String?,
         appleEmail: String?

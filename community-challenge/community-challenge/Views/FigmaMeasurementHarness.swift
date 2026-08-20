@@ -67,6 +67,8 @@ enum FigmaMeasurementHarness {
                     ordinal: 23,
                     sectionLabel: "B1",
                     controller: Fixtures.nestDetailController,
+                    makeHatchingController: { HatchingPreviewFixtures.controller(for: $0) },
+                    hatcheryName: "Hatchery_01",
                     onClose: {},
                     onDelete: {}
                 )
@@ -242,6 +244,12 @@ private struct StubIoTDataRepository: IoTDataRepository {
     /// fabricated row would quietly corrupt a measurement run.
     func fetch(id: UUID) async throws -> IoTDataEntity {
         throw RepositoryError.notFound(resource: "IoTData", id: id)
+    }
+
+    /// Same reasoning: the harness measures layout, not aggregates. Nil renders
+    /// the "--" state, which is a layout worth measuring in its own right.
+    func temperatureStats(nestID: UUID, from: Date, to: Date) async throws -> NestTemperatureStats? {
+        nil
     }
 }
 

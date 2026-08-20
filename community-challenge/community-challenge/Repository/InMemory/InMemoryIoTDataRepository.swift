@@ -33,6 +33,32 @@ actor InMemoryIoTDataRepository: IoTDataRepository {
             .sorted { $0.timestamp > $1.timestamp }
     }
 
+    /// Mirrors the SQL's half-open window exactly. `DateInterval.contains` is
+    /// closed at both ends, so it is deliberately not reused here -- the two
+    /// implementations disagreeing on a boundary reading is precisely the drift
+    /// this double exists to catch.
+    func temperatureStats(
+        nestID: UUID,
+        from: Date,
+        to: Date
+    ) async throws -> NestTemperatureStats? {
+        let temperatures = readings.values
+            .filter { $0.nestID == nestID && $0.timestamp >= from && $0.timestamp < to }
+            .map(\.temperatureC)
+
+        guard !temperatures.isEmpty else {
+            // Readable nest, empty window. There is no RLS in memory, so the
+            // nil-the-whole-result case cannot arise here.
+            return NestTemperatureStats(avgC: nil, maxC: nil, minC: nil)
+        }
+
+        return NestTemperatureStats(
+            avgC: temperatures.reduce(0, +) / Double(temperatures.count),
+            maxC: temperatures.max(),
+            minC: temperatures.min()
+        )
+    }
+
     func seed(_ newReadings: [IoTDataEntity]) async {
         for reading in newReadings {
             readings[reading.id] = reading

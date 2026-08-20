@@ -31,6 +31,11 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     /// When the next inspection is expected. Nil once the nest has hatched,
     /// which is the terminal state: nothing further is scheduled.
     var nextInspectionDate: Date?
+    /// When the nest was written down, which is not when the eggs were laid --
+    /// `dateEggsLaid` is what the ranger reports, this is what the database
+    /// recorded. Nil for nests created before the column existed, so the report
+    /// shows nothing rather than claiming they were logged today.
+    var createdAt: Date? = nil
 
     /// Eggs neither hatched nor recorded rotten, so still incubating.
     ///

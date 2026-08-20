@@ -91,3 +91,14 @@ enum NestTemperature {
         temperatureC.map { String(format: "%.1f°C", $0) } ?? "--"
     }
 }
+
+/// What `nest_temperature_stats` reports for one nest over one window.
+///
+/// All three are optional because the window may hold no readings -- which is
+/// the ordinary state for any nest whose logger has never reported. That is the
+/// "--" the designs show, not a zero: `0°C` would render as a real measurement.
+struct NestTemperatureStats: Hashable, Sendable {
+    let avgC: Double?
+    let maxC: Double?
+    let minC: Double?
+}
