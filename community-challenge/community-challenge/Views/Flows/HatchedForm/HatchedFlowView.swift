@@ -19,9 +19,12 @@ struct HatchedFlowView: View {
         case report
     }
 
-    @Bindable var controller: HatchingController
-    @Bindable var detailController: NestDetailController
-    let item: NestDashboardItem
+    /// Plain references, not `@Bindable`: this view never writes through a
+    /// binding, it only reads and hands both down. The screens that do bind --
+    /// the two form steps -- declare `@Bindable` themselves. `@Observable`
+    /// tracks reads without it.
+    let controller: HatchingController
+    let detailController: NestDetailController
     let ordinal: Int
     let sectionLabel: String
     let hatcheryName: String
@@ -35,7 +38,6 @@ struct HatchedFlowView: View {
     init(
         controller: HatchingController,
         detailController: NestDetailController,
-        item: NestDashboardItem,
         ordinal: Int,
         sectionLabel: String,
         hatcheryName: String,
@@ -45,7 +47,6 @@ struct HatchedFlowView: View {
     ) {
         self.controller = controller
         self.detailController = detailController
-        self.item = item
         self.ordinal = ordinal
         self.sectionLabel = sectionLabel
         self.hatcheryName = hatcheryName

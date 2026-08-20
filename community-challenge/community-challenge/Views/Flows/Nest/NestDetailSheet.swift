@@ -51,12 +51,21 @@ struct NestDetailSheet: View {
     /// `HomeSheet`.
     private enum Cover: Identifiable {
         case locationMap
-        case hatchFlow(HatchedFlowView.Step)
+        /// Carries the controller rather than leaving the builder to read it
+        /// out of `@State`.
+        ///
+        /// It used to be an `if let` over a separate `@State` property, set in
+        /// the same button action that set this one. The cover's content
+        /// closure captures the view before that second write lands, so it read
+        /// nil, the ViewBuilder produced an EmptyView, and the flow presented
+        /// as a blank white screen. A presented value that carries its own
+        /// dependency cannot get out of step with it.
+        case hatchFlow(HatchedFlowView.Step, HatchingController)
 
         var id: String {
             switch self {
             case .locationMap: "locationMap"
-            case let .hatchFlow(step): "hatchFlow-\(step)"
+            case let .hatchFlow(step, _): "hatchFlow-\(step)"
             }
         }
     }
@@ -128,29 +137,26 @@ struct NestDetailSheet: View {
                     }
                 )
 
-            case let .hatchFlow(step):
-                if let hatchingController {
-                    HatchedFlowView(
-                        controller: hatchingController,
-                        detailController: controller,
-                        item: item,
-                        ordinal: ordinal,
-                        sectionLabel: sectionLabel,
-                        hatcheryName: hatcheryName,
-                        startAt: step,
-                        onClose: { presentedCover = nil },
-                        onFinish: {
-                            presentedCover = nil
-                            // The sheet cannot be dismissed while its own cover
-                            // is still on screen, so the close waits a tick for
-                            // the cover to come down.
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(350))
-                                onClose()
-                            }
+            case let .hatchFlow(step, flowController):
+                HatchedFlowView(
+                    controller: flowController,
+                    detailController: controller,
+                    ordinal: ordinal,
+                    sectionLabel: sectionLabel,
+                    hatcheryName: hatcheryName,
+                    startAt: step,
+                    onClose: { presentedCover = nil },
+                    onFinish: {
+                        presentedCover = nil
+                        // The sheet cannot be dismissed while its own cover is
+                        // still on screen, so the close waits a tick for the
+                        // cover to come down.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            onClose()
                         }
-                    )
-                }
+                    }
+                )
             }
         }
         .confirmationDialog(
@@ -576,10 +582,15 @@ struct NestDetailSheet: View {
     /// would be offering something that cannot happen.
     private func hatchedBar(scale: CGFloat) -> some View {
         Button {
-            if hatchingController == nil {
-                hatchingController = makeHatchingController(nest)
-            }
-            presentedCover = .hatchFlow(controller.hatching == nil ? .details : .report)
+            // Reused across openings so a half-filled form survives closing the
+            // flow, but passed along explicitly so the cover never has to look
+            // it up.
+            let flowController = hatchingController ?? makeHatchingController(nest)
+            hatchingController = flowController
+            presentedCover = .hatchFlow(
+                controller.hatching == nil ? .details : .report,
+                flowController
+            )
         } label: {
             Text(controller.hatching == nil ? "Hatched" : "View report")
                 .font(.system(size: 17 * scale, weight: .semibold))
