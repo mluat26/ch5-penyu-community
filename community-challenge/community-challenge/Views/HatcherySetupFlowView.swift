@@ -18,6 +18,9 @@ struct HatcherySetupFlowView: View {
     let onCancel: () -> Void
 
     @State private var router = HatcherySetupRouter()
+    /// Set once the hatchery is saved, so the confirmation screen holds the
+    /// finished session until the user chooses to go to it.
+    @State private var completedHatchery: HatcherySessionState?
 
     init(
         controller: HatcherySetupController,
@@ -41,23 +44,31 @@ struct HatcherySetupFlowView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        // The session travels inside the presentation item rather than being
+        // read back from state, and a cover rather than another route: setup
+        // is finished and written by this point, so there is nothing left on
+        // the stack worth going back to.
+        .fullScreenCover(item: $completedHatchery) { hatchery in
+            HatcheryReadyView { onSave(hatchery) }
+        }
     }
 
     @ViewBuilder
     private func rootView(router: HatcherySetupRouter) -> some View {
         switch entryPoint {
         case .firstHatch:
-            CreateFirstHatchView { name in
-                controller.setName(name)
-                router.push(.scan)
-            }
+            CreateFirstHatchView(
+                onCreate: { name in
+                    await continueWithNewHatchery(named: name, router: router)
+                },
+                onBack: onCancel
+            )
 
         case .additionalHatch:
             CreateFirstHatchView(
                 style: .additionalHatch,
                 onCreate: { name in
-                    controller.setName(name)
-                    router.push(.scan)
+                    await continueWithNewHatchery(named: name, router: router)
                 },
                 onBack: onCancel
             )
@@ -102,7 +113,7 @@ struct HatcherySetupFlowView: View {
                             boundary: boundary,
                             sandRegion: sandRegion
                         ) else { return }
-                        router.push(.dimensions)
+                        advanceAfterBoundary(router: router)
                     }
                 )
             }
@@ -155,14 +166,62 @@ struct HatcherySetupFlowView: View {
                 controller.skipScanning()
                 router.push(.dimensions)
             },
-            onCancel: entryPoint == .rescan ? onCancel : nil
+            // `.scan` is this flow's root only for a rescan; the two creation
+            // entry points always push it on top of their name screen.
+            onBack: entryPoint == .rescan ? onCancel : router.pop
         )
+    }
+
+    /// A rescan is only re-photographing a hatchery that already exists, so it
+    /// keeps the dimensions already saved and goes straight to the preview.
+    /// Re-entering them would be busywork, and any change would move the grid
+    /// out from under nests that are stored against it.
+    @MainActor
+    private func advanceAfterBoundary(router: HatcherySetupRouter) {
+        guard entryPoint == .rescan else {
+            router.push(.dimensions)
+            return
+        }
+
+        guard controller.generateGrid(for: controller.draft.dimension) else {
+            // `generateGrid` has already put the reason on the controller, and
+            // the dimension screen is where it can be corrected.
+            router.push(.dimensions)
+            return
+        }
+
+        router.push(.preview)
+    }
+
+    @MainActor
+    private func continueWithNewHatchery(
+        named name: String,
+        router: HatcherySetupRouter
+    ) async -> String? {
+        do {
+            try await controller.validateNewHatcheryName(name)
+            try Task.checkCancellation()
+            controller.setName(name)
+            router.push(.scan)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     private func saveHatchery() {
         Task {
             guard let hatchery = await controller.completeSetup() else { return }
-            onSave(hatchery)
+
+            // A rescan only re-photographs a hatchery the user already has,
+            // so it returns straight to it. "Your hatchery is ready" belongs
+            // to setting one up, not to replacing its photo.
+            guard entryPoint != .rescan else {
+                onSave(hatchery)
+                return
+            }
+
+            completedHatchery = hatchery
         }
     }
 }

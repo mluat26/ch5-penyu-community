@@ -131,13 +131,34 @@ struct HatcheryDimensionView: View {
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
+            } else if let skippedScanGrid {
+                // Skipping a camera scan should not leave the hatchery area
+                // visually empty. Show the same section geometry that Next
+                // will save, but deliberately omit every image layer.
+                HatcherySkippedScanGrid(
+                    rows: skippedScanGrid.rows,
+                    columns: skippedScanGrid.columns
+                )
+                .padding(8)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityLabel(
             showsCapturedImage
                 ? "Captured hatchery area"
-                : "Hatchery area awaiting a scan"
+                : "Hatchery grid without a scan image"
+        )
+    }
+
+    /// The skipped-scan state still has a valid full-image boundary. Build a
+    /// lightweight visual preview from the dimensions currently in the form;
+    /// the persisted grid is still generated only when the user taps Next.
+    private var skippedScanGrid: HatcheryGrid? {
+        guard let enteredDimension else { return nil }
+        return HatcheryGridGenerator.generate(
+            dimension: enteredDimension,
+            boundary: .fullImage,
+            sandRegion: sandRegion
         )
     }
 
@@ -278,110 +299,35 @@ struct HatcheryDimensionView: View {
     }
 }
 
-enum HatcherySetupPalette {
-    static let warmGlow = Color(hex: "#FEF6ED")
-    static let buttonForeground = Color(hex: "#FAF8F4")
-    static let surface = Color(hex: "#F1F1F1")
-    static let border = Color(hex: "#EBEBEB")
-    static let gridOverlay = Color(hex: "#003C22")
-}
+/// A photo-free grid for the "Skip for now" dimension screen. `Canvas` keeps
+/// the live preview smooth even for a large, valid hatchery grid.
+private struct HatcherySkippedScanGrid: View {
+    let rows: Int
+    let columns: Int
 
-struct HatcherySetupBackdrop: View {
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                Color.white
+        Canvas { context, size in
+            let gap: CGFloat = 2
+            let horizontalGaps = CGFloat(max(columns - 1, 0)) * gap
+            let verticalGaps = CGFloat(max(rows - 1, 0)) * gap
+            let cellWidth = max(0, (size.width - horizontalGaps) / CGFloat(max(columns, 1)))
+            let cellHeight = max(0, (size.height - verticalGaps) / CGFloat(max(rows, 1)))
+            let cellColor = HatcherySetupPalette.gridOverlay.opacity(0.34)
 
-                Circle()
-                    .fill(HatcherySetupPalette.warmGlow)
-                    .frame(width: 621, height: 621)
-                    .blur(radius: 100)
-                    .position(x: geometry.size.width / 2, y: -67.5)
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let rect = CGRect(
+                        x: CGFloat(column) * (cellWidth + gap),
+                        y: CGFloat(row) * (cellHeight + gap),
+                        width: cellWidth,
+                        height: cellHeight
+                    )
+                    context.fill(Path(rect), with: .color(cellColor))
+                }
             }
         }
-        .allowsHitTesting(false)
-    }
-}
-
-struct HatcherySetupImage: View {
-    let image: UIImage
-    let usesMockCrop: Bool
-
-    var body: some View {
-        GeometryReader { geometry in
-            if usesMockCrop {
-                // Figma's mock photo uses a fixed zoom and offset.
-                Image(uiImage: image)
-                    .resizable()
-                    .frame(
-                        width: geometry.size.width * 1.5821,
-                        height: geometry.size.height * 1.6213
-                    )
-                    .offset(
-                        x: -geometry.size.width * 0.2767,
-                        y: -geometry.size.height * 0.4283
-                    )
-            } else {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-            }
-        }
-        .clipped()
-    }
-}
-
-
-struct HatcherySetupHeader: View {
-    let eyebrow: String
-    let hatchName: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(eyebrow)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(Color(uiColor: .systemGray))
-                .frame(height: 25)
-
-            Text(hatchName)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(Color.appGreenPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(height: 41)
-        }
-        .multilineTextAlignment(.center)
-        .frame(width: 321, height: 66)
-    }
-}
-
-struct HatcherySetupButton: View {
-    let title: String
-    let isPrimary: Bool
-    let action: () -> Void
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-    }
-
-    var body: some View {
-        Button(action: action) {
-            // The pill has to be drawn *inside* the label, and the content
-            // shape stated explicitly. With `.plain`, a bare Text only accepts
-            // taps on its glyphs, and a background applied outside the Button
-            // is decoration the hit test never sees — which left most of this
-            // 370 pt-wide button dead.
-            Text(title)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isPrimary ? HatcherySetupPalette.buttonForeground : .black)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(isPrimary ? Color.appGreenPrimary : Color(uiColor: .systemGray6))
-                .clipShape(shape)
-                .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .frame(height: 55)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 

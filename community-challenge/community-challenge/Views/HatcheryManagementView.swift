@@ -1,18 +1,31 @@
 import SwiftUI
 
 /// Full-screen hatchery management for the backend-backed list of hatcheries.
-/// It follows Figma nodes 94:1514 and 94:1614, while its cards intentionally
-/// render live dashboard values instead of the static mock values in the file.
+/// It follows Figma node 129:1803 and its 122:3437/122:3333 detail states,
+/// while cards intentionally render live dashboard values instead of the
+/// static mock values in the file.
 struct HatcheryManagementView: View {
     @Bindable var controller: HatcheryListController
     let onSelect: (HatcherySessionState) -> Void
     let onCreateNew: () -> Void
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
+    /// Drives the profile sheet this screen presents itself, so opening it
+    /// does not have to bounce back through the dashboard first.
+    var profileController: ProfileController?
+    /// Profile actions that outlive this screen. Each one has to unwind the
+    /// management cover before it can run, so they are handed upward rather
+    /// than presented here: the invite screen is a full page, and signing out
+    /// or deleting the account tears down the session this cover sits in.
+    var onShowInvite: ((OrganizationInviteEntity) -> Void)?
+    var onSignOut: (() -> Void)?
+    var onDeleteAccount: (() async throws -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedHatchery: HatcheryEntity?
-    @State private var selectedHatcheryStartsRenaming = false
+    /// Both sheets share one modifier: SwiftUI keeps only the last `.sheet`
+    /// attached to a view, so a second one would silently never present.
+    @State private var presentedSheet: ManagementSheet?
+    @State private var selectedHatcheryStartsEditing = false
     @State private var isShowingHatcheryMenu = false
 
     init(
@@ -20,13 +33,21 @@ struct HatcheryManagementView: View {
         onSelect: @escaping (HatcherySessionState) -> Void,
         onCreateNew: @escaping () -> Void,
         onRescan: @escaping (HatcheryEntity) -> Void = { _ in },
-        onRename: @escaping (HatcheryEntity) -> Void = { _ in }
+        onRename: @escaping (HatcheryEntity) -> Void = { _ in },
+        profileController: ProfileController? = nil,
+        onShowInvite: ((OrganizationInviteEntity) -> Void)? = nil,
+        onSignOut: (() -> Void)? = nil,
+        onDeleteAccount: (() async throws -> Void)? = nil
     ) {
         self.controller = controller
         self.onSelect = onSelect
         self.onCreateNew = onCreateNew
         self.onRescan = onRescan
         self.onRename = onRename
+        self.profileController = profileController
+        self.onShowInvite = onShowInvite
+        self.onSignOut = onSignOut
+        self.onDeleteAccount = onDeleteAccount
     }
 
     var body: some View {
@@ -72,34 +93,50 @@ struct HatcheryManagementView: View {
         .preferredColorScheme(.light)
         .toolbar(.hidden, for: .navigationBar)
         .task { await controller.loadManagement() }
-        .sheet(item: $selectedHatchery) { hatchery in
-            HatcheryManagementDetailSheet(
-                hatchery: hatchery,
-                controller: controller,
-                onRescan: onRescan,
-                onRename: onRename,
-                startsRenaming: selectedHatcheryStartsRenaming
-            )
-            // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
-            // fixed detent. 679pt of content therefore produces the Figma
-            // reference's 713pt visible sheet.
-            .presentationDetents([.height(679)])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(34)
-            .presentationSizing(.page)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .hatcheryDetail(let hatchery):
+                HatcheryManagementDetailSheet(
+                    hatchery: hatchery,
+                    controller: controller,
+                    onRescan: onRescan,
+                    onRename: onRename,
+                    startsEditing: selectedHatcheryStartsEditing
+                )
+                // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
+                // fixed detent. 679pt of content therefore produces the Figma
+                // reference's 713pt visible sheet.
+                .presentationDetents([.height(679)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+                .presentationSizing(.page)
+
+            case .profile(let profileController):
+                ProfileSheetView(
+                    controller: profileController,
+                    onClose: { presentedSheet = nil },
+                    onSignOut: {
+                        presentedSheet = nil
+                        onSignOut?()
+                    },
+                    onShowInvite: { invite in
+                        presentedSheet = nil
+                        onShowInvite?(invite)
+                    },
+                    onDeleteAccount: {
+                        try await onDeleteAccount?()
+                        presentedSheet = nil
+                    }
+                )
+                .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+            }
         }
     }
 
     private func managementBackdrop(scale: CGFloat) -> some View {
-        Color.white
-            .overlay(alignment: .topLeading) {
-                Circle()
-                    .fill(Color(hex: "#FEF6ED"))
-                    .frame(width: 621 * scale, height: 621 * scale)
-                    .blur(radius: 50 * scale)
-                    .offset(x: -110 * scale, y: -378 * scale)
-            }
-            .allowsHitTesting(false)
+        HatcheryWarmBackdrop(scale: scale)
     }
 
     private func managementCanvas(scale: CGFloat) -> some View {
@@ -134,15 +171,12 @@ struct HatcheryManagementView: View {
                     .offset(x: 16 * scale, y: 748 * scale)
             }
 
-            Button(action: onCreateNew) {
-                Text("Add new hatchery")
-                    .font(.system(size: 17 * scale, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#FAF8F4"))
-                    .frame(width: 370 * scale, height: 55 * scale)
-                    .background(Color.appGreenPrimary, in: Capsule())
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
+            HatcheryPrimaryButton(
+                title: "Add new hatchery",
+                scale: scale,
+                action: onCreateNew
+            )
+            .frame(width: 370 * scale, height: 55 * scale)
             .offset(x: 16 * scale, y: 795 * scale)
             .accessibilityHint("Creates a new hatchery")
 
@@ -164,11 +198,12 @@ struct HatcheryManagementView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 12 * scale) {
-                toolbarIcon(systemName: "bell", label: "Notifications", scale: scale)
-                toolbarIcon(systemName: "person", label: "Profile", scale: scale)
-            }
-            .frame(width: 156 * scale, height: 48 * scale)
+            HatcheryToolbarAccessories(
+                scale: scale,
+                onProfile: profileController.map { controller in
+                    { presentedSheet = .profile(controller) }
+                }
+            )
         }
         .frame(width: 386 * scale, height: 48 * scale)
     }
@@ -206,19 +241,6 @@ struct HatcheryManagementView: View {
 
     private var menuAnimation: Animation? {
         reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.12)
-    }
-
-    private func toolbarIcon(
-        systemName: String,
-        label: String,
-        scale: CGFloat
-    ) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 20 * scale, weight: .regular))
-            .foregroundStyle(.black)
-            .frame(width: 48 * scale, height: 48 * scale)
-            .glassEffect(.regular, in: .circle)
-            .accessibilityLabel(label)
     }
 
     private func cards(scale: CGFloat) -> some View {
@@ -308,7 +330,7 @@ struct HatcheryManagementView: View {
             .accessibilityLabel("\(hatchery.name) details")
             .accessibilityHint("Shows hatchery details")
 
-            Button { presentDetails(for: hatchery, startsRenaming: true) } label: {
+            Button { presentDetails(for: hatchery, startsEditing: true) } label: {
                 Image(systemName: "pencil")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(.black)
@@ -326,10 +348,10 @@ struct HatcheryManagementView: View {
 
     private func presentDetails(
         for hatchery: HatcheryEntity,
-        startsRenaming: Bool = false
+        startsEditing: Bool = false
     ) {
-        selectedHatcheryStartsRenaming = startsRenaming
-        selectedHatchery = hatchery
+        selectedHatcheryStartsEditing = startsEditing
+        presentedSheet = .hatcheryDetail(hatchery)
     }
 
     private func temperaturePill(_ value: Double?, scale: CGFloat) -> some View {
@@ -370,30 +392,6 @@ struct HatcheryManagementView: View {
     }
 }
 
-/// The visual label for Figma's Popup Button at node 94:1374.
-///
-/// Interaction is intentionally attached to HomeView's header so the complete
-/// selector area uses one stable touch route on both device and simulator.
-struct HatcherySelectorLabel: View {
-    let hatcheryName: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(hatcheryName)
-                .font(.title3)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.title3)
-        }
-        .foregroundStyle(Color.appGreenPrimary)
-        .frame(width: 148, height: 48, alignment: .leading)
-        .accessibilityHidden(true)
-    }
-}
-
 /// Figma node 94:1440 is a frosted 250 × 241pt menu. It intentionally uses
 /// SwiftUI Buttons instead of a system popover: the design stays pixel-stable
 /// and the presentation is owned by ContentView rather than a UIKit host view.
@@ -413,7 +411,12 @@ struct HatcheryQuickMenu: View {
 
     private let referenceCanvasWidth: CGFloat = 402
     private let menuWidth: CGFloat = 250
-    private let menuHeight: CGFloat = 241
+    /// The hatchery list grows as hatcheries are added, so the menu sizes to
+    /// its content rather than to Figma's three-hatchery height. Past this cap
+    /// the list scrolls, which keeps Management and Add hatchery reachable
+    /// instead of pushing them off the bottom.
+    private let maxHatcheryListHeight: CGFloat = 264
+    @State private var hatcheryListHeight: CGFloat = 0
 
     var body: some View {
         GeometryReader { geometry in
@@ -460,13 +463,25 @@ struct HatcheryQuickMenu: View {
 
     private func menu(width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            ForEach(displayedHatcheries) { hatchery in
-                hatcheryRow(hatchery)
-            }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(displayedHatcheries) { hatchery in
+                        hatcheryRow(hatchery)
+                    }
 
-            ForEach(unavailableHatcheryNames, id: \.self) { name in
-                unavailableRow(name)
+                    ForEach(unavailableHatcheryNames, id: \.self) { name in
+                        unavailableRow(name)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    hatcheryListHeight = height
+                }
             }
+            // Sizes to the rows until they would overflow, then scrolls.
+            .frame(height: min(max(hatcheryListHeight, 44), maxHatcheryListHeight))
+            .scrollBounceBehavior(.basedOnSize)
 
             Divider()
                 .padding(.horizontal, 16)
@@ -487,7 +502,8 @@ struct HatcheryQuickMenu: View {
             }
         }
         .padding(.vertical, 4)
-        .frame(width: width, height: menuHeight)
+        // Height follows the content; only the width is fixed.
+        .frame(width: width)
         // Node 94:1440 uses Apple's "Liquid Glass Regular Medium" surface.
         // `glassEffect` owns the system border, blur, and shadow together;
         // combining it with a Material/hand-drawn border double-renders glass.
@@ -565,35 +581,49 @@ struct HatcheryQuickMenu: View {
     }
 }
 
-/// The hatchery detail sheet from Figma node 116:1915. It keeps information,
-/// re-scanning, and rename actions together without navigating away from
-/// Management.
+/// Management's Figma detail/edit sheet pair:
+/// The sheets this screen can show, as one value, so they can share a single
+/// `.sheet` modifier.
+private enum ManagementSheet: Identifiable {
+    case hatcheryDetail(HatcheryEntity)
+    case profile(ProfileController)
+
+    var id: String {
+        switch self {
+        case .hatcheryDetail(let hatchery): hatchery.id.uuidString
+        case .profile: "profile"
+        }
+    }
+}
+
+/// 122:3437 is the read-only hatchery detail, and 122:3333 is its edit state.
+/// Both modes live in one native sheet so the edit transition keeps the same
+/// presentation, drag affordance, and underlying Management context.
 private struct HatcheryManagementDetailSheet: View {
     let hatchery: HatcheryEntity
     let controller: HatcheryListController
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
-    let startsRenaming: Bool
+    let startsEditing: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
-    @State private var isRenaming: Bool
-    @FocusState private var isNameFocused: Bool
+    @State private var isEditing: Bool
 
     init(
         hatchery: HatcheryEntity,
         controller: HatcheryListController,
         onRescan: @escaping (HatcheryEntity) -> Void,
         onRename: @escaping (HatcheryEntity) -> Void,
-        startsRenaming: Bool
+        startsEditing: Bool
     ) {
         self.hatchery = hatchery
         self.controller = controller
         self.onRescan = onRescan
         self.onRename = onRename
-        self.startsRenaming = startsRenaming
+        self.startsEditing = startsEditing
         _name = State(initialValue: hatchery.name)
-        _isRenaming = State(initialValue: startsRenaming)
+        _isEditing = State(initialValue: startsEditing)
     }
 
     var body: some View {
@@ -607,66 +637,107 @@ private struct HatcheryManagementDetailSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     sheetHeader(contentWidth: contentWidth)
 
-                    if isRenaming {
-                        renameForm(contentWidth: contentWidth)
-                            .padding(.top, 24)
+                    if isEditing {
+                        editingContent(contentWidth: contentWidth)
+                            .padding(.top, 10)
                     } else {
-                        rescanAction(contentWidth: contentWidth)
-                            .padding(.top, 22)
-
-                        informationSection(contentWidth: contentWidth)
-                            .padding(.top, 24)
+                        informationSection(
+                            contentWidth: contentWidth,
+                            isEditing: false
+                        )
+                        .padding(.top, 10)
                     }
+
+                    Spacer(minLength: 0)
                 }
                 .frame(width: contentWidth, alignment: .leading)
                 .padding(.top, 14)
             }
         }
         .preferredColorScheme(.light)
-        .onAppear {
-            guard startsRenaming else { return }
-            DispatchQueue.main.async {
-                isNameFocused = true
-            }
-        }
     }
 
     private func sheetHeader(contentWidth: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            Button(action: dismiss.callAsFunction) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(.black)
-                    .frame(width: 44, height: 44)
-                    .background(.white, in: Circle())
-                    .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-
-            Spacer(minLength: 0)
-
+        ZStack {
             Text(hatchery.name)
                 .font(.system(size: 17, weight: .semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 0)
+            HStack(spacing: 0) {
+                sheetToolbarButton(
+                    systemName: "xmark",
+                    isProminent: false,
+                    action: dismiss.callAsFunction
+                )
+                .accessibilityLabel("Close")
 
-            Button {
-                isRenaming.toggle()
-                isNameFocused = isRenaming
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color.blue, in: Circle())
+                Spacer(minLength: 0)
+
+                if isEditing {
+                    sheetToolbarButton(
+                        systemName: "checkmark",
+                        isProminent: true,
+                        action: saveEdits
+                    )
+                    .disabled(!canSave || isSaving)
+                    .accessibilityLabel(isSaving ? "Saving hatchery" : "Save hatchery")
+                } else {
+                    sheetToolbarButton(
+                        systemName: "pencil",
+                        isProminent: false,
+                        action: { isEditing = true }
+                    )
+                    .accessibilityLabel("Edit " + hatchery.name)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isRenaming ? "Cancel rename" : "Rename \(hatchery.name)")
         }
         .frame(width: contentWidth, height: 44)
+    }
+
+    private func sheetToolbarButton(
+        systemName: String,
+        isProminent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Group {
+                if isProminent && isSaving {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: systemName)
+                        .font(.system(size: 20, weight: .regular))
+                }
+            }
+            .foregroundStyle(isProminent ? Color.white : Color.black)
+            .frame(width: 44, height: 44)
+            .background(isProminent ? Color.blue : Color.white, in: Circle())
+            .overlay {
+                if !isProminent {
+                    Circle().stroke(Color.black.opacity(0.08), lineWidth: 1)
+                }
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func editingContent(contentWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            rescanAction(contentWidth: contentWidth)
+
+            informationSection(contentWidth: contentWidth, isEditing: true)
+                .padding(.top, 24)
+
+            if let errorMessage = controller.errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Color.appRed)
+                    .padding(.top, 12)
+            }
+        }
+        .frame(width: contentWidth, alignment: .leading)
     }
 
     private func rescanAction(contentWidth: CGFloat) -> some View {
@@ -676,10 +747,7 @@ private struct HatcheryManagementDetailSheet: View {
                 .foregroundStyle(Color.appNeutralGray2)
 
             Button {
-                dismiss()
-                DispatchQueue.main.async {
-                    onRescan(hatchery)
-                }
+                beginRescan()
             } label: {
                 HStack(spacing: 16) {
                     Image(systemName: "move.3d")
@@ -713,7 +781,10 @@ private struct HatcheryManagementDetailSheet: View {
         .frame(width: contentWidth, alignment: .leading)
     }
 
-    private func informationSection(contentWidth: CGFloat) -> some View {
+    private func informationSection(
+        contentWidth: CGFloat,
+        isEditing: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Information")
                 .font(.system(size: 22, weight: .bold))
@@ -724,45 +795,101 @@ private struct HatcheryManagementDetailSheet: View {
                 .foregroundStyle(.black.opacity(0.5))
                 .padding(.top, 2)
 
-            detailInformationCard(contentWidth: contentWidth)
+            detailInformationCard(
+                contentWidth: contentWidth,
+                isEditing: isEditing
+            )
                 .padding(.top, 16)
         }
         .frame(width: contentWidth, alignment: .leading)
     }
 
-    private func detailInformationCard(contentWidth: CGFloat) -> some View {
-        let rows = [
-            ("Area", "\(formattedArea) m²"),
-            ("Section", String(hatchery.sectionCount)),
-            ("Date created", formattedCreatedDate),
-            ("Demension", formattedDimension)
-        ]
-
+    private func detailInformationCard(
+        contentWidth: CGFloat,
+        isEditing: Bool
+    ) -> some View {
         return VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: 16) {
-                    Text(row.0)
-                        .foregroundStyle(.black)
-
-                    Spacer(minLength: 8)
-
-                    Text(row.1)
-                        .foregroundStyle(Color(hex: "#8E8E93"))
+            detailRow(title: "Hatchery name") {
+                if isEditing {
+                    TextField("Hatchery name", text: $name)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Color.blue)
+                        .tint(Color.blue)
                         .multilineTextAlignment(.trailing)
+                        .lineLimit(1)
+                        .frame(maxWidth: 190)
+                        .accessibilityLabel("Hatchery name")
+                } else {
+                    detailValue(hatchery.name)
                 }
-                .font(.system(size: 17, weight: .regular))
-                .frame(height: 67.25)
+            }
+            detailSeparator
 
-                if index < rows.count - 1 {
-                    Rectangle()
-                        .fill(Color(hex: "#E5E5EA"))
-                        .frame(height: 1)
+            detailRow(title: "Area") {
+                detailValue("\(formattedArea) m²")
+            }
+            detailSeparator
+
+            detailRow(title: "Section") {
+                detailValue(String(hatchery.sectionCount))
+            }
+            detailSeparator
+
+            detailRow(title: "Date created") {
+                detailValue(formattedCreatedDate)
+            }
+            detailSeparator
+
+            detailRow(title: "Demension") {
+                if isEditing {
+                    Button(action: beginRescan) {
+                        Text(editableDimension)
+                            .font(.system(size: 17, weight: .regular))
+                            .foregroundStyle(Color.blue)
+                            .lineLimit(1)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Edit dimensions")
+                    .accessibilityHint("Starts re-scanning to update the hatchery area")
+                } else {
+                    detailValue(formattedDimension)
                 }
             }
         }
         .padding(.horizontal, 16)
-        .frame(width: contentWidth, height: 272)
+        .frame(width: contentWidth, height: 340)
         .background(.white, in: RoundedRectangle(cornerRadius: 26))
+    }
+
+    private func detailRow<Content: View>(
+        title: String,
+        @ViewBuilder value: () -> Content
+    ) -> some View {
+        HStack(spacing: 16) {
+            Text(title)
+                .foregroundStyle(.black)
+
+            Spacer(minLength: 8)
+
+            value()
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 17, weight: .regular))
+        .frame(height: 67.2)
+    }
+
+    private var detailSeparator: some View {
+        Rectangle()
+            .fill(Color(hex: "#E5E5EA"))
+            .frame(height: 1)
+    }
+
+    private func detailValue(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 17, weight: .regular))
+            .foregroundStyle(Color(hex: "#8E8E93"))
+            .lineLimit(1)
     }
 
     private var formattedArea: String {
@@ -775,6 +902,10 @@ private struct HatcheryManagementDetailSheet: View {
 
     private var formattedDimension: String {
         "W \(fixedDecimal(hatchery.widthM)) x H \(fixedDecimal(hatchery.lengthM))m"
+    }
+
+    private var editableDimension: String {
+        "\(compactDecimal(hatchery.widthM))m x \(compactDecimal(hatchery.lengthM))m"
     }
 
     private var formattedCreatedDate: String {
@@ -795,6 +926,10 @@ private struct HatcheryManagementDetailSheet: View {
         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
     }
 
+    private func compactDecimal(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
     private func ordinalSuffix(for day: Int) -> String {
         switch day % 100 {
         case 11, 12, 13:
@@ -809,57 +944,34 @@ private struct HatcheryManagementDetailSheet: View {
         }
     }
 
-    private func renameForm(contentWidth: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Hatchery name")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(Color.appNeutralGray2)
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
-            TextField("Hatchery name", text: $name)
-                .font(.system(size: 20, weight: .semibold))
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 16)
-                .frame(height: 56)
-                .background(Color(hex: "#F1F1F1"), in: RoundedRectangle(cornerRadius: 16))
-                .focused($isNameFocused)
+    private var isSaving: Bool {
+        controller.updatingHatcheryID == hatchery.id
+    }
 
-            if let errorMessage = controller.errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.appRed)
+    private func saveEdits() {
+        guard canSave, !isSaving else { return }
+
+        Task {
+            guard let updated = await controller.update(
+                hatchery: hatchery,
+                name: name
+            ) else {
+                return
             }
-
-            Button {
-                Task {
-                    guard let updated = await controller.update(
-                        hatchery: hatchery,
-                        name: name
-                    ) else {
-                        return
-                    }
-                    onRename(updated)
-                    dismiss()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if controller.updatingHatcheryID == hatchery.id {
-                        ProgressView()
-                            .tint(Color(hex: "#FAF8F4"))
-                    }
-                    Text(controller.updatingHatcheryID == hatchery.id ? "Saving…" : "Save")
-                }
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(hex: "#FAF8F4"))
-                .frame(width: contentWidth, height: 55)
-                .background(Color.appGreenPrimary, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(
-                name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || controller.updatingHatcheryID != nil
-            )
+            onRename(updated)
+            dismiss()
         }
-        .frame(width: contentWidth, alignment: .leading)
+    }
+
+    private func beginRescan() {
+        dismiss()
+        DispatchQueue.main.async {
+            onRescan(hatchery)
+        }
     }
 }
 

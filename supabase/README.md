@@ -18,13 +18,39 @@ now defines authenticated owner-scoped hatcheries/nests plus private scan
 Storage. Remaining backend hardening work includes:
 
 - user profiles and organization membership;
-- the remaining telemetry/sensor access model;
-- a telemetry timestamp and safe sensor-ingestion path; and
 - Row Level Security policies for every remaining client-accessible table.
 
-The current `iotdata` anonymous-insert policy is not appropriate for direct
-mobile-client sensor writes. Route device ingestion through a trusted backend
-or Edge Function instead.
+## Device assignments and IoT telemetry
+
+`20260815170000_add_device_assignments_and_trusted_iot_ingest.sql` replaces
+the mutable `device.nest_id` link with a history-preserving assignment table:
+
+```text
+physical device.id
+  └─ device_assignment (one active row at a time)
+       └─ nest
+            └─ hatchery owner
+
+iotdata.sensor_id = physical device.id
+iotdata.nest_id   = server-resolved assignment snapshot
+```
+
+- The IoT hardware reports only its stable `device.id` as `sensor_id`; it does
+  not need, receive, or guess a `nest_id`.
+- The mobile app calls `save_device` to register, rename, assign, move, or
+  unassign a device. The RPC closes an old assignment and opens a new one in
+  one transaction.
+- A reading must enter through the service-role-only
+  `ingest_iot_reading(...)` RPC. It resolves the active assignment and writes
+  both the device source and the historical nest snapshot.
+- Direct anonymous writes to `iotdata` are removed. The device itself must
+  never hold a Supabase service/secret key. Put that key only in a trusted
+  gateway or an Edge Function that authenticates the hardware first.
+
+For a gateway, send the device UUID and sensor values to its server-side
+Supabase client, then call `ingest_iot_reading`. For direct hardware-to-cloud
+traffic, put a per-device credential/signature check in an Edge Function
+before that RPC; do not use one shared service key in firmware.
 
 ## Hatchery scan persistence
 

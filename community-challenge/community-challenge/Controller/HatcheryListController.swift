@@ -61,6 +61,10 @@ final class HatcheryListController {
     private func performLoad() async {
         isLoading = true
         errorMessage = nil
+        // `hasSuccessfulLoad` describes the last outcome, not the in-flight
+        // request. Clearing it here made every reload transiently render the
+        // failure screen, which destroyed and rebuilt the onboarding view and
+        // reset its step back to `.welcome` after a successful Apple sign-in.
         defer {
             isLoading = false
             hasLoaded = true
@@ -71,6 +75,8 @@ final class HatcheryListController {
             hatcheries = try await hatcheryService.hatcheries()
             hasSuccessfulLoad = true
         } catch {
+            hatcheries = []
+            hasSuccessfulLoad = false
             errorMessage = error.localizedDescription
         }
     }

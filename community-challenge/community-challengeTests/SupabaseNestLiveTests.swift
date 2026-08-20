@@ -47,8 +47,8 @@ final class SupabaseNestLiveTests: XCTestCase {
     /// repeated runs do not accumulate rows.
     func testNestCRUDAgainstLiveDatabase() async throws {
         // Rows and columns must agree with the dimensions the way
-        // HatcheryGridGenerator derives them (floor(m / 2.0)), otherwise this
-        // test writes a hatchery the app could never have produced.
+        // HatcherySectionSolver derives them, otherwise this test writes a
+        // hatchery the app could never have produced.
         let hatchery = try await hatcheryRepository.create(
             CreateHatcheryInput(
                 name: "Live test \(UUID().uuidString.prefix(8))",
@@ -390,8 +390,8 @@ final class SupabaseNestLiveTests: XCTestCase {
         XCTAssertEqual(corrected.successEggsHatch, 87, "32 + 55, re-totalled not double counted")
     }
 
-    /// The unique constraint on device.nest_id: one device per nest, while any
-    /// number may sit unassigned.
+    /// The active device-assignment constraint: one device per nest, while
+    /// any number may sit unassigned.
     func testANestCannotHoldTwoDevices() async throws {
         let deviceRepository = SupabaseDeviceRepository(client: SupabaseConfig.client)
         let hatchery = try await hatcheryRepository.create(
@@ -440,7 +440,7 @@ final class SupabaseNestLiveTests: XCTestCase {
         try await deviceRepository.delete(id: first.id)
         try await hatcheryRepository.delete(id: hatchery.id)
 
-        XCTAssertFalse(secondSucceeded, "device.nest_id is unique")
+        XCTAssertFalse(secondSucceeded, "a nest may have only one active device")
         // ...and it must fail the SAME way the in-memory fake does, or a view
         // that shows the message will work in tests and break in the app.
         guard case .nestAlreadyHasDevice = (secondError as? DomainValidationError) else {

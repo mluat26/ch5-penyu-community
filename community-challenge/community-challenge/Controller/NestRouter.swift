@@ -13,11 +13,8 @@ enum NestRoute: Hashable {
     case eggInformation
     case preview
     case success
-    case nestDetail(
-        item: NestDashboardItem,
-        ordinal: Int,
-        sectionID: String
-    )
+    // Nest detail has no route: it is a sheet presented after this flow
+    // closes, not another page pushed on top of it.
 }
 
 /// Typed SwiftUI navigation for the Add Nest flow.
@@ -37,6 +34,14 @@ final class NestRouter {
     func pop() {
         guard !path.isEmpty else { return }
         path.removeLast()
+    }
+
+    /// Returns to an earlier page, dropping everything stacked above it. A
+    /// route that is not on the path leaves it untouched, so a stale tap
+    /// cannot unwind the flow.
+    func popTo(_ route: NestRoute) {
+        guard let index = path.lastIndex(of: route) else { return }
+        path.removeSubrange(path.index(after: index)...)
     }
 
     func replace(with route: NestRoute) {

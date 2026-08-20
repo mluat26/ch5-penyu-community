@@ -69,9 +69,20 @@ struct NestEntity: Identifiable, Hashable, Sendable {
         return Double(successEggsHatch) / Double(numberOfEggs)
     }
 
+    /// Whole days from today to the estimated hatch, counted between calendar
+    /// days rather than instants.
+    ///
+    /// Measuring from `Date()` truncated the part-day since midnight, so this
+    /// read one lower than the same count on the add-nest preview for most of
+    /// the day. Both now start from `startOfDay`.
     var daysUntilHatch: Int? {
         guard let datePredictedHatch else { return nil }
-        return Calendar.current.dateComponents([.day], from: Date(), to: datePredictedHatch).day
+        let calendar = Calendar.current
+        return calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: Date()),
+            to: calendar.startOfDay(for: datePredictedHatch)
+        ).day
     }
 
     var sectionKey: String? {

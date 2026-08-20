@@ -82,9 +82,18 @@ private struct CenteredLabelStyle: LabelStyle {
 /// map pans and zooms, and a beach is mostly featureless, so a stray tap while
 /// framing the shot would otherwise silently move the record.
 struct NestLocationPickerView: View {
-    @Bindable var controller: NestController
+    /// Starting pin, if the caller already has one.
+    let initialLatitude: Double?
+    let initialLongitude: Double?
+    let initialAddress: String?
+    /// Preview mode: the pin can be looked at, panned around and shared, but
+    /// not moved, cleared or saved. Used by the nest detail sheet when it is
+    /// not in edit mode.
+    let isReadOnly: Bool
     let onCancel: () -> Void
-    let onSave: () -> Void
+    /// Hands back the dropped pin and the address resolved for it, so this
+    /// screen works for editing a saved nest as well as creating one.
+    let onSave: (Double, Double, String?) -> Void
 
     @State private var camera: MapCameraPosition
     @State private var coordinate: CLLocationCoordinate2D?
@@ -98,23 +107,27 @@ struct NestLocationPickerView: View {
     @State private var userLocation = UserLocationProvider()
 
     init(
-        controller: NestController,
+        initialLatitude: Double? = nil,
+        initialLongitude: Double? = nil,
+        initialAddress: String? = nil,
+        isReadOnly: Bool = false,
         onCancel: @escaping () -> Void,
-        onSave: @escaping () -> Void
+        onSave: @escaping (Double, Double, String?) -> Void
     ) {
-        self.controller = controller
+        self.initialLatitude = initialLatitude
+        self.initialLongitude = initialLongitude
+        self.initialAddress = initialAddress
+        self.isReadOnly = isReadOnly
         self.onCancel = onCancel
         self.onSave = onSave
 
-        let existing = controller.draft.latitude.flatMap { latitude in
-            controller.draft.longitude.map { longitude in
+        let existing = initialLatitude.flatMap { latitude in
+            initialLongitude.map { longitude in
                 CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             }
         }
         _coordinate = State(initialValue: existing)
-        _addressLines = State(
-            initialValue: Self.lines(from: controller.draft.locationAddress)
-        )
+        _addressLines = State(initialValue: Self.lines(from: initialAddress))
         _camera = State(
             initialValue: existing.map {
                 .region(
@@ -143,22 +156,41 @@ struct NestLocationPickerView: View {
                 MapUserLocationButton()
                 MapCompass()
             }
+            // This gesture belongs to the map, and the map is the whole screen
+            // -- including the area behind the close button. A press there is
+            // delivered to both, so holding the button a moment too long let
+            // the map claim it and the button never fired. Presses inside the
+            // button's own frame are not the map's to handle.
             .gesture(
-                LongPressGesture(minimumDuration: 0.4)
-                    .sequenced(before: DragGesture(minimumDistance: 0))
+                LongPressGesture(minimumDuration: 0.2)
+                    // Global space, so the press location and the button's
+                    // frame below are measured against the same origin. The
+                    // gesture's own local space is the map's, which the
+                    // overlay's geometry has no way to name.
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
                     .onEnded { value in
                         guard
                             case .second(_, let drag?) = value,
-                            let dropped = proxy.convert(drag.location, from: .local)
+                            !closeButtonFrame.contains(drag.location),
+                            let dropped = proxy.convert(drag.location, from: .global)
                         else {
                             return
                         }
                         drop(dropped)
-                    }
+                    },
+                isEnabled: !isReadOnly
             )
             .ignoresSafeArea()
-            .overlay(alignment: .top) { instruction }
-            .overlay(alignment: .topLeading) { closeButton }
+            .overlay(alignment: .top) {
+                // Nothing to instruct when the pin cannot move.
+                if !isReadOnly { instruction }
+            }
+            .overlay(alignment: .topLeading) {
+                closeButton
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .global)
+                    } action: { closeButtonFrame = $0 }
+            }
         }
         .task { userLocation.start() }
         // The card only exists once there is a place to describe. Background
@@ -173,6 +205,8 @@ struct NestLocationPickerView: View {
                     addressLines: addressLines,
                     isResolvingAddress: isResolvingAddress,
                     distanceText: distanceText(to: coordinate),
+                    isReadOnly: isReadOnly,
+                    onClose: onCancel,
                     onClear: clearPin,
                     onSave: { save(coordinate) }
                 )
@@ -212,13 +246,21 @@ struct NestLocationPickerView: View {
         .padding(.horizontal, 16)
     }
 
+    /// Where the close button sits in the map's own space, so the press that
+    /// drops a pin can leave it alone. Zero until first laid out, and an empty
+    /// rect contains nothing, so the guard is inert until it is real.
+    @State private var closeButtonFrame: CGRect = .zero
+
     private var closeButton: some View {
-        Button(action: onCancel) {
+        Button(action: cancel) {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.appNeutralBlack)
                 .frame(width: 44, height: 44)
                 .glassEffect(.regular, in: .circle)
+                // `.plain` hit-tests rendered content, so without this the
+                // corners of the frame outside the glass circle are dead.
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .padding(.top, 12)
@@ -240,13 +282,26 @@ struct NestLocationPickerView: View {
         return "\(formatted) away"
     }
 
+    /// Leaving with the pin still set keeps the card presented through the pop,
+    /// so it rides along on top of the form for a moment -- the same way saving
+    /// used to. Clearing first is what takes the card down.
+    private func cancel() {
+        clearPin()
+        onCancel()
+    }
+
     private func save(_ coordinate: CLLocationCoordinate2D) {
-        controller.draft.latitude = coordinate.latitude
-        controller.draft.longitude = coordinate.longitude
-        controller.draft.locationAddress = addressLines.isEmpty
-            ? nil
-            : addressLines.joined(separator: ", ")
-        onSave()
+        let address = addressLines.isEmpty ? nil : addressLines.joined(separator: ", ")
+
+        // Take the card down before handing the pin back. Its presentation is
+        // derived from `coordinate`, so leaving that set keeps the card on
+        // screen through the pop -- visible for a moment over the form, with a
+        // live Save button. Tapping it again popped a second time and landed
+        // on the bucket screen. Values are read out first; clearing the pin is
+        // what closes the card.
+        clearPin()
+
+        onSave(coordinate.latitude, coordinate.longitude, address)
     }
 
     /// Clearing the pin is what closing the card means, the same way dismissing
@@ -331,6 +386,12 @@ struct PinnedLocationSheet: View {
     let addressLines: [String]
     let isResolvingAddress: Bool
     let distanceText: String?
+    /// Preview mode: the card describes the pin but offers no way to change
+    /// or commit it, so both actions are dropped.
+    var isReadOnly = false
+    /// Leaves a read-only preview. Unused while editing, where Save and the
+    /// clear button are present instead.
+    var onClose: () -> Void = {}
     let onClear: () -> Void
     let onSave: () -> Void
 
@@ -355,9 +416,11 @@ struct PinnedLocationSheet: View {
             }
             .scrollBounceBehavior(.basedOnSize)
 
-            AddNestPrimaryButton(title: "Save", action: onSave)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
+            if !isReadOnly {
+                AddNestPrimaryButton(title: "Save", action: onSave)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+            }
         }
         .background(Color.white)
     }
@@ -387,15 +450,30 @@ struct PinnedLocationSheet: View {
             }
             .frame(maxWidth: .infinity)
 
-            Button(action: onClear) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.appNeutralBlack)
-                    .frame(width: 36, height: 36)
-                    .background(Color(hex: "#EBEBEB"), in: Circle())
+            if isReadOnly {
+                // A preview has no Save and no pin to clear, and the sheet
+                // cannot be swiped away, so without this there is no way out:
+                // the map's own close button sits behind this sheet.
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "#EBEBEB"), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            } else {
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.appNeutralBlack)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "#EBEBEB"), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove this pin")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove this pin")
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
@@ -445,14 +523,7 @@ struct PinnedLocationSheet: View {
 }
 
 #Preview("Pick nest location", traits: .fixedLayout(width: 402, height: 874)) {
-    NestLocationPickerView(
-        controller: NestController(
-            hatcheryID: UUID(),
-            nestService: NestService(repository: InMemoryNestRepository())
-        ),
-        onCancel: { },
-        onSave: { }
-    )
+    NestLocationPickerView(onCancel: { }, onSave: { _, _, _ in })
 }
 
 // The map itself needs a device to render, so the card gets its own preview:

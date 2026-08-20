@@ -15,6 +15,12 @@ struct HatcherySessionState: Identifiable {
     /// Sand outline in the coordinate space of `rectifiedPhoto`.
     let rectifiedSandRegion: HatcherySandRegion?
     let grid: HatcheryGrid
+    /// Whether this hatchery was ever photographed. A skipped scan still has a
+    /// valid grid, so only this distinguishes it from a real capture — the
+    /// dashboard shows its scan prompt rather than a blank photo.
+    let captureMode: HatcheryCaptureMode
+
+    var hasBeenScanned: Bool { captureMode == .captured }
 
     var id: UUID { hatchery.id }
 
@@ -26,7 +32,8 @@ struct HatcherySessionState: Identifiable {
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion? = nil,
         rectifiedSandRegion: HatcherySandRegion? = nil,
-        grid: HatcheryGrid
+        grid: HatcheryGrid,
+        captureMode: HatcheryCaptureMode = .captured
     ) {
         self.hatchery = hatchery
         self.photo = photo
@@ -36,6 +43,7 @@ struct HatcherySessionState: Identifiable {
         self.sandRegion = sandRegion
         self.rectifiedSandRegion = rectifiedSandRegion
         self.grid = grid
+        self.captureMode = captureMode
     }
 
     /// Rebuilds a session for a legacy hatchery loaded from the database.
@@ -44,24 +52,33 @@ struct HatcherySessionState: Identifiable {
     /// only for rows created before scan-layout persistence shipped, so their
     /// sample image is clearly a compatibility fallback—not a saved scan.
     ///
-    /// The grid is regenerated from the stored dimensions by the generator that
-    /// produced the persisted row/column counts in the first place, so the two
-    /// agree and nests land in their original sections. Returns nil only when
-    /// the stored dimensions are too small for a single section, which the
-    /// creation flow already rejects.
+    /// The grid is built directly from the entity's own stored row/column
+    /// counts rather than re-derived from its dimensions, so nests land in
+    /// their original sections no matter how the section-sizing algorithm
+    /// that originally produced those counts has since changed.
     static func reconstructed(from hatchery: HatcheryEntity) -> HatcherySessionState? {
-        let dimension = HatcheryDimension(
-            widthM: hatchery.widthM,
-            heightM: hatchery.lengthM
-        )
-        guard
-            let grid = HatcheryGridGenerator.generate(
-                dimension: dimension,
-                boundary: .fullImage
-            )
-        else {
-            return nil
+        guard hatchery.numberOfRows > 0, hatchery.numberOfColumns > 0 else { return nil }
+
+        let cellSize = hatchery.cellSize
+        let boundary = HatcheryBoundary.fullImage
+        let sections = (0..<hatchery.numberOfRows).flatMap { row in
+            (0..<hatchery.numberOfColumns).map { column in
+                HatcherySection(
+                    id: "\(HatcheryGrid.columnLabel(column))\(row + 1)",
+                    row: row,
+                    column: column,
+                    widthM: cellSize.width,
+                    heightM: cellSize.height,
+                    boundary: boundary.sectionBoundary(
+                        row: row,
+                        column: column,
+                        rowCount: hatchery.numberOfRows,
+                        columnCount: hatchery.numberOfColumns
+                    )
+                )
+            }
         }
+        let grid = HatcheryGrid(rows: hatchery.numberOfRows, columns: hatchery.numberOfColumns, sections: sections)
 
         let placeholder = UIImage(named: "HatcherySamplePhoto") ?? UIImage()
 
@@ -116,7 +133,8 @@ struct HatcherySessionState: Identifiable {
             boundary: layout.boundary,
             sandRegion: layout.sandRegion,
             rectifiedSandRegion: images.rectifiedSandRegion,
-            grid: grid
+            grid: grid,
+            captureMode: layout.captureMode
         )
     }
 }

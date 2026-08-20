@@ -48,6 +48,34 @@ final class HatcheryLayoutPersistenceTests: XCTestCase {
         )
     }
 
+    /// Deleting an account has to take its photographs with it, and must not be
+    /// blocked by one that refuses to go: the rows recording which object
+    /// belongs to whom are deleted moments later, so a path skipped here can
+    /// never be found again.
+    func testAccountPhotoCleanupTriesEveryPathEvenAfterOneRefuses() async {
+        let paths = ["one/source.jpg", "two/source.jpg", "three/source.jpg"]
+        let repository = LayoutRepositorySpy(
+            pending: makeRevision(
+                id: UUID(),
+                hatcheryID: UUID(),
+                state: .ready,
+                captureMode: .captured,
+                isCurrent: true,
+                sourcePhotoPath: paths[0],
+                photoMetadataIsPresent: true
+            ),
+            finalized: nil,
+            storedPhotoPaths: paths
+        )
+        let photoStore = PhotoStoreSpy(refusedDeletePath: paths[1])
+        let service = HatcheryLayoutService(repository: repository, photoStore: photoStore)
+
+        await service.deleteCurrentUserPhotos()
+
+        let photoStoreOperations = await photoStore.operations()
+        XCTAssertEqual(photoStoreOperations, paths.map { "delete:\($0)" })
+    }
+
     func testGridSnapshotRejectsDuplicateCoordinates() {
         let snapshot = HatcheryGridSnapshot(
             rows: 2,
@@ -452,17 +480,20 @@ private actor LayoutRepositorySpy: HatcheryLayoutRepository {
     private let abandoned: HatcheryLayoutRevision?
     private var callLog: [String] = []
     private var newHatcheryID: UUID?
+    private let storedPhotoPaths: [String]
 
     init(
         pending: HatcheryLayoutRevision,
         finalized: HatcheryLayoutRevision?,
         finalizeError: Error? = nil,
-        abandoned: HatcheryLayoutRevision? = nil
+        abandoned: HatcheryLayoutRevision? = nil,
+        storedPhotoPaths: [String] = []
     ) {
         self.pending = pending
         self.finalized = finalized
         self.finalizeError = finalizeError
         self.abandoned = abandoned
+        self.storedPhotoPaths = storedPhotoPaths
     }
 
     func fetchCurrent(hatcheryID: UUID) async throws -> HatcheryLayoutRevision? { nil }
@@ -505,6 +536,11 @@ private actor LayoutRepositorySpy: HatcheryLayoutRepository {
         callLog.append("purgeFailed")
     }
 
+    func currentUserPhotoPaths() async throws -> [String] {
+        callLog.append("currentUserPhotoPaths")
+        return storedPhotoPaths
+    }
+
     func operations() -> [String] { callLog }
 }
 
@@ -539,6 +575,11 @@ private extension HatcheryLayoutRevision {
 
 private actor PhotoStoreSpy: HatcheryPhotoStore {
     private var callLog: [String] = []
+    private let refusedDeletePath: String?
+
+    init(refusedDeletePath: String? = nil) {
+        self.refusedDeletePath = refusedDeletePath
+    }
 
     func upload(path: String, data: Data, contentType: String) async throws {
         callLog.append("upload:\(path)")
@@ -550,6 +591,7 @@ private actor PhotoStoreSpy: HatcheryPhotoStore {
 
     func delete(path: String) async throws {
         callLog.append("delete:\(path)")
+        if path == refusedDeletePath { throw LayoutTestError.finalizationFailed }
     }
 
     func operations() -> [String] { callLog }

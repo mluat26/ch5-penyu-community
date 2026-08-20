@@ -9,8 +9,13 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var controller: HatcheryController
+    let container: AppContainer
     let onAddNest: () -> Void
     let onOpenHatcheryMenu: () -> Void
+    var onOpenProfile: (() -> Void)?
+    /// Opens the scan flow for this hatchery. Supplied where the empty state
+    /// is reachable; the prompt is inert without it.
+    var onScanHatchery: (() -> Void)?
 
     @State private var presentedSection: HatcherySectionDashboard?
 
@@ -26,38 +31,38 @@ struct HomeView: View {
             let gridHeight = gridWidth * 279 / 349
 
             ZStack(alignment: .topLeading) {
-                Color.white
-                    .overlay(alignment: .topLeading) {
-                        Circle()
-                            .fill(Color(hex: "#FEF6ED"))
-                            .frame(width: 621, height: 621)
-                            .blur(radius: 50)
-                            .offset(x: -110, y: -378)
-                            .allowsHitTesting(false)
-                    }
+                HatcheryWarmBackdrop()
 
                 VStack(alignment: .leading, spacing: 0) {
                     header(screenWidth: screenWidth)
                         .padding(.top, 87)
+                        // The scanned grid below draws outside its own bounds
+                        // (`scaledToFill` on the photo), and a sibling drawn
+                        // later still takes the touches there. Without this the
+                        // profile button is unpressable on any hatchery that
+                        // has a scan, while looking perfectly normal.
+                        .zIndex(1)
 
-                    hatcheryGrid(width: gridWidth, height: gridHeight)
-                        .padding(.top, 25)
+                    if hatchery.hasBeenScanned {
+                        hatcheryGrid(width: gridWidth, height: gridHeight)
+                            .padding(.top, 25)
+                    } else {
+                        // Figma 175:3792. A skipped scan still has a valid
+                        // grid, so without this the dashboard draws a blank
+                        // rectangle that reads as a loading failure.
+                        HatcheryScanPrompt(onScan: { onScanHatchery?() })
+                            .padding(.top, 25)
+                            .padding(.leading, 16)
+                    }
 
                     overview(width: contentWidth)
                         .padding(.top, 25)
 
-                    Button {
-                        onAddNest()
-                    } label: {
-                        Text("Add new nest")
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .tracking(-0.43)
-                            .foregroundStyle(Color(hex: "#FAF8F4"))
-                            .frame(maxWidth: .infinity, minHeight: 55)
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color(hex: "#2E7D5B"), in: RoundedRectangle(cornerRadius: 26))
+                    // Placing a nest needs a mapped grid to place it on, so
+                    // the design dims this to 30% until the scan exists.
+                    HatcheryPrimaryButton(title: "Add new nest", action: onAddNest)
+                    .disabled(!hatchery.hasBeenScanned)
+                    .opacity(hatchery.hasBeenScanned ? 1 : 0.3)
                     .frame(width: contentWidth, height: 55)
                     .padding(.top, 36)
                     .padding(.leading, 16)
@@ -72,7 +77,14 @@ struct HomeView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.light)
         .sheet(item: $presentedSection) { section in
-            SectionOverviewSheet(section: section)
+            SectionOverviewSheet(
+                section: section,
+                container: container,
+                onNestDeleted: {
+                    presentedSection = nil
+                    await controller.load()
+                }
+            )
                 .presentationDetents([.height(707)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(34)
@@ -95,11 +107,7 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 12) {
-                toolbarIcon(systemName: "bell", label: "Notifications")
-                toolbarIcon(systemName: "person", label: "Profile")
-            }
-            .frame(width: 156, height: 48)
+            HatcheryToolbarAccessories(onProfile: onOpenProfile)
         }
         .frame(width: headerWidth, height: 48)
         .padding(.leading, 16)
@@ -126,17 +134,6 @@ struct HomeView: View {
         .padding(.top, 83)
     }
 
-    private func toolbarIcon(
-            systemName: String,
-            label: String
-        ) -> some View {
-            Image(systemName: systemName)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.black)
-                .frame(width: 48, height: 48)
-                .glassEffect(.regular, in: .circle)
-                .accessibilityLabel(label)
-        }
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 0) {
@@ -229,37 +226,16 @@ struct HomeView: View {
 
     private func overview(width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 4) {
-                    overviewKicker
-                        .font(.footnote)
-                        .tracking(-0.08)
-                        .lineLimit(1)
-
-                    Text("Check the status of the hatchery")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .tracking(-0.43)
-                        .foregroundStyle(Color(hex: "#575757"))
+            // The whole row opens the section, not just the chevron. With no
+            // section chosen there is nothing to open, so it stays inert text.
+            if let section = selectedSection {
+                Button { presentedSection = section } label: {
+                    overviewHeaderRow
                 }
-
-                Spacer(minLength: 0)
-
-                if selectedSection != nil {
-                    Button {
-                        presentedSection = selectedSection
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.body)
-                            .foregroundStyle(Color(hex: "#0C7C4D"))
-                            .accessibilityHidden(true)
-                            .frame(width: 44, height: 44, alignment: .trailing)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Show section overview")
-                }
+                .buttonStyle(.plain)
+            } else {
+                overviewHeaderRow
             }
-            .frame(height: 44)
 
             VStack(spacing: 12) {
                 temperatureCard(value: temperatureText(
@@ -272,13 +248,13 @@ struct HomeView: View {
                         title: "Nests",
                         value: (selectedSection?.nestCount
                             ?? controller.overview?.nestCount)
-                            .map(String.init) ?? "—"
+                            .map(String.init) ?? "--"
                     )
                     statCard(
                         title: "Eggs",
                         value: (selectedSection?.totalEggs
                             ?? controller.overview?.totalEggs)
-                            .map(groupedNumber) ?? "—"
+                            .map(groupedNumber) ?? "--"
                     )
                 }
                 .frame(height: 85)
@@ -365,6 +341,38 @@ struct HomeView: View {
         }
     }
 
+    /// `.plain` hit-tests rendered content, and most of this row is the gap
+    /// between the text and the chevron -- `.contentShape` makes that gap part
+    /// of the target rather than a dead strip down the middle.
+    private var overviewHeaderRow: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                overviewKicker
+                    .font(.footnote)
+                    .tracking(-0.08)
+                    .lineLimit(1)
+
+                Text("Check the status of the hatchery")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .tracking(-0.43)
+                    .foregroundStyle(Color(hex: "#575757"))
+            }
+
+            Spacer(minLength: 0)
+
+            if selectedSection != nil {
+                Image(systemName: "chevron.right")
+                    .font(.body)
+                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .accessibilityHidden(true)
+                    .frame(width: 44, height: 44, alignment: .trailing)
+            }
+        }
+        .frame(height: 44)
+        .contentShape(Rectangle())
+    }
+
     private var overviewKicker: Text {
         guard let selectedSection else {
             return Text("HATCHERY OVERVIEW")
@@ -403,6 +411,8 @@ struct HomeView: View {
 
 private struct SectionOverviewSheet: View {
     let section: HatcherySectionDashboard
+    let container: AppContainer
+    let onNestDeleted: () async -> Void
 
     @State private var selectedNest: NestDetailSelection?
 
@@ -416,12 +426,22 @@ private struct SectionOverviewSheet: View {
                 .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
         }
         .sheet(item: $selectedNest) { selection in
-            NestDetailView(
+            NestDetailSheet(
                 item: selection.item,
                 ordinal: selection.ordinal,
-                sectionID: section.id
+                sectionLabel: section.id,
+                controller: container.makeNestDetailController(nestID: selection.item.id),
+                onClose: { selectedNest = nil },
+                onDelete: {
+                    Task {
+                        try? await container.makeNestService().deleteNest(id: selection.item.id)
+                        selectedNest = nil
+                        await onNestDeleted()
+                    }
+                }
             )
-            .presentationDetents([.height(707)])
+            // Figma 166:3244 draws the same 801pt sheet frame as the profile.
+            .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(34)
             .presentationSizing(.page)
@@ -449,15 +469,17 @@ private struct SectionOverviewSheet: View {
     }
 
     private var nestList: some View {
-        // The card stays 464pt because the sheet is a fixed 707 and this list
-        // starts 167 down; what changed is that its contents scroll.
+        // Figma 199:3473 makes the list 371x508 at y=167 in the 713pt sheet:
+        // four 118pt cards with 12pt gutters, so four fit without scrolling.
         //
         // It used to render `section.nests.prefix(4)` into exactly four 116pt
         // rows with no scroll view, so a section's fifth nest was counted in
         // the header above and then had nowhere to appear -- which reads as the
         // nest never having been saved.
+        // Figma 166:2957 draws each nest as its own white card on the grouped
+        // background, rather than divider-separated rows inside one card.
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(spacing: 12) {
                 ForEach(Array(section.nests.enumerated()), id: \.element.id) { index, nest in
                     Button {
                         selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
@@ -465,78 +487,58 @@ private struct SectionOverviewSheet: View {
                         nestRow(nest, ordinal: index + 1)
                     }
                     .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .frame(height: 116)
-                    .overlay(alignment: .bottom) {
-                        if index < section.nests.count - 1 {
-                            Rectangle()
-                                .fill(Color(hex: "#EEEEEE"))
-                                .frame(height: 1)
-                        }
-                    }
                 }
             }
         }
-        // Four or fewer nests fill the card exactly, so leave those sections
+        // Four or fewer nests fill the list exactly, so leave those sections
         // feeling fixed rather than springy.
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 371, height: 464)
-        .background(.white, in: RoundedRectangle(cornerRadius: 26))
-        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .frame(width: 371, height: 508)
     }
 
     private func nestRow(
         _ item: NestDashboardItem,
         ordinal: Int
     ) -> some View {
-        let temperature = temperaturePresentation(for: item.latestTemperatureC)
-
-        return ZStack(alignment: .topLeading) {
-            HStack(spacing: 4) {
+        VStack(spacing: 20) {
+            HStack {
                 Text("Nest #\(item.nest.displayNumber(fallbackOrdinal: ordinal))")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "#2B2B2B"))
 
-                Text("· \(item.nest.numberOfEggs) eggs")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(hex: "#4A4A4A"))
-
                 Spacer(minLength: 0)
 
-                Image(systemName: "timer")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
-
-                Text(hatchCountdown(for: item.nest))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#4A4A4A").opacity(0.5))
-            }
-            .frame(width: 339, height: 22)
-            .offset(x: 16, y: 16)
-
-            HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: temperature.systemName)
-                        .font(.system(size: 12, weight: .regular))
-
-                    Text(temperature.text)
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(.white)
-                .frame(width: temperature.chipWidth, height: 36)
-                .background(temperature.tint, in: RoundedRectangle(cornerRadius: 16))
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
+                // A logger with no battery reading needs servicing rather than
+                // opening, so Figma swaps the chevron for a wrench. The
+                // battery pill itself is not on the card.
+                Image(systemName: item.batteryLevel == nil ? "wrench.and.screwdriver" : "chevron.right")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(hex: "#0C7C4D"))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
                     .accessibilityHidden(true)
             }
-            .frame(width: 339, height: 36)
-            .offset(x: 16, y: 64)
+            .frame(height: 36)
+
+            HStack(spacing: 12) {
+                NestStatusPill.temperature(item.latestTemperatureC)
+                NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text("\(item.nest.numberOfEggs)")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.black)
+                    Text(" eggs")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                }
+            }
+            .frame(height: 30)
         }
-        .frame(width: 371, height: 116, alignment: .topLeading)
+        .padding(16)
+        .frame(width: 371, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 24))
+        .contentShape(RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
     }
 
@@ -555,35 +557,15 @@ private struct SectionOverviewSheet: View {
     }
 
     private func temperaturePresentation(for temperature: Double?) -> TemperaturePresentation {
-        guard let temperature else {
-            return TemperaturePresentation(
-                text: "--",
-                systemName: "thermometer.medium",
-                tint: Color(hex: "#8E8E93"),
-                chipWidth: 76
-            )
-        }
-        if temperature >= 32 {
-            return TemperaturePresentation(
-                text: temperatureText(temperature) + "°C",
-                systemName: "heat.waves",
-                tint: Color(hex: "#FF383C"),
-                chipWidth: 85
-            )
-        }
-        if temperature <= 27 {
-            return TemperaturePresentation(
-                text: temperatureText(temperature) + "°C",
-                systemName: "snowflake",
-                tint: Color(hex: "#00C3D0"),
-                chipWidth: 83
-            )
-        }
+        // Band and colour come from `NestTemperature` so this chip agrees
+        // with the nest cards and the detail chart. Only the chip width is
+        // decided here, since it depends on the rendered string.
+        let band = NestTemperature.Band(temperatureC: temperature)
         return TemperaturePresentation(
-            text: temperatureText(temperature) + "°C",
-            systemName: "checkmark.circle",
-            tint: Color(hex: "#34C759"),
-            chipWidth: 85
+            text: NestTemperature.textWithUnit(temperature),
+            systemName: band == .noData ? "thermometer.medium" : band.systemImage,
+            tint: band.tint,
+            chipWidth: temperature == nil ? 76 : 85
         )
     }
 
@@ -604,10 +586,11 @@ private struct SectionOverviewSheet: View {
 }
 
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
+    let container = AppContainer()
+
     HomeView(
-        controller: AppContainer().makeHatcheryController(
-            sessionState: .previewSample
-        ),
+        controller: container.makeHatcheryController(sessionState: .previewSample),
+        container: container,
         onAddNest: { },
         onOpenHatcheryMenu: { }
     )

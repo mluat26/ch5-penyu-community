@@ -153,14 +153,29 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         XCTAssertEqual(input.toDTO().datePredictedHatch, predictedHatch)
     }
 
+    func testDeviceSaveUsesAssignmentRPCParameters() throws {
+        let deviceID = UUID()
+        let nestID = UUID()
+        let dto = UpdateDeviceInput(name: "Probe A", nestID: nestID)
+            .toSaveDTO(deviceID: deviceID)
+
+        let object = try encodedObject(dto)
+
+        XCTAssertEqual(object["p_device_id"] as? String, deviceID.uuidString)
+        XCTAssertEqual(object["p_name"] as? String, "Probe A")
+        XCTAssertEqual(object["p_nest_id"] as? String, nestID.uuidString)
+        XCTAssertNil(object["nest_id"], "The client must use save_device, not a mutable device.nest_id column.")
+    }
+
     func testIoTDataDTOMapsToAReading() throws {
         let id = UUID()
         let nestID = UUID()
+        let sensorID = UUID()
         let timestamp = Date()
         let dto = IoTDataDTO(
             id: id,
             nestID: nestID,
-            sensorID: nil,
+            sensorID: sensorID,
             position: "centre",
             depthCM: 45,
             temperature: 29.5,
@@ -174,6 +189,7 @@ final class SupabaseSchemaMappingTests: XCTestCase {
         let reading = try dto.toEntity()
 
         XCTAssertEqual(reading.nestID, nestID)
+        XCTAssertEqual(reading.sensorID, sensorID)
         XCTAssertEqual(reading.temperatureC, 29.5)
         XCTAssertEqual(reading.timestamp, timestamp)
         XCTAssertEqual(reading.alert, .low)

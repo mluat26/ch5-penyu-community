@@ -1,30 +1,39 @@
 import Foundation
 
-/// Wire representation of the current `public.organiztion` table.
+/// Wire representation of `public.organization`.
 ///
-/// The table name is misspelled in the database. Keep the correct Swift name
-/// and use `organiztion` only when a future repository selects the table.
+/// The table was originally created as `organiztion`; the organization
+/// membership migration renamed it, so the spelling now matches this type.
 struct OrganizationDTO: Codable, Sendable {
     let id: UUID
     let name: String?
     let createdAt: Date?
+    /// The human-readable identifier shown on the profile screen
+    /// ("ORG-0000000"), distinct from the primary key.
+    let code: String?
 
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case createdAt = "date_created"
+        case code
     }
 }
 
 extension OrganizationDTO {
     func toEntity() throws -> OrganizationEntity {
         guard let name, !name.isEmpty else {
-            throw DataMappingError.missingRequiredValue(field: "organiztion.name")
+            throw DataMappingError.missingRequiredValue(field: "organization.name")
         }
         guard let createdAt else {
-            throw DataMappingError.missingRequiredValue(field: "organiztion.date_created")
+            throw DataMappingError.missingRequiredValue(field: "organization.date_created")
         }
 
-        return OrganizationEntity(id: id, name: name, createdAt: createdAt)
+        return OrganizationEntity(
+            id: id,
+            name: name,
+            createdAt: createdAt,
+            code: code
+        )
     }
 }

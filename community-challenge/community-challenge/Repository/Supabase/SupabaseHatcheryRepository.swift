@@ -44,36 +44,44 @@ actor SupabaseHatcheryRepository: HatcheryRepository {
     }
 
     func create(_ input: CreateHatcheryInput) async throws -> HatcheryEntity {
-        _ = try await identity.ensureAuthenticatedUserID()
-        let insertDTO = try input.toDTO()
-        let rows: [HatcheryDTO] = try await client
-            .from("hatchery")
-            .insert(insertDTO)
-            .select()
-            .execute()
-            .value
+        do {
+            _ = try await identity.ensureAuthenticatedUserID()
+            let insertDTO = try input.toDTO()
+            let rows: [HatcheryDTO] = try await client
+                .from("hatchery")
+                .insert(insertDTO)
+                .select()
+                .execute()
+                .value
 
-        guard let dto = rows.first else {
-            throw DataMappingError.missingRequiredValue(field: "hatchery insert response")
+            guard let dto = rows.first else {
+                throw DataMappingError.missingRequiredValue(field: "hatchery insert response")
+            }
+            return try dto.toEntity()
+        } catch {
+            throw HatcheryPersistenceErrorMapper.map(error)
         }
-        return try dto.toEntity()
     }
 
     func update(id: UUID, _ input: UpdateHatcheryInput) async throws -> HatcheryEntity {
-        _ = try await identity.ensureAuthenticatedUserID()
-        let updateDTO = input.toDTO()
-        let rows: [HatcheryDTO] = try await client
-            .from("hatchery")
-            .update(updateDTO)
-            .eq("id", value: id)
-            .select()
-            .execute()
-            .value
+        do {
+            _ = try await identity.ensureAuthenticatedUserID()
+            let updateDTO = input.toDTO()
+            let rows: [HatcheryDTO] = try await client
+                .from("hatchery")
+                .update(updateDTO)
+                .eq("id", value: id)
+                .select()
+                .execute()
+                .value
 
-        guard let dto = rows.first else {
-            throw RepositoryError.notFound(resource: "Hatchery", id: id)
+            guard let dto = rows.first else {
+                throw RepositoryError.notFound(resource: "Hatchery", id: id)
+            }
+            return try dto.toEntity()
+        } catch {
+            throw HatcheryPersistenceErrorMapper.map(error)
         }
-        return try dto.toEntity()
     }
 
     func delete(id: UUID) async throws {

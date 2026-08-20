@@ -4,17 +4,7 @@ struct ScanView: View {
 
     let onScan: () -> Void
     let onSkip: () -> Void
-    let onCancel: (() -> Void)?
-
-    init(
-        onScan: @escaping () -> Void,
-        onSkip: @escaping () -> Void,
-        onCancel: (() -> Void)? = nil
-    ) {
-        self.onScan = onScan
-        self.onSkip = onSkip
-        self.onCancel = onCancel
-    }
+    let onBack: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,20 +21,8 @@ struct ScanView: View {
                     .offset(x: xOffset)
                     .allowsHitTesting(false)
 
-                if let onCancel {
-                    Button(action: onCancel) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.appGreenPrimary)
-                        .frame(width: 84, height: 44, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
+                HatcherySetupBackButton(action: onBack)
                     .offset(x: xOffset + 16, y: 87)
-                    .accessibilityLabel("Back")
-                }
 
                 VStack(spacing: 12) {
                     Text("Scan your\nhatchery area")
@@ -62,17 +40,8 @@ struct ScanView: View {
                 .offset(x: xOffset + 41, y: 158)
 
                 VStack(spacing: 16) {
-                    Button(action: onScan) {
-                        Text("Scan now")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color(hex: "#FAF8F4"))
-                            .frame(width: 370, height: 55)
-                            .background(
-                                Color.appGreenPrimary,
-                                in: RoundedRectangle(cornerRadius: 26)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    HatcheryPrimaryButton(title: "Scan now", action: onScan)
+                        .frame(width: 370, height: 55)
 
                     Button(action: onSkip) {
                         Text("Skip for now")
@@ -94,5 +63,5 @@ struct ScanView: View {
 }
 
 #Preview {
-    ScanView(onScan: {}, onSkip: {})
+    ScanView(onScan: {}, onSkip: {}, onBack: {})
 }

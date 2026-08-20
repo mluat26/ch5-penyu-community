@@ -21,6 +21,11 @@ struct NestFormDraft: Hashable {
     var collectionDate: String
     var inspectionDate: String
     var hatchDate: String
+    /// Set once someone types a hatch date themselves, which stops the
+    /// collection-date estimate replacing it. Nothing on the create form
+    /// offers that yet; the flag exists so adding one cannot silently
+    /// reintroduce the overwrite.
+    var hasManualHatchDate = false
     var inspectionDateMode: NestInspectionDateMode
     /// How long after collection the first inspection is due. Resolved into
     /// `inspectionDate` by the controller; it is not the incubation period,
@@ -38,8 +43,12 @@ struct NestFormDraft: Hashable {
     static var sample: NestFormDraft {
         let today = AppDateFormatting.nestDraftDateString(Date())
         return NestFormDraft(
-            bucketID: "00000000",
-            nestNumber: "055",
+            // Placeholders only. Both identifiers are issued by
+            // `NestController.prepareIdentifiers()` when the identity screen
+            // appears; these are what shows if that lookup fails, and they are
+            // the correct values for a hatchery's very first nest.
+            bucketID: "001",
+            nestNumber: "001",
             section: "",
             sectionRow: nil,
             sectionColumn: nil,

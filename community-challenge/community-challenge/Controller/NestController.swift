@@ -11,10 +11,23 @@ final class NestController {
 
     private let hatcheryID: UUID
     private let nestService: NestService
+    /// Resolves the signed-in user, so a saved nest records who collected it.
+    private let identity: (any SupabaseIdentityProviding)?
 
-    init(hatcheryID: UUID, nestService: NestService) {
+    init(
+        hatcheryID: UUID,
+        nestService: NestService,
+        identity: (any SupabaseIdentityProviding)? = nil
+    ) {
         self.hatcheryID = hatcheryID
         self.nestService = nestService
+        self.identity = identity
+    }
+
+    /// The current user, or nil if the identity could not be resolved. A nest
+    /// is still worth saving without its founder, so this never throws.
+    private func currentUserID() async -> UUID? {
+        try? await identity?.ensureAuthenticatedUserID()
     }
 
     func save() async -> NestEntity? {
@@ -40,10 +53,15 @@ final class NestController {
         defer { isSaving = false }
 
         do {
+            let founderID = await currentUserID()
+
             let nest = try await nestService.createNest(
                 CreateNestInput(
                     hatcheryID: hatcheryID,
-                    founderID: nil,
+                    // Who collected this nest. The infobook calls this the
+                    // founder / responsible person, and the detail screen
+                    // shows it as "Data logger".
+                    founderID: founderID,
                     numberOfEggs: eggCount,
                     dateEggsLaid: AppDateFormatting.parseNestDraftDate(draft.collectionDate),
                     datePredictedHatch: AppDateFormatting.parseNestDraftDate(draft.hatchDate),
@@ -73,6 +91,30 @@ final class NestController {
         }
     }
 
+    /// The next identifier in a hatchery's sequence: one past the highest
+    /// number already issued, three digits, starting at 001.
+    nonisolated static func nextIdentifier(after existing: [String?]) -> String {
+        let highest = existing.compactMap { $0.flatMap(Int.init) }.max() ?? 0
+        return String(format: "%03d", highest + 1)
+    }
+
+    /// Issues both identifiers for a new nest. Neither is typed: the nest
+    /// number continues the hatchery's sequence, and the bucket ID mirrors it
+    /// until an NFC tag supplies the real one.
+    ///
+    /// A failed lookup leaves the draft's own defaults in place rather than
+    /// blanking the screen, so the form stays saveable offline.
+    // ponytail: numbered client-side from max + 1, and the bucket ID is a
+    // stand-in for the tag payload. Replace that half with the NFC read; move
+    // the nest number to a database sequence if two devices ever register into
+    // one hatchery at the same moment.
+    func prepareIdentifiers() async {
+        guard let nests = try? await nestService.nests(hatcheryID: hatcheryID) else { return }
+        let next = Self.nextIdentifier(after: nests.map(\.nestNumber))
+        draft.nestNumber = next
+        draft.bucketID = next
+    }
+
     func reset() {
         draft = .sample
         errorMessage = nil
@@ -86,33 +128,37 @@ final class NestController {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Both are asked for on the identity screen and both are required: a nest
+    /// with no section cannot be drawn on the grid, and one with no pin cannot
+    /// be found again on the beach.
+    var isSectionMissing: Bool { draft.sectionRow == nil || draft.sectionColumn == nil }
+    var isLocationMissing: Bool { draft.latitude == nil || draft.longitude == nil }
+
+    /// Pure on purpose. It used to write a message into `errorMessage`, which
+    /// nothing erased once the field was filled, so a fixed problem kept
+    /// complaining. The screen now renders one message per missing field
+    /// straight from the flags above, so filling a field clears its own
+    /// message and the two cannot drift apart.
+    ///
+    /// The bucket ID and nest number are no longer checked: both are issued by
+    /// `prepareIdentifiers()` and default to 001, so neither can be empty.
     func validateIdentity() -> Bool {
-        guard !draft.bucketID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a QR or bucket ID."
-            return false
-        }
-
-        guard !draft.nestNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Enter a nest number."
-            return false
-        }
-
-        guard draft.sectionRow != nil, draft.sectionColumn != nil else {
-            errorMessage = "Select a section on the map."
-            return false
-        }
-
-        errorMessage = nil
-        return true
+        !isSectionMissing && !isLocationMissing
     }
 
-    /// Sea turtle clutches incubate for roughly two months. This is the figure
-    /// behind the "Auto" estimate on the hatch card -- an estimate, not a
-    /// promise, which is why it is not asked for.
+    /// The reference incubation duration from `SmartNest_Infobook_V01.pdf`,
+    /// which gives roughly 80-82 days at 26C, 56 at 30C and 45-48 at 32C.
     ///
-    /// ponytail: one constant for every species; split per species if the app
-    /// ever tracks more than one.
-    static let estimatedIncubationDays = 59
+    /// 56 is the 30C figure, and this stays a single number on purpose: the
+    /// infobook wants the duration configurable rather than derived, and an
+    /// estimate that moved with every logged reading would be a promise the app
+    /// cannot keep. It seeds the estimate; nothing recalculates it afterwards,
+    /// per the infobook's "never overwrite the original estimate".
+    ///
+    /// ponytail: one constant for every species and temperature; split when
+    /// the app tracks more than one species, or when the team wants the
+    /// duration to follow the nest's own average.
+    static let estimatedIncubationDays = 56
 
     /// The hatch estimate follows the collection date alone.
     ///
@@ -120,6 +166,11 @@ final class NestController {
     /// to the inspection interval: choosing to inspect in 5 days also claimed
     /// the eggs would hatch in 5 days.
     func updateEstimatedHatchDate() {
+        // A date entered by hand wins. The infobook is explicit that the
+        // estimate must never be overwritten once recorded, and 56 days is a
+        // reference figure for 30C, not a fact about this nest.
+        guard !draft.hasManualHatchDate else { return }
+
         guard
             let collectionDate = AppDateFormatting.parseNestDraftDate(draft.collectionDate),
             let estimatedDate = Calendar.current.date(

@@ -2,10 +2,31 @@ import Foundation
 import Supabase
 
 actor SupabaseIoTDataRepository: IoTDataRepository {
+    /// `timestamp` is a `timestamptz`, and this is the only filter in the app
+    /// that compares against a real instant rather than a calendar day.
+    ///
+    /// The client's encoder writes every `Date` as `yyyy-MM-dd`, which is right
+    /// for the five `date` columns it saves and wrong here -- it collapsed this
+    /// window to whole days and the chart came back empty. Formatting the bound
+    /// explicitly keeps the two concerns apart.
+    private static func instant(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
+    }
+
     private let client: SupabaseClient
+    private let identity: any SupabaseIdentityProviding
+
+    init(
+        client: SupabaseClient,
+        identity: any SupabaseIdentityProviding
+    ) {
+        self.client = client
+        self.identity = identity
+    }
 
     init(client: SupabaseClient) {
         self.client = client
+        self.identity = SupabaseAuthenticationService(client: client)
     }
 
     func fetch(id: UUID) async throws -> IoTDataEntity {
@@ -39,6 +60,7 @@ actor SupabaseIoTDataRepository: IoTDataRepository {
         in interval: DateInterval?
     ) async throws -> [IoTDataEntity] {
         guard !nestIDs.isEmpty else { return [] }
+        _ = try await identity.ensureAuthenticatedUserID()
 
         var query = client
             .from("iotdata")
@@ -47,8 +69,8 @@ actor SupabaseIoTDataRepository: IoTDataRepository {
 
         if let interval {
             query = query
-                .gte("timestamp", value: interval.start)
-                .lte("timestamp", value: interval.end)
+                .gte("timestamp", value: Self.instant(interval.start))
+                .lte("timestamp", value: Self.instant(interval.end))
         }
 
         let rows: [IoTDataDTO] = try await query
