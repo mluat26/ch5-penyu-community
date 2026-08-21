@@ -104,8 +104,7 @@ struct NestDetailSheet: View {
                 ScrollView {
                     content(scale: scale)
                         .frame(width: Layout.sheetWidth * scale, alignment: .topLeading)
-                        // Clears the floating Hatched bar, which both modes
-                        // now show.
+                        // Clears the floating action, which both modes show.
                         .padding(.bottom, 96 * scale)
                 }
                 .scrollIndicators(.hidden)
@@ -115,11 +114,11 @@ struct NestDetailSheet: View {
                         .background(Color(uiColor: .systemGroupedBackground))
                 }
 
-                // Shown in both modes. It was read-only while it did nothing;
-                // now it is the only way into the hatchling flow, and hiding it
-                // behind edit mode would make a recorded hatch unreachable for
-                // anyone who happened to be editing.
-                hatchedBar(scale: scale)
+                // One slot, one action. Editing offers Delete nest, reading
+                // offers Hatched / View report -- the two are alternatives, not
+                // companions, and showing both put a destructive button and the
+                // primary action on screen together.
+                floatingAction(scale: scale)
                     .frame(width: geometry.size.width, alignment: .center)
                     .offset(y: geometry.size.height - 96 * scale)
             }
@@ -263,15 +262,10 @@ struct NestDetailSheet: View {
 
             inspectionSection(scale: scale)
                 .offset(x: 16 * scale, y: 1321.09 * scale)
-
-            if isEditing {
-                deleteButton(scale: scale)
-                    .offset(x: 16 * scale, y: 1617.09 * scale)
-            }
         }
         .frame(
             width: Layout.sheetWidth * scale,
-            height: (isEditing ? 1707 : 1573) * scale,
+            height: (1573 + editingGrowth) * scale,
             alignment: .topLeading
         )
     }
@@ -554,25 +548,92 @@ struct NestDetailSheet: View {
         let height = isEditing ? Layout.rowHeight : Layout.compactRowHeight
 
         return detailSection(title: "Inspection list", subtitle: "Hatching timeline", scale: scale) {
-            if controller.inspections.isEmpty {
-                Text("No inspections recorded yet")
-                    .font(.system(size: 15 * scale, weight: .regular))
-                    .foregroundStyle(Color(hex: "#8E8E93"))
-                    .frame(width: Layout.sectionWidth * scale, height: height * scale, alignment: .leading)
-                    .padding(.leading, 16 * scale)
-            } else {
+            if !controller.inspections.isEmpty {
                 ForEach(Array(controller.inspections.enumerated()), id: \.element.id) { index, inspection in
                     if index > 0 { rowSeparator(scale: scale) }
 
+                    // Recorded visits are their own rows in another table, and
+                    // nothing on this screen saves them, so they stay read-only
+                    // in both modes -- the badge is styling, not an affordance.
                     infoRow(
                         title: "#\(index + 1)",
-                        value: formatted(inspection.inspectedOn),
+                        value: AppDateFormatting.ordinalDate(inspection.inspectedOn),
                         isBadge: isEditing,
                         height: height,
                         scale: scale
                     )
                 }
+            } else if isEditing || nest.nextInspectionDate != nil {
+                plannedInspectionRow(height: height, scale: scale)
+            } else {
+                Text("No inspections recorded yet")
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .frame(width: Layout.sectionWidth * scale, height: height * scale, alignment: .leading)
+                    .padding(.leading, 16 * scale)
             }
+        }
+    }
+
+    /// The one visit planned in the Add Nest flow, standing in for a real
+    /// inspection list until the inspection flow writes rows.
+    ///
+    /// It edits `draftInspectionDate` -- the same value the Timeline's
+    /// "Inspection date" row above writes -- because there is exactly one date
+    /// and this is it. Two controls on one value is the honest shape of a
+    /// stand-in; a second stored date would be inventing data the schema does
+    /// not have.
+    // ponytail: delete this row, not the section, once inspections are real.
+    private func plannedInspectionRow(height: CGFloat, scale: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text("#1")
+                .font(.system(size: 17 * scale, weight: .regular))
+                .foregroundStyle(.black)
+
+            Spacer(minLength: 12 * scale)
+
+            if isEditing {
+                // `.compact` renders as the grey rounded field the edit frame
+                // draws, and is a real picker rather than a badge that only
+                // looks tappable.
+                DatePicker(
+                    "",
+                    selection: $controller.draftInspectionDate,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+            } else {
+                Text(nest.nextInspectionDate.map(AppDateFormatting.ordinalDate) ?? "\u{2014}")
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 16 * scale)
+        .frame(width: Layout.sectionWidth * scale, height: height * scale)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Inspection 1")
+    }
+
+    /// How much taller the coordinate-placed content gets while editing.
+    ///
+    /// 1573 is calibrated against read mode's 52pt inspection rows; editing
+    /// draws them at 68 (199:3721). The old figure folded in 134pt of runway
+    /// for an inline Delete nest button, which now floats instead.
+    private var editingGrowth: CGFloat {
+        guard isEditing else { return 0 }
+        return 16 * CGFloat(max(controller.inspections.count, 1))
+    }
+
+    /// Editing replaces the primary action rather than adding to it, so both
+    /// land in the same place at the same size -- 358 × 55, corner 26.
+    @ViewBuilder
+    private func floatingAction(scale: CGFloat) -> some View {
+        if isEditing {
+            deleteButton(scale: scale)
+        } else {
+            hatchedBar(scale: scale)
         }
     }
 

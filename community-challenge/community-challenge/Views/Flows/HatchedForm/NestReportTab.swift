@@ -230,17 +230,19 @@ struct NestReportView: View {
             )
 
             VStack(alignment: .leading, spacing: 12) {
+                // Figma 248:6806 heads the list with a plain grey label, not
+                // the bold black one the other sections use.
                 Text("Inspection list")
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.black)
+                    .font(.subheadline)
+                    .foregroundStyle(Color(hex: "#8E8E93"))
 
-                if controller.inspections.isEmpty {
+                if inspectionDates.isEmpty {
                     Text("No inspections recorded yet")
                         .font(.subheadline)
                         .foregroundStyle(Color(hex: "#8E8E93"))
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(controller.inspections.enumerated()), id: \.element.id) { index, inspection in
+                        ForEach(Array(inspectionDates.enumerated()), id: \.offset) { index, date in
                             if index > 0 {
                                 Divider()
                             }
@@ -249,13 +251,17 @@ struct NestReportView: View {
                                     .font(.body)
                                     .foregroundStyle(.black)
                                 Spacer()
-                                Text(formattedOrdinal(inspection.inspectedOn))
+                                Text(formattedOrdinal(date))
                                     .font(.body)
                                     .foregroundStyle(Color(hex: "#8E8E93"))
                             }
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 16)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    // Same white-on-grey card the temperature stats use, so
+                    // the two tabs cannot drift on corner radius.
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
                 }
             }
         }
@@ -360,6 +366,25 @@ struct NestReportView: View {
 
     private func formattedLong(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.wide).year())
+    }
+
+    /// The dates the Inspection list shows.
+    ///
+    /// Recorded inspections when there are any. When there are none -- which is
+    /// every nest today, because nothing writes inspection rows yet -- it falls
+    /// back to the single date entered in the Add Nest flow, so a hatched
+    /// nest's report shows the visit that was planned rather than nothing at
+    /// all.
+    ///
+    /// That date only survives hatching for nests hatched after 20260821030000;
+    /// earlier ones had it overwritten with NULL and show the empty message.
+    // ponytail: a stand-in for the real inspection list. Delete the fallback --
+    // not the property -- once the inspection flow writes rows.
+    private var inspectionDates: [Date] {
+        guard controller.inspections.isEmpty else {
+            return controller.inspections.map(\.inspectedOn)
+        }
+        return [nest.nextInspectionDate].compactMap { $0 }
     }
 
     private func formattedOrdinal(_ date: Date) -> String {
