@@ -9,6 +9,19 @@ enum HatcherySetupEntryPoint {
     case rescan
 }
 
+/// Everything this flow presents full-screen, as one value.
+private enum SetupCover: Identifiable {
+    case ready(HatcherySessionState)
+    case invite(OrganizationInviteEntity)
+
+    var id: String {
+        switch self {
+        case .ready(let hatchery): hatchery.id.uuidString
+        case .invite(let invite): invite.id
+        }
+    }
+}
+
 /// Presentation flow only: it maps typed SwiftUI routes to views. The actual
 /// setup draft and creation workflow belong to `HatcherySetupController`.
 struct HatcherySetupFlowView: View {
@@ -16,22 +29,46 @@ struct HatcherySetupFlowView: View {
     let onSave: (HatcherySessionState) -> Void
     let entryPoint: HatcherySetupEntryPoint
     let onCancel: () -> Void
+    /// Drives the profile sheet the name screen opens. Nil while there is no
+    /// account to show — first-hatch onboarding — which is what keeps the icon
+    /// decorative there, as it was everywhere before this.
+    var profileController: ProfileController?
+    /// Both tear down the session this flow is running inside, so they are
+    /// handed upward rather than run here. Same split as
+    /// `HatcheryManagementView`.
+    var onSignOut: (() -> Void)?
+    var onDeleteAccount: (() async throws -> Void)?
 
     @State private var router = HatcherySetupRouter()
-    /// Set once the hatchery is saved, so the confirmation screen holds the
-    /// finished session until the user chooses to go to it.
-    @State private var completedHatchery: HatcherySessionState?
+    /// Every full-screen presentation this flow makes, as one value: SwiftUI
+    /// keeps only the last `.fullScreenCover` attached to a view, so a second
+    /// modifier would silently never present.
+    @State private var presentedCover: SetupCover?
+    @State private var isShowingProfile = false
 
     init(
         controller: HatcherySetupController,
         onSave: @escaping (HatcherySessionState) -> Void,
         entryPoint: HatcherySetupEntryPoint = .firstHatch,
-        onCancel: @escaping () -> Void = {}
+        onCancel: @escaping () -> Void = {},
+        profileController: ProfileController? = nil,
+        onSignOut: (() -> Void)? = nil,
+        onDeleteAccount: (() async throws -> Void)? = nil
     ) {
         self.controller = controller
         self.onSave = onSave
         self.entryPoint = entryPoint
         self.onCancel = onCancel
+        self.profileController = profileController
+        self.onSignOut = onSignOut
+        self.onDeleteAccount = onDeleteAccount
+    }
+
+    /// Nil without a controller, which is what leaves the icon decorative on
+    /// first-hatch onboarding rather than opening an empty sheet.
+    private var profileHandler: (() -> Void)? {
+        guard profileController != nil else { return nil }
+        return { isShowingProfile = true }
     }
 
     var body: some View {
@@ -48,8 +85,49 @@ struct HatcherySetupFlowView: View {
         // read back from state, and a cover rather than another route: setup
         // is finished and written by this point, so there is nothing left on
         // the stack worth going back to.
-        .fullScreenCover(item: $completedHatchery) { hatchery in
-            HatcheryReadyView { onSave(hatchery) }
+        .fullScreenCover(item: $presentedCover) { cover in
+            switch cover {
+            case .ready(let hatchery):
+                HatcheryReadyView { onSave(hatchery) }
+
+            case .invite(let invite):
+                InvitationCodeView(
+                    invite: invite,
+                    onBack: { presentedCover = nil },
+                    onRegenerate: {
+                        guard let profileController else { return }
+                        await profileController.generateInvite()
+                        if let refreshed = profileController.invite {
+                            presentedCover = .invite(refreshed)
+                        }
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $isShowingProfile) {
+            if let profileController {
+                ProfileSheetView(
+                    controller: profileController,
+                    onClose: { isShowingProfile = false },
+                    onSignOut: {
+                        isShowingProfile = false
+                        onSignOut?()
+                    },
+                    onShowInvite: { invite in
+                        // The invite screen is a full page, so the sheet has to
+                        // be gone before it can be presented.
+                        isShowingProfile = false
+                        presentedCover = .invite(invite)
+                    },
+                    onDeleteAccount: {
+                        try await onDeleteAccount?()
+                        isShowingProfile = false
+                    }
+                )
+                .presentationDetents([.height(ProfileSheetView.Layout.detentHeight)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(34)
+            }
         }
     }
 
@@ -61,7 +139,8 @@ struct HatcherySetupFlowView: View {
                 onCreate: { name in
                     await continueWithNewHatchery(named: name, router: router)
                 },
-                onBack: onCancel
+                onBack: onCancel,
+                onProfile: profileHandler
             )
 
         case .additionalHatch:
@@ -70,7 +149,8 @@ struct HatcherySetupFlowView: View {
                 onCreate: { name in
                     await continueWithNewHatchery(named: name, router: router)
                 },
-                onBack: onCancel
+                onBack: onCancel,
+                onProfile: profileHandler
             )
 
         case .rescan:
@@ -221,7 +301,7 @@ struct HatcherySetupFlowView: View {
                 return
             }
 
-            completedHatchery = hatchery
+            presentedCover = .ready(hatchery)
         }
     }
 }

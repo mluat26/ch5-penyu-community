@@ -1,5 +1,7 @@
--- Covers 20260820010000: the assignment decides a reading's nest, and a
+-- Covers 20260821040000: the assignment decides a reading's nest, and a
 -- hatching record releases the logger.
+--
+-- (20260820010000 is `record_who_logged_the_hatch`, which this does not test.)
 
 begin;
 
