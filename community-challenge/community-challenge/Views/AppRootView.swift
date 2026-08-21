@@ -15,6 +15,9 @@ struct AppRootView: View {
 
     @State private var hatcherySetupController: HatcherySetupController
     @State private var hatcheryListController: HatcheryListController
+    /// Built once here rather than per presentation, so the sheet keeps what it
+    /// loaded across openings of the name screen.
+    @State private var profileController: ProfileController
     @State private var isCreatingHatchery = false
     @State private var hatcheryBeforeCreation: HatcherySessionState?
     @State private var rescanRequest: RescanRequest?
@@ -40,6 +43,24 @@ struct AppRootView: View {
         _hatcheryListController = State(
             initialValue: container.makeHatcheryListController()
         )
+        _profileController = State(
+            initialValue: container.makeProfileController()
+        )
+    }
+
+    /// Signing out from the name screen. Same shape as the dashboard's: the
+    /// container clears the session, then the root drops back to the welcome
+    /// route under whatever identity comes next.
+    private func signOut() {
+        Task {
+            do {
+                try await container.signOut()
+                isCreatingHatchery = false
+                endActiveAccount()
+            } catch {
+                profileController.setErrorMessage(error.localizedDescription)
+            }
+        }
     }
 
     var body: some View {
@@ -63,7 +84,18 @@ struct AppRootView: View {
                     entryPoint: isCreatingAdditionalHatchery
                         ? .additionalHatch
                         : .firstHatch,
-                    onCancel: cancelHatcheryCreation
+                    onCancel: cancelHatcheryCreation,
+                    // Only when an account already exists. First-hatch
+                    // onboarding has no profile to show, which is why the icon
+                    // stays decorative there.
+                    profileController: isCreatingAdditionalHatchery
+                        ? profileController
+                        : nil,
+                    onSignOut: signOut,
+                    onDeleteAccount: {
+                        try await container.deleteAccount()
+                        endActiveAccount()
+                    }
                 )
             } else if !hatcheryListController.hasLoaded {
                 // Neither screen is right until the query returns; rendering
