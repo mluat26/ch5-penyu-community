@@ -164,8 +164,8 @@ enum HatcheryDetectorEvaluation {
             box.minY >= 0,
             box.maxX <= 1,
             box.maxY <= 1,
-            box.width > 0,
-            box.height > 0
+            box.size.width > 0,
+            box.size.height > 0
         else {
             return false
         }
