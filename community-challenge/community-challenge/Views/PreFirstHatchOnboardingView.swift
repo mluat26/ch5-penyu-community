@@ -108,7 +108,7 @@ struct PreFirstHatchOnboardingView: View {
                 .accessibilityHidden(true)
 
             introCopy(
-                title: "Welcome to\nSmart Nest",
+                title: "Welcome to\nTurterra",
                 subtitle: "Protect every nest\nfrom egg to hatchling.",
                 titleHeight: 82,
                 scale: scale
