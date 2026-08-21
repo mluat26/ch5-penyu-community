@@ -13,15 +13,19 @@ final class NestController {
     private let nestService: NestService
     /// Resolves the signed-in user, so a saved nest records who collected it.
     private let identity: (any SupabaseIdentityProviding)?
+    /// Installs the logger named by the bucket ID into the saved nest.
+    private let deviceService: DeviceService?
 
     init(
         hatcheryID: UUID,
         nestService: NestService,
-        identity: (any SupabaseIdentityProviding)? = nil
+        identity: (any SupabaseIdentityProviding)? = nil,
+        deviceService: DeviceService? = nil
     ) {
         self.hatcheryID = hatcheryID
         self.nestService = nestService
         self.identity = identity
+        self.deviceService = deviceService
     }
 
     /// The current user, or nil if the identity could not be resolved. A nest
@@ -83,11 +87,61 @@ final class NestController {
                     )
                 )
             )
+            await installLogger(named: draft.bucketID, into: nest)
+
             lastSavedNest = nest
             return nest
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Assigns the logger the bucket ID names to this nest.
+    ///
+    /// Readings carry only the device's own ID; the database resolves the nest
+    /// from the active assignment. Without this step a nest records a bucket
+    /// ID as text and nothing else, the assignment never exists, and every
+    /// reading that device sends is refused.
+    ///
+    /// Loggers are registered ahead of time -- the firmware is flashed with the
+    /// ID of an existing row -- so this only ever installs one that is already
+    /// there. It never creates a device: a new row would carry a new ID that no
+    /// hardware knows, which looks like success and reports nothing.
+    ///
+    /// The nest is already saved by this point, so a missing logger never
+    /// discards the record. It no longer reports itself either: the bucket ID
+    /// is auto-issued until the NFC scan exists, so it matched no registered
+    /// device and the warning fired on every nest. A genuine failure to reach
+    /// the device service still surfaces -- that is a fault, not an absence.
+    private func installLogger(named bucketID: String, into nest: NestEntity) async {
+        let name = bucketID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let deviceService else { return }
+
+        do {
+            let devices = try await deviceService.devices()
+            guard
+                let device = devices.first(where: {
+                    $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .caseInsensitiveCompare(name) == .orderedSame
+                })
+            else {
+                // ponytail: silent by request -- the team guarantees the
+                // logger is registered and powered before a nest is created,
+                // so the warning was only ever noise in practice.
+                //
+                // If nests start reading "--" forever, look here first: no
+                // device means no `device_assignment` row, and
+                // `resolve_reading_nest` refuses every reading without one.
+                return
+            }
+
+            _ = try await deviceService.updateDevice(
+                id: device.id,
+                UpdateDeviceInput(name: device.name, nestID: nest.id)
+            )
+        } catch {
+            errorMessage = "Nest saved, but its logger could not be installed: \(error.localizedDescription)"
         }
     }
 

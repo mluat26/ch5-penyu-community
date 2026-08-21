@@ -608,7 +608,10 @@ struct NestRegistrationSuccessView: View {
     let nestNumber: String
     let eggCount: String
     let hatchDate: String
-    let temperatureC: Double
+    /// The newly saved nest's own latest reading, or nil when its logger has
+    /// not reported yet. Not a hatchery average and not a stand-in number:
+    /// either would show a fresh nest a temperature that isn't its own.
+    let temperatureC: Double?
     let onViewNest: () -> Void
     let onBackToHatchery: () -> Void
 
@@ -744,6 +747,19 @@ private extension NestTemperature.Band {
         eggCount: "100",
         hatchDate: "03.03.2026",
         temperatureC: 30,
+        onViewNest: { },
+        onBackToHatchery: { }
+    )
+}
+
+// The state a nest is actually in the moment it is registered: saved, logger
+// installed, nothing reported yet.
+#Preview("Nest registered: no data", traits: .fixedLayout(width: 402, height: 874)) {
+    NestRegistrationSuccessView(
+        nestNumber: "055",
+        eggCount: "100",
+        hatchDate: "03.03.2026",
+        temperatureC: nil,
         onViewNest: { },
         onBackToHatchery: { }
     )
