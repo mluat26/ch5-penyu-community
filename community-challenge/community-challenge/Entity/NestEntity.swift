@@ -28,8 +28,10 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     var eggsUnhatched: Int?
     var placementRow: Int?
     var placementColumn: Int?
-    /// When the next inspection is expected. Nil once the nest has hatched,
-    /// which is the terminal state: nothing further is scheduled.
+    /// When the next inspection is expected — and, once the nest has hatched,
+    /// the record of when one was expected. It survives hatching: the ranger
+    /// entered it and the Timeline still shows it. What stops a hatched nest
+    /// appearing in the work queue is `hasHatched`, not an absent date.
     var nextInspectionDate: Date?
     /// When the nest was written down, which is not when the eggs were laid --
     /// `dateEggsLaid` is what the ranger reports, this is what the database
@@ -54,8 +56,14 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     /// True once an inspection reported the nest finished. Deliberately not
     /// "some eggs hatched": a clutch emerges over several days, so a nest can
     /// have hatchlings and still be incubating the rest.
+    ///
+    /// `hasHatched` leads because a hatched nest keeps its inspection date now
+    /// (`20260821030000`) -- it is the ranger's record of what was planned, not
+    /// a flag. An absent date still closes a nest an inspection finished
+    /// without a tally, which is the other way a record ends.
     var isComplete: Bool {
-        nextInspectionDate == nil && (successEggsHatch != nil || failEggsHatch != nil)
+        hasHatched
+            || (nextInspectionDate == nil && (successEggsHatch != nil || failEggsHatch != nil))
     }
 
     /// Whether the final tally has been recorded.
@@ -73,8 +81,13 @@ struct NestEntity: Identifiable, Hashable, Sendable {
     }
 
     /// Whether this nest is waiting to be inspected on or before `date`.
+    ///
+    /// A hatched nest never is, however its date reads. That used to be true
+    /// because `refresh_nest_summary` nulled the date on hatching, which meant
+    /// the queue was reading a destroyed record rather than asking whether the
+    /// nest had hatched. It asks now, and the date is left alone.
     func isDueForInspection(on date: Date = Date()) -> Bool {
-        guard let nextInspectionDate else { return false }
+        guard !hasHatched, let nextInspectionDate else { return false }
         return nextInspectionDate <= date
     }
 

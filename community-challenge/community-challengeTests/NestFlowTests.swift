@@ -589,6 +589,41 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(nest.displayNumber(fallbackOrdinal: 1), "001")
     }
 
+    /// The bug: the ranger's inspection date disappeared from the Timeline the
+    /// moment the nest hatched, because `refresh_nest_summary` nulled the
+    /// column to keep the nest out of the work queue. The date stays now, and
+    /// the queue asks whether the nest hatched instead of reading a destroyed
+    /// record -- so both halves have to hold at once.
+    func testAHatchedNestKeepsItsInspectionDateAndLeavesTheQueue() {
+        let due = Date().addingTimeInterval(-60 * 60 * 24)
+        var nest = NestEntity(
+            id: UUID(),
+            hatcheryID: UUID(),
+            founderID: nil,
+            numberOfEggs: 100,
+            dateEggsLaid: nil,
+            datePredictedHatch: nil,
+            successEggsHatch: nil,
+            failEggsHatch: nil,
+            placementRow: 1,
+            placementColumn: 1,
+            nextInspectionDate: due
+        )
+
+        XCTAssertTrue(nest.isDueForInspection(), "an unhatched nest past its date is due")
+
+        // The tally arrives. eggsUnhatched is what a hatching row sets, and
+        // the inspection date is deliberately left alone.
+        nest.successEggsHatch = 80
+        nest.failEggsHatch = 10
+        nest.eggsUnhatched = 10
+
+        XCTAssertEqual(nest.nextInspectionDate, due, "the date the ranger entered survives")
+        XCTAssertFalse(nest.isDueForInspection(), "a hatched nest is never due, date or no date")
+        XCTAssertTrue(nest.isComplete)
+        XCTAssertFalse(nest.isPartiallyHatched)
+    }
+
     private func makeController() -> NestController {
         NestController(
             hatcheryID: UUID(),
