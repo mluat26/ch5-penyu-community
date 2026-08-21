@@ -205,8 +205,20 @@ private struct StubProfileRepository: ProfileRepository {
     }
 
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity {
-        OrganizationEntity(id: id, name: "Demo", createdAt: .now, code: "ORG-0000000")
+        OrganizationEntity(
+            id: id,
+            name: "Demo",
+            createdAt: .now,
+            code: "ORG-0000000",
+            // Nil, so the members list measures as Figma draws it: 200:4212
+            // is the plain read frame, without the owner's role menus.
+            ownerID: nil
+        )
     }
+
+    func setMemberRole(memberID: UUID, role: OrganizationRole) async throws {}
+
+    func removeMember(memberID: UUID) async throws {}
 
     func generateInvite() async throws -> OrganizationInviteEntity {
         FigmaMeasurementHarness.Fixtures.invite

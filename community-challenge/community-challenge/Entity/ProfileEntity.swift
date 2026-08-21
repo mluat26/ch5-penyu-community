@@ -20,6 +20,11 @@ enum OrganizationRole: String, Codable, CaseIterable, Sendable {
     /// Only a manager may issue invite codes. The database enforces this too;
     /// this exists so the UI can hide an action that would be refused.
     var canGenerateInviteCode: Bool { self == .manager }
+
+    /// The roles an owner may hand out. `agent` is absent because it means
+    /// "belongs to no organization" — that is what removing a member does, and
+    /// `set_organization_member_role` refuses it for the same reason.
+    static var assignable: [OrganizationRole] { allCases.filter { $0 != .agent } }
 }
 
 /// The signed-in person and their organization membership.
