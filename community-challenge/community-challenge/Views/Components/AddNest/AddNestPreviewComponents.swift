@@ -298,10 +298,15 @@ struct AddNestTemperatureCard: View {
                 Text(NestTemperature.text(temperatureC))
                     .font(.system(size: 70, weight: .regular))
                     .frame(height: 48, alignment: .top)
-                Text("°C")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .frame(height: 48, alignment: .top)
+                // No unit on an absent reading: "--°C" reads as a measurement
+                // in degrees that happens to be missing its digits, when the
+                // truth is that nothing has been measured at all.
+                if temperatureC != nil {
+                    Text("°C")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .frame(height: 48, alignment: .top)
+                }
             }
             .frame(height: 48, alignment: .top)
             .foregroundStyle(accentColor)
