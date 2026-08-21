@@ -367,6 +367,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
 				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Turterra;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan your hatchery area and map the turtle nest grid.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to pin where a turtle nest was found.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use your photos to let you pick an existing hatchery image.";
@@ -406,6 +407,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_EXPAND_BUILD_SETTINGS = YES;
 				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Turterra;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan your hatchery area and map the turtle nest grid.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to pin where a turtle nest was found.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use your photos to let you pick an existing hatchery image.";
