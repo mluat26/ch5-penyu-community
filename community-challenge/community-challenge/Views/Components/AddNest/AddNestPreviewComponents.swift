@@ -281,7 +281,10 @@ private struct AddNestPreviewMetric: View {
 }
 
 struct AddNestTemperatureCard: View {
-    let temperatureC: Double
+    /// Nil until the nest's logger has reported, which is the ordinary state
+    /// for a nest registered seconds ago. It reads "--" rather than a number,
+    /// so a nest with no data cannot be mistaken for a healthy one.
+    let temperatureC: Double?
     let accentColor: Color
 
     var body: some View {
@@ -292,7 +295,7 @@ struct AddNestTemperatureCard: View {
                 .foregroundStyle(Color.appNeutralGray2.opacity(0.8))
 
             HStack(alignment: .top, spacing: 0) {
-                Text(temperatureC.formatted(.number.precision(.fractionLength(1))))
+                Text(NestTemperature.text(temperatureC))
                     .font(.system(size: 70, weight: .regular))
                     .frame(height: 48, alignment: .top)
                 Text("°C")
