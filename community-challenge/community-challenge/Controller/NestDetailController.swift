@@ -9,6 +9,10 @@ import Foundation
 final class NestDetailController {
     private(set) var readings: [IoTDataEntity] = []
     private(set) var inspections: [InspectionEntity] = []
+    /// The final tally, once one exists. Nil while the nest is still
+    /// incubating, which is what the detail sheet reads to decide whether its
+    /// action records a hatch or opens the report.
+    private(set) var hatching: HatchingEntity?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
@@ -32,19 +36,22 @@ final class NestDetailController {
     private let inspectionService: InspectionService
     private let nestService: NestService?
     private let profileRepository: (any ProfileRepository)?
+    private let hatchingService: HatchingService?
 
     init(
         nestID: UUID,
         ioTDataRepository: any IoTDataRepository,
         inspectionService: InspectionService,
         nestService: NestService? = nil,
-        profileRepository: (any ProfileRepository)? = nil
+        profileRepository: (any ProfileRepository)? = nil,
+        hatchingService: HatchingService? = nil
     ) {
         self.nestID = nestID
         self.ioTDataRepository = ioTDataRepository
         self.inspectionService = inspectionService
         self.nestService = nestService
         self.profileRepository = profileRepository
+        self.hatchingService = hatchingService
     }
 
     /// Turns `founder_id` into a name. Readable only for people in the same
@@ -126,9 +133,11 @@ final class NestDetailController {
 
             async let readings = ioTDataRepository.fetchReadings(nestIDs: [nestID], in: window)
             async let inspections = inspectionService.inspections(nestID: nestID)
+            async let hatching = hatchingService?.hatching(nestID: nestID)
 
             self.readings = try await readings
             self.inspections = try await inspections.sorted { $0.inspectedOn < $1.inspectedOn }
+            self.hatching = try await hatching ?? nil
         } catch {
             errorMessage = error.localizedDescription
         }

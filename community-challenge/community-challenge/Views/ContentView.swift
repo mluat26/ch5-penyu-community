@@ -135,6 +135,8 @@ struct ContentView: View {
                             ordinal: selection.ordinal,
                             sectionLabel: selection.sectionID,
                             controller: container.makeNestDetailController(nestID: selection.item.id),
+                            makeHatchingController: { container.makeHatchingController(nest: $0) },
+                            hatcheryName: hatchery.hatchery.name,
                             onClose: { presentedSheet = nil },
                             onDelete: {
                                 Task {
@@ -142,7 +144,9 @@ struct ContentView: View {
                                     presentedSheet = nil
                                     await hatcheryController.load()
                                 }
-                            }
+                            },
+                            onNestChanged: { await hatcheryController.load() },
+                            onReturnToHatchery: { presentedSheet = nil }
                         )
                         .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                         .presentationDragIndicator(.visible)

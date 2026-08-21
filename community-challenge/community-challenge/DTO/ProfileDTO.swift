@@ -67,6 +67,26 @@ extension OrganizationInviteDTO {
     }
 }
 
+/// Parameters for `set_organization_member_role`.
+struct SetMemberRoleDTO: Codable, Sendable {
+    let memberID: UUID
+    let newRole: String
+
+    enum CodingKeys: String, CodingKey {
+        case memberID = "member_id"
+        case newRole = "new_role"
+    }
+}
+
+/// Parameters for `remove_organization_member`.
+struct RemoveMemberDTO: Codable, Sendable {
+    let memberID: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case memberID = "member_id"
+    }
+}
+
 /// Parameters for `redeem_organization_invite`.
 struct RedeemInviteDTO: Codable, Sendable {
     let inviteCode: String

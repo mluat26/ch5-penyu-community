@@ -3,9 +3,9 @@
 /// the edit/inspect sheet), but shares its controller and several building
 /// blocks so the two stay in sync on the underlying data.
 ///
-/// NOTE: `NestTemperatureChart` and the axis/threshold helpers it uses live
-/// in NestDetailSheet.swift marked `private`. Drop the `private` there to
-/// reuse it here — duplicating the gradient/threshold logic would drift.
+/// The day chart is `NestTemperatureChart` from NestDetailSheet.swift, shared
+/// rather than reimplemented so the two screens cannot drift on gradients or
+/// thresholds.
 
 import SwiftUI
 
@@ -25,8 +25,6 @@ struct NestReportView: View {
     // Info tab
     let hatcheryName: String
 
-    let onViewTemperatureOverTime: () -> Void
-    let onDownloadFullReport: () -> Void
     let onBackToHatchery: () -> Void
 
     @State private var selectedTab: NestReportTab = .info
@@ -40,11 +38,24 @@ struct NestReportView: View {
     // active.
     @State private var sheetDetent: PresentationDetent = .fraction(0.6)
 
-    // NestEntity already carries these -- no separate params needed.
-    private var hatchedCount: Int? { nest.successEggsHatch }
-    private var unhatchedCount: Int? { nest.eggsUnhatched }
-    private var rottenCount: Int? { nest.failEggsHatch }
-    private var successRatePercent: Double? { nest.hatchRate.map { $0 * 100 } }
+    // The tally first, the nest second.
+    //
+    // refresh_nest_summary copies one onto the other, so they agree -- but only
+    // after a round trip. The `nest` here is whatever snapshot the caller was
+    // holding, and the flow arrives straight from recording a hatch, so its
+    // copy still predates the save and every figure below reads nil. The
+    // hatching record on the controller is reloaded as part of that save, so it
+    // is the one that is current.
+    private var hatchedCount: Int? { controller.hatching?.eggsHatched ?? nest.successEggsHatch }
+    private var unhatchedCount: Int? { controller.hatching?.eggsUnhatched ?? nest.eggsUnhatched }
+    private var rottenCount: Int? { controller.hatching?.eggsRotten ?? nest.failEggsHatch }
+
+    private var successRatePercent: Double? {
+        if let hatching = controller.hatching {
+            return hatching.hatchRate(clutchSize: nest.numberOfEggs).map { $0 * 100 }
+        }
+        return nest.hatchRate.map { $0 * 100 }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -133,7 +144,15 @@ struct NestReportView: View {
             .scrollIndicators(.hidden)
 
             VStack(spacing: 12) {
-                AddNestPrimaryButton(title: "Download full report", action: onDownloadFullReport)
+                // ponytail: report generation is not built, so this renders
+                // disabled rather than being hidden -- the design puts it on
+                // all three tabs and its absence would read as a missing
+                // feature. Give it an action when there is a report to make.
+                AddNestPrimaryButton(
+                    title: "Download full report",
+                    action: {},
+                    isDisabled: true
+                )
                 AddNestPrimaryButton(
                     title: "Back to Hatchery",
                     action: onBackToHatchery,
@@ -260,20 +279,23 @@ struct NestReportView: View {
                     .foregroundStyle(Color(hex: "#D9538E"))
                 }
                 Spacer()
-                Button(action: onViewTemperatureOverTime) {
+                // ponytail: the day-by-day temperature screen this points at
+                // does not exist yet, so the control is disabled rather than
+                // silently doing nothing. The chart below stays per-day until
+                // it does.
+                Button(action: {}) {
                     HStack(spacing: 4) {
                         Text("View temperature over time")
                             .font(.footnote)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .foregroundStyle(Color(hex: "#8E8E93").opacity(0.4))
                 }
                 .buttonStyle(.plain)
+                .disabled(true)
             }
 
-            // Requires `NestTemperatureChart` to be non-`private` in
-            // NestDetailSheet.swift.
             NestTemperatureChart(
                 readings: controller.readings(on: selectedChartDay),
                 scale: 1
@@ -322,8 +344,16 @@ struct NestReportView: View {
 
     // MARK: - Shared formatting
 
+    /// Measured against the hatch that actually happened, not the one that was
+    /// predicted. A clutch emerging a week early or late is exactly the case
+    /// this figure exists to record, and `datePredictedHatch` would report the
+    /// guess instead. Falls back to the prediction only while still incubating,
+    /// where there is no actual date yet and the estimate is the honest answer.
     private var incubationPeriodText: String {
-        guard let laid = nest.dateEggsLaid, let hatch = nest.datePredictedHatch else { return "—" }
+        guard let laid = nest.dateEggsLaid else { return "—" }
+        guard let hatch = controller.hatching?.hatchedOn ?? nest.datePredictedHatch else {
+            return "—"
+        }
         let days = Calendar.current.dateComponents([.day], from: laid, to: hatch).day ?? 0
         return "\(max(days, 0)) days"
     }
@@ -332,19 +362,8 @@ struct NestReportView: View {
         date.formatted(.dateTime.day().month(.wide).year())
     }
 
-    /// "20th June, 2026" -- matches `AppDateFormatting.longNestDraftDate`'s
-    /// reading style for a `Date` rather than the draft's `String` form.
     private func formattedOrdinal(_ date: Date) -> String {
-        let day = Calendar.current.component(.day, from: date)
-        let suffix: String
-        switch (day % 10, day % 100) {
-        case (1, let hundred) where hundred != 11: suffix = "st"
-        case (2, let hundred) where hundred != 12: suffix = "nd"
-        case (3, let hundred) where hundred != 13: suffix = "rd"
-        default: suffix = "th"
-        }
-        let rest = date.formatted(.dateTime.month(.wide).year())
-        return "\(day)\(suffix) \(rest)"
+        AppDateFormatting.ordinalDate(date)
     }
 }
 
@@ -387,18 +406,6 @@ private struct NestReportOutcomeRow: View {
         .frame(maxWidth: .infinity)
     }
 }
-
-    private func stat(value: String, label: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title3).bold()
-                .foregroundStyle(tint)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(Color(hex: "#8E8E93"))
-        }
-        .frame(maxWidth: .infinity)
-    }
 
 /// New -- the dashed-line "collection ⟶ incubation ⟶ hatching" progress row
 /// on the Timeline tab.
@@ -469,6 +476,10 @@ private struct NestReportPreviewIoTDataRepository: IoTDataRepository {
     func fetchReadings(nestIDs: [UUID], in interval: DateInterval?) async throws -> [IoTDataEntity] {
         []
     }
+
+    func temperatureStats(nestID: UUID, from: Date, to: Date) async throws -> NestTemperatureStats? {
+        nil
+    }
 }
 
 private struct NestReportPreviewInspectionRepository: InspectionRepository {
@@ -528,8 +539,6 @@ private enum NestReportPreviewFixtures {
         sectionLabel: "B1",
         controller: NestReportPreviewFixtures.controller(for: nest),
         hatcheryName: "Hatchery_01",
-        onViewTemperatureOverTime: { },
-        onDownloadFullReport: { },
         onBackToHatchery: { }
     )
 }

@@ -82,4 +82,29 @@ actor SupabaseIoTDataRepository: IoTDataRepository {
         // rest of the dashboard down with it: drop it and keep going.
         return rows.compactMap { try? $0.toEntity() }
     }
+
+    func temperatureStats(
+        nestID: UUID,
+        from: Date,
+        to: Date
+    ) async throws -> NestTemperatureStats? {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        let rows: [NestTemperatureStatsDTO] = try await client
+            .rpc(
+                "nest_temperature_stats",
+                params: NestTemperatureStatsParamsDTO(
+                    nestID: nestID,
+                    from: Self.instant(from),
+                    to: Self.instant(to)
+                )
+            )
+            .execute()
+            .value
+
+        // Unlike every other RPC here, an empty result is not a mapping
+        // failure. The function is `security invoker`, so a nest the caller may
+        // not read simply returns no rows -- that is an answer, not an error.
+        return rows.first?.toEntity()
+    }
 }

@@ -63,10 +63,10 @@ struct AddNestPreviewCard: View {
     }
 }
 
-/// The identifiers that are not part of the headline summary: which bucket the
-/// clutch is in, which grid cell it went to, and when someone is due to look at
-/// it. Confirming these is the point of this screen, so they are shown rather
-/// than trusted.
+/// A flat row of identifiers, each an icon over a label over its value, split
+/// by thin vertical rules. The caller decides which facts belong in it -- the
+/// review screen shows bucket, section and inspection date, but nothing here
+/// is tied to those three.
 struct AddNestPreviewDetailRow: View {
     struct Item: Identifiable {
         let id = UUID()

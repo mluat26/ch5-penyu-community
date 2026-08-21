@@ -33,10 +33,12 @@ final class HatcheryImageProcessorTests: XCTestCase {
         let mapper = try XCTUnwrap(HatcheryPerspectiveMapper(boundary: boundary))
         let sourceRegion = try XCTUnwrap(
             HatcherySandRegion(
+                // A right triangle, not a rectangle: rectification crops to
+                // the sand's bounding box, so a region that filled its own box
+                // would fill the cropped image and prove nothing.
                 points: try [
                     NormalizedPoint(x: 0, y: 0),
                     NormalizedPoint(x: 0.55, y: 0),
-                    NormalizedPoint(x: 0.55, y: 1),
                     NormalizedPoint(x: 0, y: 1)
                 ].map { rectifiedPoint in
                     let sourcePoint = try XCTUnwrap(

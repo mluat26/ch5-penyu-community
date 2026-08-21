@@ -28,6 +28,12 @@ protocol ProfileRepository: Sendable {
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity
     func generateInvite() async throws -> OrganizationInviteEntity
     @discardableResult func redeemInvite(code: String) async throws -> UUID
+    /// Changes another member's role. Only the organization's owner may do
+    /// this, and the database refuses everyone else.
+    func setMemberRole(memberID: UUID, role: OrganizationRole) async throws
+    /// Takes a member out of the organization without deleting their account:
+    /// what they recorded stays, and stays attributed to them.
+    func removeMember(memberID: UUID) async throws
     func deleteAccount() async throws
 }
 
@@ -142,6 +148,25 @@ actor SupabaseProfileRepository: ProfileRepository {
             )
         }
         return dto.toEntity()
+    }
+
+    func setMemberRole(memberID: UUID, role: OrganizationRole) async throws {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        try await client
+            .rpc(
+                "set_organization_member_role",
+                params: SetMemberRoleDTO(memberID: memberID, newRole: role.rawValue)
+            )
+            .execute()
+    }
+
+    func removeMember(memberID: UUID) async throws {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        try await client
+            .rpc("remove_organization_member", params: RemoveMemberDTO(memberID: memberID))
+            .execute()
     }
 
     /// Removes the caller's account and everything that belongs to it. The

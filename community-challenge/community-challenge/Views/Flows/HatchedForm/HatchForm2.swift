@@ -73,21 +73,24 @@ struct NestSummaryCard: View {
 // MARK: - Screen
 
 struct ReviewHatchlingsDetailsView: View {
-    @Environment(\.dismiss) private var dismiss
+    /// The whole controller rather than seven display values, so this screen
+    /// cannot arrive at a different hatch rate or incubation count from the one
+    /// the person just filled in. Every figure below is computed in exactly one
+    /// place.
+    ///
+    /// The seven values it used to take were `let`s with defaults, which meant
+    /// `ReviewHatchlingsDetailsView()` compiled and silently showed a fake nest.
+    @Bindable var controller: HatchingController
+    /// Position in the section list, used only as the fallback when a nest has
+    /// no number of its own -- the same contract as everywhere else that shows
+    /// a nest number.
+    let ordinal: Int
 
-    // Replace with real draft/controller values when wiring up
-    let nestID: String = "Nest #055"
-    let successfulHatch: Int = 50
-    let hatchingDate: String = "Mar 01, 2026"
-    let incubationDays: Int = 90
-    let rottenEggs: Int = 12
-    let unhatchedEggs: Int = 123
-    let hatchingPercent: Double = 26.3
+    let onSave: () -> Void
+    let onEdit: () -> Void
+    let onCancel: () -> Void
 
     private let accentGreen = Color(red: 0.29, green: 0.45, blue: 0.34)
-
-    var onSave: () -> Void = {}
-    var onEdit: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -103,7 +106,7 @@ struct ReviewHatchlingsDetailsView: View {
                         .padding(.top, 4)
                 }
                 Spacer()
-                Button(action: { dismiss() }) {
+                Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
@@ -117,11 +120,19 @@ struct ReviewHatchlingsDetailsView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     NestSummaryCard(
-                        title: nestID,
+                        title: "Nest #\(controller.nest.displayNumber(fallbackOrdinal: ordinal))",
                         stats: [
-                            .init(value: "\(successfulHatch)", label: "Succesful\nhatch"),
-                            .init(value: hatchingDate, label: "Hatching\ndate"),
-                            .init(value: "\(incubationDays)", label: "Incubation\ndays"),
+                            .init(value: "\(controller.hatchedEggs)", label: "Succesful\nhatch"),
+                            .init(
+                                value: AppDateFormatting.longNestDraftDate(
+                                    AppDateFormatting.nestDraftDateString(controller.draft.hatchedOn)
+                                ),
+                                label: "Hatching\ndate"
+                            ),
+                            .init(
+                                value: controller.incubationDays.map(String.init) ?? "—",
+                                label: "Incubation\ndays"
+                            ),
                         ]
                     )
 
@@ -129,17 +140,17 @@ struct ReviewHatchlingsDetailsView: View {
                         .init(
                             systemImage: "viewfinder.trianglebadge.exclamationmark",
                             label: "Rotten eggs",
-                            value: "\(rottenEggs)"
+                            value: "\(controller.rottenEggs)"
                         ),
                         .init(
                             systemImage: "clock.badge.exclamationmark",
                             label: "Unhatched eggs",
-                            value: "\(unhatchedEggs)"
+                            value: "\(controller.unhatchedEggs)"
                         ),
                         .init(
                             systemImage: "checkmark.seal",
                             label: "Hatching %",
-                            value: String(format: "%.1f%%", hatchingPercent)
+                            value: String(format: "%.1f%%", controller.hatchRatePercent)
                         ),
                     ])
                 }
@@ -151,20 +162,38 @@ struct ReviewHatchlingsDetailsView: View {
 
             // Save + Edit
             VStack(spacing: 14) {
-                Button(action: onSave) {
-                    Text("Save")
-                        .font(.headline)
-                        .foregroundColor(.white)
+                if let errorMessage = controller.errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundColor(Color(hex: "#FF383C"))
+                        .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(RoundedRectangle(cornerRadius: 28).fill(accentGreen))
                 }
+
+                Button(action: onSave) {
+                    Group {
+                        if controller.isSaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Save").font(.headline)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(controller.isSaving ? Color(.systemGray3) : accentGreen)
+                    )
+                }
+                .disabled(controller.isSaving)
 
                 Button(action: onEdit) {
                     Text("Edit details")
                         .font(.subheadline).bold()
                         .foregroundColor(accentGreen)
                 }
+                .disabled(controller.isSaving)
             }
             .padding(.horizontal)
             .padding(.bottom, 16)
@@ -189,5 +218,11 @@ private struct GlassCloseButtonModifier: ViewModifier {
 }
 
 #Preview {
-    ReviewHatchlingsDetailsView()
+    ReviewHatchlingsDetailsView(
+        controller: HatchingPreviewFixtures.controller(),
+        ordinal: 55,
+        onSave: {},
+        onEdit: {},
+        onCancel: {}
+    )
 }

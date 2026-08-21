@@ -137,9 +137,9 @@ final class NestFlowTests: XCTestCase {
 
         controller.updateEstimatedHatchDate()
 
-        // 01.01.2026 + 59 days of incubation
-        XCTAssertEqual(controller.draft.hatchDate, "01.03.2026")
-        XCTAssertEqual(NestController.estimatedIncubationDays, 59)
+        // 01.01.2026 + 56 days of incubation
+        XCTAssertEqual(controller.draft.hatchDate, "26.02.2026")
+        XCTAssertEqual(NestController.estimatedIncubationDays, 56)
     }
 
     /// The day count is a free-text numeric field, so a non-number is

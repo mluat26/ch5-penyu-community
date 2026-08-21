@@ -437,13 +437,60 @@ struct ProfileSheetView: View {
 
             Spacer(minLength: 8 * scale)
 
-            Text(member.role.displayName)
-                .font(.system(size: 17 * scale, weight: .regular))
-                .foregroundStyle(Color(hex: "#8E8E93"))
+            if controller.pendingMemberID == member.id {
+                ProgressView().controlSize(.small)
+            } else if controller.canManage(member) {
+                memberMenu(member, scale: scale)
+            } else {
+                Text(member.role.displayName)
+                    .font(.system(size: 17 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+            }
         }
         .padding(.horizontal, 16 * scale)
         .frame(width: Layout.contentWidth * scale, height: Layout.rowHeight * scale)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The owner's controls, shaped like the profile screen's own role menu
+    /// (200:4269) so the two read as the same control.
+    ///
+    /// Removing is destructive but not confirmed: it takes the organization
+    /// away, it does not delete the account, and re-inviting is a four-character
+    /// code. The one action here that cannot be undone — Delete Account — is
+    /// the one that keeps its confirmation.
+    private func memberMenu(_ member: ProfileEntity, scale: CGFloat) -> some View {
+        Menu {
+            ForEach(OrganizationRole.assignable, id: \.self) { role in
+                Button {
+                    Task { await controller.setRole(role, for: member) }
+                } label: {
+                    if role == member.role {
+                        Label(role.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(role.displayName)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task { await controller.remove(member) }
+            } label: {
+                Label("Remove from organization", systemImage: "person.badge.minus")
+            }
+        } label: {
+            HStack(spacing: 4 * scale) {
+                Text(member.role.displayName)
+                    .font(.system(size: 17 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+            }
+        }
+        .accessibilityLabel("Manage \(member.displayName ?? "this member")")
     }
 
     private func organizationRow(scale: CGFloat) -> some View {

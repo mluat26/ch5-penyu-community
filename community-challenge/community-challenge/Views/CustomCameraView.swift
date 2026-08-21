@@ -45,22 +45,20 @@ struct CustomCameraView: View {
                     )
                 }
 
-                GlassEffectContainer(spacing: 20) {
-                    VStack(spacing: 0) {
-                        HatcheryScanInstructionBanner(
-                            systemName: "camera.viewfinder",
-                            text: "Get ready to check out the whole turtle hatching area"
-                        )
-                        .padding(.top, 68)
+                VStack(spacing: 0) {
+                    HatcheryScanInstructionBanner(
+                        systemName: "camera.viewfinder",
+                        text: "Get ready to check out the whole turtle hatching area"
+                    )
+                    .padding(.top, 68)
 
-                        Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                        captureControls
-                            .padding(.bottom, 59)
-                    }
+                    captureControls
+                        .padding(.bottom, 59)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear {
                 invalidatePendingWork()
                 previewSize = geometry.size

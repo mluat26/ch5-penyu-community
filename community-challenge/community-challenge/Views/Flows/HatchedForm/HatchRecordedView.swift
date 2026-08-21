@@ -13,7 +13,10 @@ struct HatchRecordedView: View {
     let successfulHatchCount: String
     let hatchingDate: String
     let incubationDays: String
-    let averageTemperatureC: Double
+    /// Optional because most nests have no logger. `%.0f` of a defaulted zero
+    /// would render "0°C", which reads as a real measurement of a freezing
+    /// nest rather than as no data.
+    let averageTemperatureC: Double?
     let initialEggCount: String
 
     let onViewFullReport: () -> Void
@@ -51,7 +54,7 @@ struct HatchRecordedView: View {
                     HStack(spacing: 12) {
                         AddNestSummaryMetricCard(
                             title: "Average temperature",
-                            value: String(format: "%.0f°C", averageTemperatureC)
+                            value: averageTemperatureC.map { String(format: "%.0f°C", $0) } ?? "—°C"
                         )
 
                         AddNestSummaryMetricCard(

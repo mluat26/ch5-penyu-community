@@ -80,10 +80,23 @@ struct HomeView: View {
             SectionOverviewSheet(
                 section: section,
                 container: container,
+                hatcheryName: hatchery.hatchery.name,
                 onNestDeleted: {
                     presentedSection = nil
                     await controller.load()
-                }
+                },
+                onNestChanged: {
+                    await controller.load()
+                    // The sheet holds a copy of its section, so reloading the
+                    // dashboard alone would leave the list underneath showing
+                    // the nest exactly as it was. Re-read the same section from
+                    // the refreshed dashboard instead of dismissing.
+                    if let refreshed = controller.dashboard?
+                        .section(row: section.row, column: section.column) {
+                        presentedSection = refreshed
+                    }
+                },
+                onReturnToHatchery: { presentedSection = nil }
             )
                 .presentationDetents([.height(707)])
                 .presentationDragIndicator(.visible)
@@ -409,12 +422,58 @@ struct HomeView: View {
     }
 }
 
+/// Which nests the section list shows.
+///
+/// "Hatched" reads `NestEntity.hasHatched` -- the nest carries a tally --
+/// rather than `isComplete`, which is also true for a nest an inspection closed
+/// without one. No extra query either way; this is data the dashboard already
+/// holds.
+private enum NestHatchFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case unhatched = "Unhatched"
+    case hatched = "Hatched"
+
+    var id: String { rawValue }
+
+    func matches(_ nest: NestEntity) -> Bool {
+        switch self {
+        case .all: true
+        case .hatched: nest.hasHatched
+        case .unhatched: !nest.hasHatched
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .all: "No nests in this section"
+        case .hatched: "No hatched nests in this section"
+        case .unhatched: "No nests still incubating here"
+        }
+    }
+}
+
 private struct SectionOverviewSheet: View {
     let section: HatcherySectionDashboard
     let container: AppContainer
+    let hatcheryName: String
     let onNestDeleted: () async -> Void
+    let onNestChanged: () async -> Void
+    let onReturnToHatchery: () -> Void
 
     @State private var selectedNest: NestDetailSelection?
+    @State private var filter: NestHatchFilter = .all
+
+    /// Ordinals are assigned before filtering, never after.
+    ///
+    /// Numbering a filtered array renumbers every nest in it, so the same nest
+    /// would answer to a different number depending on which filter happened to
+    /// be selected -- the exact failure `NestEntity.displayNumber` exists to
+    /// prevent. Position in the unfiltered section is the identity.
+    private var rows: [(ordinal: Int, item: NestDashboardItem)] {
+        section.nests.enumerated()
+            .map { (ordinal: $0.offset + 1, item: $0.element) }
+            .filter { filter.matches($0.item.nest) }
+    }
 
     var body: some View {
         SheetChrome(title: "Section \(section.id)") { sheetWidth in
@@ -422,8 +481,12 @@ private struct SectionOverviewSheet: View {
                 .frame(width: 370, height: 85, alignment: .top)
                 .offset(x: (sheetWidth - 370) / 2, y: 71)
 
-            nestList
+            filterPicker
+                .frame(width: 371)
                 .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
+
+            nestList
+                .offset(x: ceil((sheetWidth - 371) / 2), y: 207)
         }
         .sheet(item: $selectedNest) { selection in
             NestDetailSheet(
@@ -431,6 +494,8 @@ private struct SectionOverviewSheet: View {
                 ordinal: selection.ordinal,
                 sectionLabel: section.id,
                 controller: container.makeNestDetailController(nestID: selection.item.id),
+                makeHatchingController: { container.makeHatchingController(nest: $0) },
+                hatcheryName: hatcheryName,
                 onClose: { selectedNest = nil },
                 onDelete: {
                     Task {
@@ -438,7 +503,12 @@ private struct SectionOverviewSheet: View {
                         selectedNest = nil
                         await onNestDeleted()
                     }
-                }
+                },
+                onNestChanged: onNestChanged,
+                // Dismissing this sheet alone would only fall back to the
+                // section list, which is itself a sheet over the hatchery. The
+                // host closes the section instead, and this one goes with it.
+                onReturnToHatchery: onReturnToHatchery
             )
             // Figma 166:3244 draws the same 801pt sheet frame as the profile.
             .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
@@ -480,20 +550,41 @@ private struct SectionOverviewSheet: View {
         // background, rather than divider-separated rows inside one card.
         ScrollView {
             VStack(spacing: 12) {
-                ForEach(Array(section.nests.enumerated()), id: \.element.id) { index, nest in
-                    Button {
-                        selectedNest = NestDetailSelection(item: nest, ordinal: index + 1)
-                    } label: {
-                        nestRow(nest, ordinal: index + 1)
+                if rows.isEmpty {
+                    // An empty list with no explanation reads as a failed load,
+                    // which is the same reasoning that removed the old
+                    // `prefix(4)` truncation above.
+                    Text(filter.emptyMessage)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                } else {
+                    ForEach(rows, id: \.item.id) { row in
+                        Button {
+                            selectedNest = NestDetailSelection(item: row.item, ordinal: row.ordinal)
+                        } label: {
+                            nestRow(row.item, ordinal: row.ordinal)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
         // Four or fewer nests fill the list exactly, so leave those sections
         // feeling fixed rather than springy.
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 371, height: 508)
+        // 40pt shorter than before: the picker above took that space.
+        .frame(width: 371, height: 468)
+    }
+
+    private var filterPicker: some View {
+        Picker("Show", selection: $filter) {
+            ForEach(NestHatchFilter.allCases) { option in
+                Text(option.rawValue).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
     }
 
     private func nestRow(
