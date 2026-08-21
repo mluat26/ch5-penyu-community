@@ -109,9 +109,11 @@ final class NestController {
     /// there. It never creates a device: a new row would carry a new ID that no
     /// hardware knows, which looks like success and reports nothing.
     ///
-    /// The nest is already saved by this point, so a missing logger reports
-    /// itself rather than discarding the record. Silence is what left the
-    /// assignment table empty in the first place.
+    /// The nest is already saved by this point, so a missing logger never
+    /// discards the record. It no longer reports itself either: the bucket ID
+    /// is auto-issued until the NFC scan exists, so it matched no registered
+    /// device and the warning fired on every nest. A genuine failure to reach
+    /// the device service still surfaces -- that is a fault, not an absence.
     private func installLogger(named bucketID: String, into nest: NestEntity) async {
         let name = bucketID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, let deviceService else { return }
@@ -124,10 +126,13 @@ final class NestController {
                         .caseInsensitiveCompare(name) == .orderedSame
                 })
             else {
-                errorMessage = """
-                    Nest saved, but no logger is registered as \(name). \
-                    Register it, then reconnect the bucket.
-                    """
+                // ponytail: silent by request -- the team guarantees the
+                // logger is registered and powered before a nest is created,
+                // so the warning was only ever noise in practice.
+                //
+                // If nests start reading "--" forever, look here first: no
+                // device means no `device_assignment` row, and
+                // `resolve_reading_nest` refuses every reading without one.
                 return
             }
 
