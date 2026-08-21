@@ -448,21 +448,8 @@ struct NestDetailSheet: View {
             NestTemperatureChart(readings: readings, scale: scale)
                 .frame(width: 341 * scale, height: 173 * scale, alignment: .bottomLeading)
 
-            // 199:3814 — 12pt bold on a 21pt × 152pt column at x349, evenly
-            // spaced. `fixedSize` keeps the degree sign from clipping.
-            VStack(spacing: 0) {
-                ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
-                    Text("\(degrees)°")
-                        .font(.system(size: 12 * scale, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8E93"))
-                        .fixedSize()
-                        .frame(height: 16 * scale)
-
-                    if degrees != 18 { Spacer(minLength: 0) }
-                }
-            }
-            .frame(width: 21 * scale, height: 152 * scale)
-            .offset(x: 349 * scale)
+            NestTemperatureDegreeAxis(scale: scale)
+                .offset(x: 349 * scale)
         }
         .frame(width: 370 * scale, height: 173 * scale, alignment: .topLeading)
     }
@@ -897,13 +884,38 @@ struct NestDetailSheet: View {
 /// discrete `NestTemperature.Band` colours used by the pills — the pills
 /// answer "is this nest healthy", the chart shows the shape of the day.
 struct NestTemperatureChart: View {
-    let readings: [IoTDataEntity]
+    /// One value per bar, oldest first. `nil` draws a grey stub, so a range
+    /// with gaps keeps its shape instead of closing up.
+    ///
+    /// What a bar spans is the caller's business: the nest sheet passes hours
+    /// of one day, the hatch report passes days of the whole incubation.
+    let values: [Double?]
     let scale: CGFloat
 
-    /// 199:3789 draws 24 bars — one per hour of the day.
-    private static let barCount = 24
-    private static let barWidth: CGFloat = 8.458_333
-    private static let pitch: CGFloat = 14.458_333
+    /// Today's shape — 199:3789's 24 bars, one per hour.
+    init(readings: [IoTDataEntity], scale: CGFloat) {
+        var buckets = [Double?](repeating: nil, count: 24)
+        let calendar = Calendar.current
+
+        for reading in readings {
+            let hour = calendar.component(.hour, from: reading.timestamp)
+            buckets[min(23, max(0, hour))] = reading.temperatureC
+        }
+        self.init(values: buckets, scale: scale)
+    }
+
+    init(values: [Double?], scale: CGFloat) {
+        self.values = values
+        self.scale = scale
+    }
+
+    /// 199:3789 spaces 24 bars on a 14.458pt pitch and draws them 8.458pt
+    /// wide. Kept as that ratio rather than the two measurements, so the bars
+    /// spread to fill whatever width the chart is given and a screen with a
+    /// different bar count keeps the design's proportions.
+    private static let barWidthRatio: CGFloat = 8.458_333 / 14.458_333
+    private static let nominalPitch: CGFloat = 14.458_333
+
     private static let fullHeight: CGFloat = 173
     private static let stubHeight: CGFloat = 7.75
     private static let axisRange: ClosedRange<Double> = 18...33
@@ -922,23 +934,6 @@ struct NestTemperatureChart: View {
         endPoint: .top
     )
 
-    /// One slot per bar across the day, so a partial day leaves stubs at the
-    /// end rather than stretching a few readings across the whole axis.
-    private var slots: [Double?] {
-        var buckets = [Double?](repeating: nil, count: Self.barCount)
-        let calendar = Calendar.current
-
-        for reading in readings {
-            let temperature = reading.temperatureC
-            let hour = calendar.component(.hour, from: reading.timestamp)
-            let minute = calendar.component(.minute, from: reading.timestamp)
-            let fraction = (Double(hour) + Double(minute) / 60) / 24
-            let index = min(Self.barCount - 1, max(0, Int(fraction * Double(Self.barCount))))
-            buckets[index] = temperature
-        }
-        return buckets
-    }
-
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // The infobook's acceptable band, behind the bars so a reading can
@@ -946,32 +941,44 @@ struct NestTemperatureChart: View {
             thresholdLine(at: NestTemperature.maximumAcceptableC)
             thresholdLine(at: NestTemperature.minimumAcceptableC)
 
-            // Empty hours are flat grey stubs, drawn separately because they
+            // Empty slots are flat grey stubs, drawn separately because they
             // must not take the heat gradient.
             barShapes(filled: false)
                 .foregroundStyle(.black.opacity(0.1))
 
             // One gradient for the whole plot, revealed only where bars are.
             Self.heatGradient
+                .frame(maxWidth: .infinity)
                 .frame(height: Self.fullHeight * scale)
                 .mask(alignment: .bottomLeading) { barShapes(filled: true) }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Temperature through the day")
+        .accessibilityLabel("Temperature range")
         .accessibilityValue(accessibilityValue)
     }
 
+    /// Every slot takes an equal share of the width, so the bars spread to
+    /// fill the plot however many there are. Both passes lay out all the
+    /// slots and hide the ones they are not drawing, which is what keeps the
+    /// grey stubs and the gradient bars on the same grid.
     private func barShapes(filled: Bool) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            ForEach(Array(slots.enumerated()), id: \.offset) { index, temperature in
-                if (temperature != nil) == filled {
-                    Capsule()
-                        .frame(width: Self.barWidth * scale, height: height(for: temperature) * scale)
-                        .offset(x: Self.pitch * CGFloat(index) * scale)
-                }
+        // `.bottom`, not the HStack default of `.center`: bars stand on the
+        // 18° baseline. Centred, a tall bar grows downward as much as upward
+        // and the foot of the chart curves along with its top.
+        HStack(alignment: .bottom, spacing: 0) {
+            ForEach(Array(values.enumerated()), id: \.offset) { _, temperature in
+                Capsule()
+                    .frame(
+                        width: Self.nominalPitch * Self.barWidthRatio * scale,
+                        height: height(for: temperature) * scale
+                    )
+                    .opacity((temperature != nil) == filled ? 1 : 0)
+                    .frame(maxWidth: .infinity)
             }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
     }
 
@@ -998,10 +1005,71 @@ struct NestTemperatureChart: View {
     }
 
     private var accessibilityValue: String {
-        let values = readings.map(\.temperatureC)
-        guard let low = values.min(), let high = values.max() else { return "No readings" }
+        let recorded = values.compactMap { $0 }
+        guard let low = recorded.min(), let high = recorded.max() else { return "No readings" }
         return String(format: "From %.1f to %.1f degrees", low, high)
     }
+}
+
+/// 199:3814 — the chart's temperature axis: 12pt bold on a 21pt × 152pt
+/// column, evenly spaced. Shared by the nest sheet and the hatch report so the
+/// two cannot end up labelling the same gradient with different degrees.
+/// `fixedSize` keeps the degree sign from clipping.
+struct NestTemperatureDegreeAxis: View {
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
+                Text("\(degrees)°")
+                    .font(.system(size: 12 * scale, weight: .bold))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .fixedSize()
+                    .frame(height: 16 * scale)
+
+                if degrees != 18 { Spacer(minLength: 0) }
+            }
+        }
+        .frame(width: 21 * scale, height: 152 * scale)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Both feeds side by side, which is the point of the chart taking values
+/// rather than readings: same gradient, same 18–33° axis, different bar spans.
+/// The nest sheet passes the top one, the hatch report the bottom one.
+#Preview("Temperature chart", traits: .sizeThatFitsLayout) {
+    /// A warm middle and a cool start, with a couple of gaps so the grey
+    /// stubs a dead logger leaves are visible too.
+    func curve(count: Int, low: Double, high: Double, gaps: Set<Int>) -> [Double?] {
+        (0..<count).map { index in
+            guard !gaps.contains(index) else { return nil }
+            let progress = Double(index) / Double(max(count - 1, 1))
+            return low + (high - low) * sin(progress * .pi)
+        }
+    }
+
+    return VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Nest sheet — 24 hours of one day")
+                .font(.caption).foregroundStyle(.secondary)
+            NestTemperatureChart(
+                values: curve(count: 24, low: 21, high: 32, gaps: [20, 21, 22, 23]),
+                scale: 1
+            )
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Hatch report — a 90-day incubation, grouped into 23 bars")
+                .font(.caption).foregroundStyle(.secondary)
+            NestTemperatureChart(
+                values: curve(count: 23, low: 24, high: 33, gaps: [5, 12]),
+                scale: 1
+            )
+        }
+    }
+    .padding(24)
+    .frame(width: 402)
 }
 
 

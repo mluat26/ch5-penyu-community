@@ -3,11 +3,45 @@
 /// the edit/inspect sheet), but shares its controller and several building
 /// blocks so the two stay in sync on the underlying data.
 ///
-/// The day chart is `NestTemperatureChart` from NestDetailSheet.swift, shared
-/// rather than reimplemented so the two screens cannot drift on gradients or
-/// thresholds.
+/// The temperature chart is `NestTemperatureChart` from NestDetailSheet.swift,
+/// shared rather than reimplemented so the two screens cannot drift on
+/// gradients or thresholds. They feed it different bars: the sheet shows the
+/// hours of one day, this screen shows a daily mean per day of the incubation,
+/// which is the span a finished report is a record of.
 
 import SwiftUI
+
+/// The temperature chart's x axis: one slot per bar, laid out exactly as
+/// `NestTemperatureChart` lays out its bars, so a label sits under the bar it
+/// belongs to however many bars there are.
+private struct NestTemperatureBarAxis: View {
+    /// One entry per bar; nil leaves that slot unlabelled.
+    let labels: [String?]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
+                // The label is an overlay, not the slot's content: a
+                // `fixedSize` "90" is wider than a slot, and as content it
+                // would claim that width and shove the labelled slots out of
+                // line with the bars they belong to.
+                Color.clear
+                    .frame(height: 16)
+                    .frame(maxWidth: .infinity)
+                    .overlay {
+                        if let label {
+                            Text(label)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color(hex: "#8E8E93"))
+                                .fixedSize()
+                        }
+                    }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+}
 
 private enum NestReportTab: String, CaseIterable, Identifiable {
     case info = "Info"
@@ -28,7 +62,6 @@ struct NestReportView: View {
     let onBackToHatchery: () -> Void
 
     @State private var selectedTab: NestReportTab = .info
-    @State private var selectedChartDay = Calendar.current.startOfDay(for: .now)
 
     // The sheet is always up (never dismissed by the user -- it's the page's
     // own layout, not an optional overlay), so this only ever flips true.
@@ -84,7 +117,7 @@ struct NestReportView: View {
                     .init(
                         systemImage: "viewfinder",
                         label: "Hatch date",
-                        value: nest.datePredictedHatch.map(formattedLong) ?? "—"
+                        value: nest.datePredictedHatch.map(formattedDate) ?? "—"
                     ),
                 ])
 
@@ -100,7 +133,17 @@ struct NestReportView: View {
             .padding(.horizontal, 16)
         }
         .task {
-            await controller.load()
+            // The default week cannot fill a chart that spans the incubation.
+            // Padded because this runs before the hatching record is loaded, so
+            // `incubationInterval` is still reading the *predicted* hatch date
+            // and a clutch that emerged late would lose its last days.
+            let incubation = incubationInterval
+            await controller.load(
+                readingWindow: DateInterval(
+                    start: incubation.start.addingTimeInterval(-86_400),
+                    end: incubation.end.addingTimeInterval(7 * 86_400)
+                )
+            )
             await controller.loadDataLogger(founderID: nest.founderID)
         }
  
@@ -273,7 +316,7 @@ struct NestReportView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(formattedLong(selectedChartDay))
+                    Text(chartRangeText)
                         .font(.subheadline)
                         .foregroundStyle(Color(hex: "#8E8E93"))
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -285,10 +328,11 @@ struct NestReportView: View {
                     .foregroundStyle(Color(hex: "#D9538E"))
                 }
                 Spacer()
-                // ponytail: the day-by-day temperature screen this points at
-                // does not exist yet, so the control is disabled rather than
-                // silently doing nothing. The chart below stays per-day until
-                // it does.
+                // ponytail: the drill-down screen this points at does not
+                // exist yet, so the control is disabled rather than silently
+                // doing nothing. The chart below already covers the whole
+                // incubation; what is missing is the hour-by-hour view of a
+                // day you tap.
                 Button(action: {}) {
                     HStack(spacing: 4) {
                         Text("View temperature over time")
@@ -302,14 +346,22 @@ struct NestReportView: View {
                 .disabled(true)
             }
 
-            NestTemperatureChart(
-                readings: controller.readings(on: selectedChartDay),
-                scale: 1
-            )
-            .frame(height: 173)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    NestTemperatureChart(values: chartBars.map(\.meanC), scale: 1)
+                        .frame(height: 173)
+                    dayAxis
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("°C")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                    NestTemperatureDegreeAxis(scale: 1)
+                }
+            }
 
             HStack(spacing: 12) {
-                temperatureStat(title: "Avg (daily)", value: averageTemperatureText, tint: .black)
+                temperatureStat(title: "Avg", value: averageTemperatureText, tint: .black)
                 temperatureStat(title: "Highest", value: highestTemperatureText, tint: Color(hex: "#FF383C"))
                 temperatureStat(title: "Lowest", value: lowestTemperatureText, tint: Color(hex: "#4DA3FF"))
             }
@@ -330,8 +382,66 @@ struct NestReportView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 14))
     }
 
+    // MARK: - Temperature over the incubation
+
+    /// The span the chart draws: laid to hatched, which is the period the
+    /// report is a record of. Falls back to four weeks before the hatch when a
+    /// nest has no collection date, so an incomplete record still draws.
+    private var incubationInterval: DateInterval {
+        let calendar = Calendar.current
+        let end = controller.hatching?.hatchedOn ?? nest.datePredictedHatch ?? .now
+        let start = nest.dateEggsLaid
+            ?? calendar.date(byAdding: .day, value: -28, to: end)
+            ?? end
+        return DateInterval(start: min(start, end), end: max(start, end))
+    }
+
+    private var chartBars: [NestTemperatureBuckets.Bar] {
+        NestTemperatureBuckets.bars(across: incubationInterval, readings: controller.readings)
+    }
+
+    /// Day-of-incubation labels, on the same elastic grid the bars use so a
+    /// label sits under its own bar. Only every `axisStep` day is marked --
+    /// ninety of them would be a grey smear.
+    private var dayAxis: some View {
+        let bars = chartBars
+        let step = NestTemperatureBuckets.axisStep(dayCount: incubationDayCount)
+
+        return VStack(spacing: 2) {
+            NestTemperatureBarAxis(
+                labels: bars.map { bar in
+                    NestTemperatureBuckets.axisMark(for: bar, step: step).map(String.init)
+                }
+            )
+
+            Text("Days since collection")
+                .font(.caption2)
+                .foregroundStyle(Color(hex: "#8E8E93"))
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var incubationDayCount: Int {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: incubationInterval.start),
+            to: calendar.startOfDay(for: incubationInterval.end)
+        ).day ?? 0
+        return max(days, 0) + 1
+    }
+
+    private var chartRangeText: String {
+        let interval = incubationInterval
+        guard interval.start < interval.end else { return formattedDate(interval.start) }
+        return (interval.start..<interval.end).formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// The stats beside the chart cover the same span the chart does. The
+    /// controller is loaded with exactly that window, so this is every reading
+    /// it holds.
     private var dailyReadings: [IoTDataEntity] {
-        controller.readings(on: selectedChartDay)
+        controller.readings
     }
 
     private var averageTemperatureText: String {
@@ -364,8 +474,10 @@ struct NestReportView: View {
         return "\(max(days, 0)) days"
     }
 
-    private func formattedLong(_ date: Date) -> String {
-        date.formatted(.dateTime.day().month(.wide).year())
+    /// Abbreviated ("Oct 16, 2026"), not a spelled-out month. The header row
+    /// gives this a third of the width and a wide month blows the padding.
+    private func formattedDate(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
     }
 
     /// The dates the Inspection list shows.
@@ -498,8 +610,39 @@ private struct NestReportPreviewIoTDataRepository: IoTDataRepository {
         []
     }
 
+    /// A plausible incubation rather than an empty list: the Temperature tab
+    /// draws one bar per day across this window, and with no readings the
+    /// preview is a row of grey stubs that shows nothing about the layout.
     func fetchReadings(nestIDs: [UUID], in interval: DateInterval?) async throws -> [IoTDataEntity] {
-        []
+        guard let interval, let nestID = nestIDs.first else { return [] }
+
+        let calendar = Calendar.current
+        let midnight = calendar.startOfDay(for: interval.start)
+        let dayCount = calendar.dateComponents(
+            [.day], from: interval.start, to: interval.end
+        ).day ?? 0
+        guard dayCount > 0 else { return [] }
+
+        return (0...dayCount).flatMap { day -> [IoTDataEntity] in
+            // Every ninth day is left empty so the preview also shows the grey
+            // stub a day with a dead logger draws.
+            guard day % 9 != 4,
+                  let date = calendar.date(byAdding: .day, value: day, to: midnight)
+            else { return [] }
+
+            // Warmest in the middle of the incubation, cooler at either end.
+            let progress = Double(day) / Double(dayCount)
+            let dailyMean = 27.5 + 3.5 * sin(progress * .pi)
+
+            return [0, 6, 12, 18].map { hour in
+                IoTDataEntity(
+                    id: UUID(),
+                    nestID: nestID,
+                    temperatureC: dailyMean + 1.5 * sin(Double(hour) / 24 * 2 * .pi),
+                    timestamp: calendar.date(byAdding: .hour, value: hour, to: date) ?? date
+                )
+            }
+        }
     }
 
     func temperatureStats(nestID: UUID, from: Date, to: Date) async throws -> NestTemperatureStats? {

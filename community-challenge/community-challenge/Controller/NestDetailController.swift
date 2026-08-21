@@ -118,7 +118,11 @@ final class NestDetailController {
         readings.max { $0.timestamp < $1.timestamp }?.temperatureC
     }
 
-    func load() async {
+    /// `readingWindow` is the span the caller's chart can actually draw. The
+    /// default is the last week, which is what the detail sheet's hour-by-hour
+    /// chart of today needs; the hatch report asks for the whole incubation
+    /// because it draws one bar per day across it.
+    func load(readingWindow: DateInterval? = nil) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -126,7 +130,7 @@ final class NestDetailController {
         do {
             // A nest is read on a beach, so keep this to the window the chart
             // can actually show rather than every reading ever recorded.
-            let window = DateInterval(
+            let window = readingWindow ?? DateInterval(
                 start: Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now,
                 end: .now
             )
