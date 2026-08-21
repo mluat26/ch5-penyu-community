@@ -123,7 +123,8 @@ final class AppContainer {
         NestController(
             hatcheryID: hatcheryID,
             nestService: nestService,
-            identity: authenticationService
+            identity: authenticationService,
+            deviceService: deviceService
         )
     }
 

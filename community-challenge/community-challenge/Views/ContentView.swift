@@ -279,18 +279,14 @@ struct ContentView: View {
                             nestNumber: savedNestNumber,
                             eggCount: savedEggCount,
                             hatchDate: savedHatchDate,
-                            temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
+                            temperatureC: savedNestItem?.latestTemperatureC,
                             onViewNest: {
-                                guard let nest = nestController.lastSavedNest else { return }
+                                guard let item = savedNestItem else { return }
                                 // Figma shows nest detail as a sheet, so this
                                 // leaves the flow first and presents rather
                                 // than pushing another page onto it.
                                 pendingNestDetail = NestDetailPresentation(
-                                    item: NestDashboardItem(
-                                        nest: nest,
-                                        latestTemperatureC: nil,
-                                        latestBatteryVoltage: nil
-                                    ),
+                                    item: item,
                                     ordinal: Int(nestController.draft.nestNumber) ?? 0,
                                     sectionID: nestController.draft.section
                                 )
@@ -385,6 +381,28 @@ struct ContentView: View {
     /// later insert on, and this screen has to report what was actually saved.
     private var savedNestNumber: String {
         nestController.lastSavedNest?.nestNumber ?? nestController.draft.nestNumber
+    }
+
+    /// The nest that was just saved, carrying whatever its logger has
+    /// reported. `save()` is followed by a dashboard reload, so this reads the
+    /// freshly loaded readings rather than the pre-save ones.
+    ///
+    /// It deliberately does not fall back to the hatchery average: that is
+    /// every other nest's temperature, and a nest registered seconds ago
+    /// almost never has a reading of its own yet -- so the average showed as
+    /// this nest's own healthy 30C on a nest nothing had ever measured.
+    ///
+    /// If the reload missed the new nest the nest itself still stands in, with
+    /// its readings absent rather than invented. Dropping to nil here would
+    /// leave "View nest" doing nothing.
+    private var savedNestItem: NestDashboardItem? {
+        guard let nest = nestController.lastSavedNest else { return nil }
+        return hatcheryController.dashboard?.nest(id: nest.id)
+            ?? NestDashboardItem(
+                nest: nest,
+                latestTemperatureC: nil,
+                latestBatteryVoltage: nil
+            )
     }
 
     private var savedEggCount: String {

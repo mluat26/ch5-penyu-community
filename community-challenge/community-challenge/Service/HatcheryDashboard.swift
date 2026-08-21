@@ -49,4 +49,11 @@ struct HatcheryDashboard: Identifiable, Hashable, Sendable {
     func section(row: Int, column: Int) -> HatcherySectionDashboard? {
         sections.first { $0.row == row && $0.column == column }
     }
+
+    /// One nest with its latest reading attached, wherever it sits on the grid.
+    /// The registration screen knows the nest it just saved but not the
+    /// section it landed in, so it looks the nest up rather than the cell.
+    func nest(id: UUID) -> NestDashboardItem? {
+        sections.flatMap(\.nests).first { $0.id == id }
+    }
 }

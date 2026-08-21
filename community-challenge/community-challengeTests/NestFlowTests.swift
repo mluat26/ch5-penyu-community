@@ -394,6 +394,94 @@ final class NestFlowTests: XCTestCase {
         XCTAssertEqual(afterDelete.overview.nestCount, 0)
     }
 
+    /// The registration screen reads its temperature from the nest it just
+    /// saved, never from the hatchery average.
+    ///
+    /// It used to show `overview.averageTemperatureC ?? 30`, so a brand-new
+    /// nest -- which has no reading of its own, because its logger has not
+    /// reported yet -- displayed the neighbouring nests' average, or a flat 30
+    /// when the hatchery had no readings at all. Both land in the optimal band,
+    /// so a nest nothing had ever measured announced itself as healthy.
+    func testNewNestReadsItsOwnTemperatureNotTheHatcheryAverage() async throws {
+        let nestRepository = InMemoryNestRepository()
+        let hatcheryRepository = InMemoryHatcheryRepository()
+        let ioTDataRepository = InMemoryIoTDataRepository()
+        let hatcheryService = HatcheryService(
+            hatcheryRepository: hatcheryRepository,
+            nestRepository: nestRepository,
+            ioTDataRepository: ioTDataRepository
+        )
+        let nestService = NestService(repository: nestRepository)
+
+        let hatchery = try await hatcheryService.createHatchery(
+            CreateHatcheryInput(
+                name: "Test hatchery",
+                shape: .rectangle,
+                numberOfRows: 2,
+                numberOfColumns: 2,
+                lengthM: 10,
+                widthM: 8,
+                organizationID: nil
+            )
+        )
+
+        func addNest(row: Int, column: Int) async throws -> NestEntity {
+            try await nestService.createNest(
+                CreateNestInput(
+                    hatcheryID: hatchery.id,
+                    founderID: nil,
+                    numberOfEggs: 42,
+                    dateEggsLaid: Date(),
+                    datePredictedHatch: nil,
+                    placementRow: row,
+                    placementColumn: column
+                )
+            )
+        }
+
+        // An established nest that has been reporting, and the one just
+        // registered alongside it.
+        let reporting = try await addNest(row: 0, column: 0)
+        let justRegistered = try await addNest(row: 1, column: 0)
+
+        await ioTDataRepository.seed([
+            IoTDataEntity(
+                id: UUID(),
+                nestID: reporting.id,
+                sensorID: nil,
+                position: nil,
+                depthCM: nil,
+                temperatureC: 30,
+                timestamp: Date(),
+                alert: nil,
+                sensorStatus: nil,
+                batteryVoltage: 3.9,
+                signalRSSIDBM: nil
+            )
+        ])
+
+        let dashboard = try await hatcheryService.loadDashboard(hatcheryID: hatchery.id)
+
+        // The average exists and is optimal -- exactly the value the old code
+        // would have handed the success screen.
+        XCTAssertEqual(dashboard.overview.averageTemperatureC, 30)
+
+        // The nest that reported resolves its own reading...
+        XCTAssertEqual(dashboard.nest(id: reporting.id)?.latestTemperatureC, 30)
+        XCTAssertEqual(dashboard.nest(id: reporting.id)?.latestBatteryVoltage, 3.9)
+
+        // ...and the one just registered has nothing, which is what the
+        // success screen must render as "--" rather than 30.
+        let new = try XCTUnwrap(dashboard.nest(id: justRegistered.id))
+        XCTAssertNil(new.latestTemperatureC)
+        XCTAssertNil(new.latestBatteryVoltage)
+        XCTAssertEqual(NestTemperature.text(new.latestTemperatureC), "--")
+        XCTAssertEqual(NestTemperature.Band(temperatureC: new.latestTemperatureC), .noData)
+
+        // A nest that is not in this hatchery is not found by the lookup.
+        XCTAssertNil(dashboard.nest(id: UUID()))
+    }
+
     /// A hatchery holding nests must not be deletable: the nests would be
     /// orphaned, and nest_hatchery_id_fkey rejects it at the database anyway.
     func testDeletingAHatcheryHoldingNestsIsBlocked() async throws {
