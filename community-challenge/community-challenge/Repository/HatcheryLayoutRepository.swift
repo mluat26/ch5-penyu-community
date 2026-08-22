@@ -24,6 +24,11 @@ protocol HatcheryLayoutRepository: Sendable {
     /// same predicate `delete_my_account` uses to delete the rows -- so the
     /// photos removed and the rows removed cannot drift apart.
     func currentUserPhotoPaths() async throws -> [String]
+    /// Every layout photo path for one hatchery, for the same reason and read
+    /// through the database rather than here: a manager deleting a colleague's
+    /// hatchery cannot see its layout rows, and would otherwise orphan every
+    /// object it owns.
+    func photoPaths(hatcheryID: UUID) async throws -> [String]
 }
 
 /// Private object storage for the source photo of a layout revision.

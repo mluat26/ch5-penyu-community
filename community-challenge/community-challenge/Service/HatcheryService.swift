@@ -144,12 +144,19 @@ struct HatcheryService: Sendable {
     /// `nest_hatchery_id_fkey` would reject this anyway, but a raw foreign key
     /// violation is not something the UI can explain. Counting first turns it
     /// into a message naming how many nests are in the way.
-    func deleteHatchery(id: UUID) async throws {
+    ///
+    /// Separate from `deleteHatchery` because deleting a hatchery also destroys
+    /// its layout photographs, and that has to happen before the row goes --
+    /// so the refusal has to come before the photographs, not with the row.
+    func assertHatcheryIsEmpty(id: UUID) async throws {
         let nestCount = try await nestRepository.fetchAll(hatcheryID: id).count
         guard nestCount == 0 else {
             throw DomainValidationError.hatcheryNotEmpty(nestCount: nestCount)
         }
+    }
 
+    func deleteHatchery(id: UUID) async throws {
+        try await assertHatcheryIsEmpty(id: id)
         try await hatcheryRepository.delete(id: id)
     }
 

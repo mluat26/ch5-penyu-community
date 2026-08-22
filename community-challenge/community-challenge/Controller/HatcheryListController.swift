@@ -19,6 +19,7 @@ final class HatcheryListController {
     private(set) var isLoading = false
     private(set) var isLoadingManagement = false
     private(set) var updatingHatcheryID: UUID?
+    private(set) var deletingHatcheryID: UUID?
     /// A layout restore may include a private Storage download. Keep it
     /// single-flight so two quick taps cannot finish out of order and activate
     /// a different hatchery from the one the person most recently saw.
@@ -166,6 +167,45 @@ final class HatcheryListController {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Drops a hatchery from this controller's list without a round trip.
+    ///
+    /// `ContentView` builds its own instance, so a delete made through that one
+    /// leaves the root's copy holding a hatchery that no longer exists. The
+    /// root reroutes on the very next render, before any reload could return,
+    /// and would otherwise try to open the deleted row.
+    func forget(hatcheryID: UUID) {
+        hatcheries.removeAll { $0.id == hatcheryID }
+        managementSummaries.removeAll { $0.id == hatcheryID }
+    }
+
+    /// Deletes a hatchery, and returns whether it went.
+    ///
+    /// The order is the whole of it, and it mirrors `AppContainer.deleteAccount`
+    /// for the same reason. The refusal comes first: a hatchery still holding
+    /// nests keeps its photographs, because removing them is not undoable and
+    /// the delete is about to be turned down anyway. Then the photographs, then
+    /// the row -- `hatchery_layout` cascades with the hatchery, and the bucket's
+    /// delete policy is written against a layout row that would no longer
+    /// exist, so this is the last moment those objects can be removed at all.
+    func delete(_ hatchery: HatcheryEntity) async -> Bool {
+        guard deletingHatcheryID == nil else { return false }
+        deletingHatcheryID = hatchery.id
+        errorMessage = nil
+        defer { deletingHatcheryID = nil }
+
+        do {
+            try await hatcheryService.assertHatcheryIsEmpty(id: hatchery.id)
+            await layoutService?.deletePhotos(hatcheryID: hatchery.id)
+            try await hatcheryService.deleteHatchery(id: hatchery.id)
+            hatcheries.removeAll { $0.id == hatchery.id }
+            await loadManagement()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 

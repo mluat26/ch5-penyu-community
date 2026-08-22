@@ -47,6 +47,20 @@ final class ProfileController {
     /// action keeps the UI from offering something that cannot succeed.
     var canGenerateInvite: Bool { role.canGenerateInviteCode }
 
+    /// Deleting a hatchery is a manager's job. Someone with no organization is
+    /// the only person who can see their own hatcheries at all, so they keep
+    /// it -- otherwise a solo account, whose role is `agent` by definition,
+    /// could never remove a hatchery it created by mistake.
+    ///
+    /// Deliberately stricter than the database rule, which also allows the
+    /// hatchery's owner: an officer who happens to own one is refused here,
+    /// because "only a manager may delete" is the point. The guard matters --
+    /// `role` reads `.agent` before the profile has loaded.
+    var canDeleteHatchery: Bool {
+        guard let profile else { return false }
+        return profile.role == .manager || profile.organizationID == nil
+    }
+
     /// Only the organization's owner may change roles or remove people. This is
     /// `organization.owner_id`, not a role: a manager can be appointed, an
     /// owner is whoever created the organization's first hatchery. Same check

@@ -10,6 +10,9 @@ struct HatcheryManagementView: View {
     let onCreateNew: () -> Void
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
+    /// The hatchery is already gone by the time this runs. It exists so a
+    /// caller showing that hatchery underneath can route away from it.
+    let onDelete: (HatcheryEntity) -> Void
     /// Drives the profile sheet this screen presents itself, so opening it
     /// does not have to bounce back through the dashboard first.
     var profileController: ProfileController?
@@ -34,6 +37,7 @@ struct HatcheryManagementView: View {
         onCreateNew: @escaping () -> Void,
         onRescan: @escaping (HatcheryEntity) -> Void = { _ in },
         onRename: @escaping (HatcheryEntity) -> Void = { _ in },
+        onDelete: @escaping (HatcheryEntity) -> Void = { _ in },
         profileController: ProfileController? = nil,
         onShowInvite: ((OrganizationInviteEntity) -> Void)? = nil,
         onSignOut: (() -> Void)? = nil,
@@ -44,6 +48,7 @@ struct HatcheryManagementView: View {
         self.onCreateNew = onCreateNew
         self.onRescan = onRescan
         self.onRename = onRename
+        self.onDelete = onDelete
         self.profileController = profileController
         self.onShowInvite = onShowInvite
         self.onSignOut = onSignOut
@@ -93,6 +98,10 @@ struct HatcheryManagementView: View {
         .preferredColorScheme(.light)
         .toolbar(.hidden, for: .navigationBar)
         .task { await controller.loadManagement() }
+        // The profile is otherwise only fetched when the profile sheet opens,
+        // so without this the delete button would be hidden on a fresh open
+        // for anyone who has not visited it.
+        .task { await profileController?.load() }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .hatcheryDetail(let hatchery):
@@ -101,6 +110,8 @@ struct HatcheryManagementView: View {
                     controller: controller,
                     onRescan: onRescan,
                     onRename: onRename,
+                    onDelete: onDelete,
+                    canDelete: profileController?.canDeleteHatchery == true,
                     startsEditing: selectedHatcheryStartsEditing
                 )
                 // SwiftUI adds the iPhone 17's 34pt bottom safe-area inset to a
@@ -604,23 +615,30 @@ private struct HatcheryManagementDetailSheet: View {
     let controller: HatcheryListController
     let onRescan: (HatcheryEntity) -> Void
     let onRename: (HatcheryEntity) -> Void
+    let onDelete: (HatcheryEntity) -> Void
+    let canDelete: Bool
     let startsEditing: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var isEditing: Bool
+    @State private var isConfirmingDelete = false
 
     init(
         hatchery: HatcheryEntity,
         controller: HatcheryListController,
         onRescan: @escaping (HatcheryEntity) -> Void,
         onRename: @escaping (HatcheryEntity) -> Void,
+        onDelete: @escaping (HatcheryEntity) -> Void,
+        canDelete: Bool,
         startsEditing: Bool
     ) {
         self.hatchery = hatchery
         self.controller = controller
         self.onRescan = onRescan
         self.onRename = onRename
+        self.onDelete = onDelete
+        self.canDelete = canDelete
         self.startsEditing = startsEditing
         _name = State(initialValue: hatchery.name)
         _isEditing = State(initialValue: startsEditing)
@@ -655,6 +673,16 @@ private struct HatcheryManagementDetailSheet: View {
             }
         }
         .preferredColorScheme(.light)
+        .confirmationDialog(
+            "Delete this hatchery?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete hatchery", role: .destructive, action: confirmDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \(hatchery.name) and its scan. It cannot be undone.")
+        }
     }
 
     private func sheetHeader(contentWidth: CGFloat) -> some View {
@@ -736,8 +764,36 @@ private struct HatcheryManagementDetailSheet: View {
                     .foregroundStyle(Color.appRed)
                     .padding(.top, 12)
             }
+
+            if canDelete {
+                deleteButton(contentWidth: contentWidth)
+                    .padding(.top, 32)
+            }
         }
         .frame(width: contentWidth, alignment: .leading)
+    }
+
+    /// Edit mode only, and the same 358 × 55 red button as "Delete nest" on the
+    /// nest sheet, because it is the same kind of decision in the same place.
+    private func deleteButton(contentWidth: CGFloat) -> some View {
+        Button(role: .destructive) {
+            isConfirmingDelete = true
+        } label: {
+            Group {
+                if isDeleting {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text("Delete hatchery")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: contentWidth, height: 55)
+            .background(Color(hex: "#FF383C"), in: RoundedRectangle(cornerRadius: 26))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDeleting)
     }
 
     private func rescanAction(contentWidth: CGFloat) -> some View {
@@ -964,6 +1020,24 @@ private struct HatcheryManagementDetailSheet: View {
             }
             onRename(updated)
             dismiss()
+        }
+    }
+
+    private var isDeleting: Bool {
+        controller.deletingHatcheryID == hatchery.id
+    }
+
+    /// A refusal -- most often "this hatchery still holds N nests" -- keeps the
+    /// sheet open, where `editingContent` already renders `errorMessage`.
+    private func confirmDelete() {
+        guard !isDeleting else { return }
+
+        Task {
+            guard await controller.delete(hatchery) else { return }
+            dismiss()
+            DispatchQueue.main.async {
+                onDelete(hatchery)
+            }
         }
     }
 

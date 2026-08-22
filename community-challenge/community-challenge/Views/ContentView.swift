@@ -14,6 +14,9 @@ struct ContentView: View {
     /// Called after signing out or deleting the account, so the root can leave
     /// this dashboard — the session it was built on no longer exists.
     var onAccountEnded: () -> Void = {}
+    /// The hatchery this screen is built around has just been deleted, so the
+    /// root has to route somewhere else before anything reads it again.
+    var onActiveHatcheryDeleted: (UUID) -> Void = { _ in }
     let onCreateHatchery: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -53,13 +56,15 @@ struct ContentView: View {
         container: AppContainer,
         onSwitchHatchery: @escaping (HatcherySessionState) -> Void = { _ in },
         onCreateHatchery: @escaping () -> Void = {},
-        onAccountEnded: @escaping () -> Void = {}
+        onAccountEnded: @escaping () -> Void = {},
+        onActiveHatcheryDeleted: @escaping (UUID) -> Void = { _ in }
     ) {
         self.hatchery = hatchery
         self.container = container
         self.onSwitchHatchery = onSwitchHatchery
         self.onCreateHatchery = onCreateHatchery
         self.onAccountEnded = onAccountEnded
+        self.onActiveHatcheryDeleted = onActiveHatcheryDeleted
         _hatcheryController = State(
             initialValue: container.makeHatcheryController(sessionState: hatchery)
         )
@@ -205,6 +210,10 @@ struct ContentView: View {
                             },
                             onRescan: beginRescan,
                             onRename: updateActiveHatchery,
+                            onDelete: { deleted in
+                                pendingManagementAction = .hatcheryDeleted(deleted.id)
+                                presentedCover = nil
+                            },
                             // Management presents the profile sheet itself, so
                             // opening it no longer bounces through the
                             // dashboard. Only the exits that outlive that cover
@@ -467,6 +476,12 @@ struct ContentView: View {
         switch action {
         case .switchHatchery(let session):
             onSwitchHatchery(session)
+        case .hatcheryDeleted(let id):
+            // Only the active hatchery needs a route out. Any other one simply
+            // left the list, which already reloaded.
+            if id == hatchery.hatchery.id {
+                onActiveHatcheryDeleted(id)
+            }
         case .createHatchery:
             onCreateHatchery()
         case .rescan(let request):
@@ -556,6 +571,7 @@ private enum HomeCover: Identifiable {
 
 private enum PendingManagementAction {
     case switchHatchery(HatcherySessionState)
+    case hatcheryDeleted(UUID)
     case createHatchery
     case signOut
     case accountEnded

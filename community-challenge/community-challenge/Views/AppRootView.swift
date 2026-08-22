@@ -29,6 +29,10 @@ struct AppRootView: View {
     /// came from. Back should land where the person was, not wherever the
     /// data happens to point.
     @State private var isShowingOnboarding = false
+    /// Set only when the last hatchery was deleted. The person is still signed
+    /// in, so the welcome frame would be a lie -- and its Sign in with Apple
+    /// button replaces the identity rather than linking to it.
+    @State private var onboardingStartsAtGetStarted = false
     /// The rich scan session can change even when a hatchery's UUID does not
     /// (for example, after re-scanning). This forces ContentView to rebuild
     /// its stateful dashboard controllers for that fresh session.
@@ -71,7 +75,8 @@ struct AppRootView: View {
                     container: container,
                     onSwitchHatchery: activateHatchery,
                     onCreateHatchery: startNewHatchery,
-                    onAccountEnded: endActiveAccount
+                    onAccountEnded: endActiveAccount,
+                    onActiveHatcheryDeleted: activeHatcheryDeleted
                 )
                 // ContentView builds its controllers in init, so switching
                 // hatcheries or re-scanning must create a new instance bound
@@ -117,7 +122,8 @@ struct AppRootView: View {
                 PreFirstHatchOnboardingView(
                     onCreateHatchery: startNewHatchery,
                     onSignInWithApple: signInWithApple,
-                    onJoinWithCode: joinWithCode
+                    onJoinWithCode: joinWithCode,
+                    startsAtGetStarted: onboardingStartsAtGetStarted
                 )
             } else if let firstHatchery = hatcheryListController.hatcheries.first {
                 if initialHatcheryOpeningState == .failed {
@@ -195,6 +201,25 @@ struct AppRootView: View {
     /// Clear the active hatchery and reload, which drops the app back to the
     /// welcome route under whatever identity comes next.
     private func endActiveAccount() {
+        session.activeHatchery = nil
+        initialHatcheryOpeningState = .idle
+        activeSessionRevision = UUID()
+        onboardingStartsAtGetStarted = false
+
+        Task { await hatcheryListController.load() }
+    }
+
+    /// The hatchery this session was built on has been deleted. The account is
+    /// untouched, so this only has to answer "what now": the next hatchery if
+    /// there is one, otherwise "Let's get started".
+    ///
+    /// `forget` first, and synchronously. `ContentView` holds its own list
+    /// controller, so this one still lists the deleted hatchery, and the reroute
+    /// happens on the next render -- long before any reload could return. Left
+    /// stale, the root would try to open a hatchery that no longer exists.
+    private func activeHatcheryDeleted(_ hatcheryID: UUID) {
+        hatcheryListController.forget(hatcheryID: hatcheryID)
+        onboardingStartsAtGetStarted = hatcheryListController.hatcheries.isEmpty
         session.activeHatchery = nil
         initialHatcheryOpeningState = .idle
         activeSessionRevision = UUID()
