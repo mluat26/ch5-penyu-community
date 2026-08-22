@@ -170,17 +170,6 @@ final class HatcheryListController {
         }
     }
 
-    /// Drops a hatchery from this controller's list without a round trip.
-    ///
-    /// `ContentView` builds its own instance, so a delete made through that one
-    /// leaves the root's copy holding a hatchery that no longer exists. The
-    /// root reroutes on the very next render, before any reload could return,
-    /// and would otherwise try to open the deleted row.
-    func forget(hatcheryID: UUID) {
-        hatcheries.removeAll { $0.id == hatcheryID }
-        managementSummaries.removeAll { $0.id == hatcheryID }
-    }
-
     /// Deletes a hatchery, and returns whether it went.
     ///
     /// The order is the whole of it, and it mirrors `AppContainer.deleteAccount`
@@ -201,6 +190,7 @@ final class HatcheryListController {
             await layoutService?.deletePhotos(hatcheryID: hatchery.id)
             try await hatcheryService.deleteHatchery(id: hatchery.id)
             hatcheries.removeAll { $0.id == hatchery.id }
+            managementSummaries.removeAll { $0.id == hatchery.id }
             await loadManagement()
             return true
         } catch {

@@ -196,57 +196,18 @@ final class HatcheryListControllerTests: XCTestCase {
         return (controller, hatchery, hatcheryRepository, photoStore)
     }
 
-    /// The routing decision the root makes after a delete -- open the next
-    /// hatchery, or show "Let's get started" -- reads this list on the very
-    /// next render, so it has to be right before any reload returns.
-    func testForgettingAHatcheryUpdatesTheListSynchronously() async {
-        let first = HatcheryEntity(
-            id: UUID(),
-            name: "Hatch_01",
-            shape: .rectangle,
-            numberOfRows: 3,
-            numberOfColumns: 4,
-            lengthM: 5,
-            widthM: 4,
-            organizationID: nil
-        )
-        let second = HatcheryEntity(
-            id: UUID(),
-            name: "Hatch_02",
-            shape: .rectangle,
-            numberOfRows: 3,
-            numberOfColumns: 4,
-            lengthM: 5,
-            widthM: 4,
-            organizationID: nil
-        )
-        let controller = HatcheryListController(
-            hatcheryService: HatcheryService(
-                hatcheryRepository: InMemoryHatcheryRepository(seed: [first, second]),
-                nestRepository: InMemoryNestRepository(),
-                ioTDataRepository: InMemoryIoTDataRepository()
-            )
-        )
-        await controller.loadManagement()
-
-        controller.forget(hatcheryID: first.id)
-
-        XCTAssertEqual(controller.hatcheries.map(\.id), [second.id])
-        XCTAssertEqual(controller.managementSummaries.map(\.id), [second.id])
-
-        controller.forget(hatcheryID: second.id)
-
-        XCTAssertTrue(controller.hatcheries.isEmpty)
-        XCTAssertTrue(controller.managementSummaries.isEmpty)
-    }
-
     func testDeletingAnEmptyHatcheryRemovesItsPhotosAndItsRow() async throws {
         let fixture = try await makeDeletionFixture(withNest: false)
+        await fixture.controller.loadManagement()
 
         let deleted = await fixture.controller.delete(fixture.hatchery)
 
         XCTAssertTrue(deleted)
         XCTAssertNil(fixture.controller.errorMessage)
+        // The root shares this controller and reroutes off these two lists on
+        // the very next render, so both have to be right before any reload.
+        XCTAssertTrue(fixture.controller.hatcheries.isEmpty)
+        XCTAssertTrue(fixture.controller.managementSummaries.isEmpty)
         let remaining = try await fixture.hatcheryRepository.fetchAll()
         XCTAssertTrue(remaining.isEmpty)
         let photoOperations = await fixture.photoStore.operations()

@@ -73,6 +73,8 @@ struct AppRootView: View {
                 ContentView(
                     hatchery: activeHatchery,
                     container: container,
+                    hatcheryListController: hatcheryListController,
+                    profileController: profileController,
                     onSwitchHatchery: activateHatchery,
                     onCreateHatchery: startNewHatchery,
                     onAccountEnded: endActiveAccount,
@@ -213,12 +215,11 @@ struct AppRootView: View {
     /// untouched, so this only has to answer "what now": the next hatchery if
     /// there is one, otherwise "Let's get started".
     ///
-    /// `forget` first, and synchronously. `ContentView` holds its own list
-    /// controller, so this one still lists the deleted hatchery, and the reroute
-    /// happens on the next render -- long before any reload could return. Left
-    /// stale, the root would try to open a hatchery that no longer exists.
+    /// The list is already right. `ContentView` shares this controller, so the
+    /// delete that just happened removed the row from it before this runs --
+    /// which matters, because the reroute happens on the very next render, long
+    /// before any reload could return.
     private func activeHatcheryDeleted(_ hatcheryID: UUID) {
-        hatcheryListController.forget(hatcheryID: hatcheryID)
         onboardingStartsAtGetStarted = hatcheryListController.hatcheries.isEmpty
         session.activeHatchery = nil
         initialHatcheryOpeningState = .idle

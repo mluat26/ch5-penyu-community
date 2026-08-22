@@ -24,7 +24,10 @@ struct ContentView: View {
     @State private var router = NestRouter()
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
-    @State private var hatcheryListController: HatcheryListController
+    /// Shared with the root rather than built here. Two instances meant a
+    /// delete made on this screen left the root routing off a list that still
+    /// contained the hatchery that had just gone.
+    let hatcheryListController: HatcheryListController
     @State private var isShowingHatcheryMenu = false
     @State private var rescanRequest: RescanRequest?
     /// Held while the management cover dismisses.
@@ -38,7 +41,7 @@ struct ContentView: View {
     /// Every sheet this screen owns, in one place. SwiftUI keeps only the
     /// last `.sheet` attached to a view, so they cannot be separate modifiers.
     @State private var presentedSheet: HomeSheet?
-    @State private var profileController: ProfileController
+    let profileController: ProfileController
     /// Held while the profile sheet dismisses, then promoted to
     /// `presentedCover` — the same wait-for-dismissal rule every other
     /// presentation here follows.
@@ -54,6 +57,8 @@ struct ContentView: View {
     init(
         hatchery: HatcherySessionState,
         container: AppContainer,
+        hatcheryListController: HatcheryListController,
+        profileController: ProfileController,
         onSwitchHatchery: @escaping (HatcherySessionState) -> Void = { _ in },
         onCreateHatchery: @escaping () -> Void = {},
         onAccountEnded: @escaping () -> Void = {},
@@ -61,6 +66,8 @@ struct ContentView: View {
     ) {
         self.hatchery = hatchery
         self.container = container
+        self.hatcheryListController = hatcheryListController
+        self.profileController = profileController
         self.onSwitchHatchery = onSwitchHatchery
         self.onCreateHatchery = onCreateHatchery
         self.onAccountEnded = onAccountEnded
@@ -70,12 +77,6 @@ struct ContentView: View {
         )
         _nestController = State(
             initialValue: container.makeNestController(hatcheryID: hatchery.hatchery.id)
-        )
-        _hatcheryListController = State(
-            initialValue: container.makeHatcheryListController()
-        )
-        _profileController = State(
-            initialValue: container.makeProfileController()
         )
     }
 
@@ -589,5 +590,12 @@ struct RescanRequest: Identifiable {
 }
 
 #Preview {
-    ContentView(hatchery: .previewSample, container: AppContainer())
+    let container = AppContainer()
+
+    return ContentView(
+        hatchery: .previewSample,
+        container: container,
+        hatcheryListController: container.makeHatcheryListController(),
+        profileController: container.makeProfileController()
+    )
 }
