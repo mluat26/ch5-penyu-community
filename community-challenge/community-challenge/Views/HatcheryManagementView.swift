@@ -896,7 +896,7 @@ private struct HatcheryManagementDetailSheet: View {
             }
             detailSeparator
 
-            detailRow(title: "Demension") {
+            detailRow(title: "Dimension") {
                 if isEditing {
                     Button(action: beginRescan) {
                         Text(editableDimension)
