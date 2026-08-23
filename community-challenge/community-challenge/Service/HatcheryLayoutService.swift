@@ -60,6 +60,21 @@ nonisolated struct HatcheryLayoutService: Sendable {
         }
     }
 
+    /// Removes the layout photographs of one hatchery, immediately before it is
+    /// deleted.
+    ///
+    /// Same reasoning as above and the same best-effort handling: the rows that
+    /// say which object belongs to which hatchery cascade away with it, and the
+    /// bucket's delete policy is written against those rows, so afterwards the
+    /// objects cannot be reached at all.
+    func deletePhotos(hatcheryID: UUID) async {
+        guard let paths = try? await repository.photoPaths(hatcheryID: hatcheryID) else { return }
+
+        for path in paths {
+            try? await photoStore.delete(path: path)
+        }
+    }
+
     private func uploadAndFinalize(
         pending: HatcheryLayoutRevision,
         request: HatcheryLayoutSaveRequest

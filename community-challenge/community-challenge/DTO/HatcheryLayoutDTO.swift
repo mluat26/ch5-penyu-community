@@ -188,6 +188,14 @@ nonisolated struct HatcheryLayoutIDDTO: Encodable, Sendable {
     }
 }
 
+nonisolated struct HatcheryLayoutHatcheryIDDTO: Encodable, Sendable {
+    let hatcheryID: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case hatcheryID = "p_hatchery_id"
+    }
+}
+
 extension HatcheryLayoutBeginDTO {
     init(request: HatcheryLayoutSaveRequest) {
         self.init(
