@@ -589,6 +589,9 @@ struct RescanRequest: Identifiable {
     var id: UUID { hatchery.id }
 }
 
+// The fixture this preview uses only exists in DEBUG, and a #Preview body still
+// compiles in Release -- without this guard the archive fails to build.
+#if DEBUG
 #Preview {
     let container = AppContainer()
 
@@ -599,3 +602,4 @@ struct RescanRequest: Identifiable {
         profileController: container.makeProfileController()
     )
 }
+#endif

@@ -676,6 +676,9 @@ private struct SectionOverviewSheet: View {
 
 }
 
+// The fixture this preview uses only exists in DEBUG, and a #Preview body still
+// compiles in Release -- without this guard the archive fails to build.
+#if DEBUG
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
     let container = AppContainer()
 
@@ -686,3 +689,4 @@ private struct SectionOverviewSheet: View {
         onOpenHatcheryMenu: { }
     )
 }
+#endif
