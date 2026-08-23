@@ -38,7 +38,13 @@ struct HatcheryGridPreviewView: View {
                         usesMockImage: usesMockImage,
                         grid: grid
                     )
-                    .frame(width: contentWidth, height: 305)
+                    .frame(
+                        width: contentWidth,
+                        height: HatcheryGridDiagram.height(
+                            forContentWidth: contentWidth,
+                            image: image
+                        )
+                    )
 
                     Spacer().frame(height: 33)
 
@@ -196,6 +202,26 @@ private struct HatcheryGridDiagram: View {
     private var rowCount: Int { max(grid.rows, 1) }
     private var columnCount: Int { max(grid.columns, 1) }
 
+    /// Gap above the photo, left for the column labels.
+    static let photoTopOffset: CGFloat = 26
+
+    /// The photo's drawn height for a given content width.
+    ///
+    /// Derived from the image rather than fixed at 279: `rectification` crops
+    /// the corrected photo to the sand region's bounding box, so a hardcoded
+    /// height let `scaledToFill` crop the sand off again for any sand shape
+    /// that was not 349:279, and the cell grid no longer matched the photo.
+    static func photoHeight(forContentWidth width: CGFloat, image: UIImage) -> CGFloat {
+        let imageWidth = max(0, width - 21)
+        guard image.size.width > 0, image.size.height > 0 else { return 279 }
+        return imageWidth * image.size.height / image.size.width
+    }
+
+    /// What the caller must reserve: the label gap plus the photo.
+    static func height(forContentWidth width: CGFloat, image: UIImage) -> CGFloat {
+        photoTopOffset + photoHeight(forContentWidth: width, image: image)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let imageWidth = max(0, geometry.size.width - 21)
@@ -203,9 +229,14 @@ private struct HatcheryGridDiagram: View {
             let columnGap = CGFloat(max(columnCount - 1, 0)) * 2
             let cellWidth = max(0, (innerWidth - columnGap) / CGFloat(columnCount))
 
+            let photoHeight = Self.photoHeight(
+                forContentWidth: geometry.size.width,
+                image: image
+            )
+
             ZStack(alignment: .topLeading) {
                 columnLabels(cellWidth: cellWidth)
-                rowLabels
+                rowLabels(photoHeight: photoHeight)
 
                 HatcheryGridPhoto(
                     image: image,
@@ -213,8 +244,8 @@ private struct HatcheryGridDiagram: View {
                     usesMockImage: usesMockImage,
                     grid: grid
                 )
-                .frame(width: imageWidth, height: 279)
-                .offset(x: 21, y: 26)
+                .frame(width: imageWidth, height: photoHeight)
+                .offset(x: 21, y: Self.photoTopOffset)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -236,24 +267,24 @@ private struct HatcheryGridDiagram: View {
         }
     }
 
-    private var rowLabels: some View {
+    private func rowLabels(photoHeight: CGFloat) -> some View {
         ForEach(0..<rowCount, id: \.self) { row in
             Text(row < grid.rowLabels.count ? grid.rowLabels[row] : "\(row + 1)")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.black.opacity(0.5))
                 .frame(width: 9, height: 16)
                 .minimumScaleFactor(0.7)
-                .position(x: 4.5, y: rowLabelCenter(for: row))
+                .position(x: 4.5, y: rowLabelCenter(for: row, photoHeight: photoHeight))
         }
     }
 
     /// Mirrors `HatcheryGridPhoto`'s own row layout (photo offset y=26, 8 pt
-    /// content padding, 2 pt row spacing, 279 pt photo height) so labels land
-    /// on the real cell centers for any row count, not just the 3-row mock
-    /// this was originally tuned against.
-    private func rowLabelCenter(for row: Int) -> CGFloat {
-        let photoTop: CGFloat = 26
-        let photoHeight: CGFloat = 279
+    /// content padding, 2 pt row spacing) so labels land on the real cell
+    /// centers for any row count, not just the 3-row mock this was originally
+    /// tuned against. `photoHeight` is passed in rather than hardcoded so it
+    /// cannot drift from the height the photo is actually drawn at.
+    private func rowLabelCenter(for row: Int, photoHeight: CGFloat) -> CGFloat {
+        let photoTop = Self.photoTopOffset
         let contentPadding: CGFloat = 8
         let rowSpacing: CGFloat = 2
 

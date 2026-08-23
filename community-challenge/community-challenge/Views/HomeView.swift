@@ -20,6 +20,20 @@ struct HomeView: View {
     @State private var presentedSection: HatcherySectionDashboard?
 
     private var hatchery: HatcherySessionState { controller.sessionState }
+
+    /// Height-over-width of the scanned photo, for sizing the grid box.
+    ///
+    /// `HatcheryImageProcessor.rectification` crops the corrected photo to the
+    /// sand region's bounding box, so this ratio is whatever shape was dragged
+    /// in the scan editor -- not a constant. The grid box used to be a fixed
+    /// 349:279, which made `scaledToFill` crop the sand back off while the
+    /// uniform cell grid still spanned the whole box, so the sections stopped
+    /// landing on the sand they were drawn from.
+    private var photoAspectRatio: CGFloat {
+        let size = hatchery.rectifiedPhoto.size
+        guard size.width > 0, size.height > 0 else { return 279 / 349 }
+        return size.height / size.width
+    }
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
 
@@ -28,7 +42,7 @@ struct HomeView: View {
             let screenWidth = min(geometry.size.width, 402)
             let contentWidth = min(max(screenWidth - 32, 0), 370)
             let gridWidth = max(contentWidth - 21, 0)
-            let gridHeight = gridWidth * 279 / 349
+            let gridHeight = gridWidth * photoAspectRatio
 
             ZStack(alignment: .topLeading) {
                 HatcheryWarmBackdrop()
