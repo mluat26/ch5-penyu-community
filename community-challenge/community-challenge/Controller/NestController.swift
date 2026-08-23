@@ -13,8 +13,18 @@ final class NestController {
     private let nestService: NestService
     /// Resolves the signed-in user, so a saved nest records who collected it.
     private let identity: (any SupabaseIdentityProviding)?
-    /// Installs the logger named by the bucket ID into the saved nest.
+    /// Installs the scanned logger into the saved nest.
     private let deviceService: DeviceService?
+    private let tagScanner = BucketTagScanner()
+
+    private(set) var isScanningTag = false
+    /// Why the last scan produced no logger. Never fatal: the flow continues
+    /// with whatever the draft already holds.
+    private(set) var bucketScanMessage: String?
+
+    /// Whether this iPhone can scan at all, so the screen can offer a plain
+    /// way past instead of a button that cannot work.
+    var canScanBucketTag: Bool { BucketTagScanner.isSupported }
 
     init(
         hatcheryID: UUID,
@@ -87,7 +97,7 @@ final class NestController {
                     )
                 )
             )
-            await installLogger(named: draft.bucketID, into: nest)
+            await installLogger(into: nest)
 
             lastSavedNest = nest
             return nest
@@ -97,44 +107,73 @@ final class NestController {
         }
     }
 
-    /// Assigns the logger the bucket ID names to this nest.
+    /// Reads the bucket's NFC tag and remembers which logger it names.
+    ///
+    /// Deliberately not a gate. Scanning does not exist on the simulator or on
+    /// an iPhone without a reader, a tag can be missing, and the nest is the
+    /// record that matters -- the logger is an attachment to it. So every
+    /// failure lands in `bucketScanMessage` and the draft stays saveable.
+    ///
+    /// A tag that names a logger this account cannot see reads as unregistered,
+    /// because `device_current_assignment` is owner-scoped: the same message
+    /// covers "no such device" and "not yours", and neither can be fixed here.
+    func scanBucketTag() async {
+        guard !isScanningTag else { return }
+        bucketScanMessage = nil
+        isScanningTag = true
+        defer { isScanningTag = false }
+
+        do {
+            let sensorID = try await tagScanner.scan()
+
+            guard let deviceService else {
+                // No backend wired up; remember the tag so the nest still
+                // records which bucket it went into.
+                draft.scannedDeviceID = sensorID
+                return
+            }
+
+            let device = try await deviceService.device(id: sensorID)
+
+            guard device.nestID == nil else {
+                bucketScanMessage =
+                    "That logger is already installed in another nest. "
+                    + "Record the hatch there first, or use a different bucket."
+                return
+            }
+
+            draft.scannedDeviceID = device.id
+            // The tag decides the label too, so the ranger reads the same
+            // thing on the bucket and on the nest report.
+            draft.bucketID = device.name
+        } catch is CancellationError {
+            // The scan sheet was dismissed. A deliberate action needs no
+            // error message.
+        } catch {
+            bucketScanMessage = error.localizedDescription
+        }
+    }
+
+    /// Assigns the scanned logger to this nest.
     ///
     /// Readings carry only the device's own ID; the database resolves the nest
     /// from the active assignment. Without this step a nest records a bucket
     /// ID as text and nothing else, the assignment never exists, and every
     /// reading that device sends is refused.
     ///
-    /// Loggers are registered ahead of time -- the firmware is flashed with the
-    /// ID of an existing row -- so this only ever installs one that is already
-    /// there. It never creates a device: a new row would carry a new ID that no
-    /// hardware knows, which looks like success and reports nothing.
+    /// It never creates a device: a new row would carry a new ID that no
+    /// hardware knows, which looks like success and reports nothing. Loggers
+    /// are registered ahead of time and the firmware is flashed with the ID of
+    /// an existing row.
     ///
     /// The nest is already saved by this point, so a missing logger never
-    /// discards the record. It no longer reports itself either: the bucket ID
-    /// is auto-issued until the NFC scan exists, so it matched no registered
-    /// device and the warning fired on every nest. A genuine failure to reach
-    /// the device service still surfaces -- that is a fault, not an absence.
-    private func installLogger(named bucketID: String, into nest: NestEntity) async {
-        let name = bucketID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let deviceService else { return }
+    /// discards the record. A genuine failure to reach the device service still
+    /// surfaces -- that is a fault, not an absence.
+    private func installLogger(into nest: NestEntity) async {
+        guard let deviceService else { return }
 
         do {
-            let devices = try await deviceService.devices()
-            guard
-                let device = devices.first(where: {
-                    $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        .caseInsensitiveCompare(name) == .orderedSame
-                })
-            else {
-                // ponytail: silent by request -- the team guarantees the
-                // logger is registered and powered before a nest is created,
-                // so the warning was only ever noise in practice.
-                //
-                // If nests start reading "--" forever, look here first: no
-                // device means no `device_assignment` row, and
-                // `resolve_reading_nest` refuses every reading without one.
-                return
-            }
+            guard let device = try await resolveLogger(using: deviceService) else { return }
 
             _ = try await deviceService.updateDevice(
                 id: device.id,
@@ -142,6 +181,33 @@ final class NestController {
             )
         } catch {
             errorMessage = "Nest saved, but its logger could not be installed: \(error.localizedDescription)"
+        }
+    }
+
+    /// The logger to install: the scanned one when there is one, otherwise the
+    /// device whose name matches the bucket ID.
+    ///
+    /// The name match is kept for provisioning by hand -- registering a device
+    /// called `001` and letting the auto-issued bucket ID find it is how this
+    /// is tested without hardware. It is a lookup, not a fallback: with a tag
+    /// scanned, the name is never consulted.
+    private func resolveLogger(using deviceService: DeviceService) async throws -> DeviceEntity? {
+        if let scannedDeviceID = draft.scannedDeviceID {
+            return try await deviceService.device(id: scannedDeviceID)
+        }
+
+        let name = draft.bucketID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+
+        // ponytail: silent when nothing matches -- a hand-issued bucket ID
+        // matches no device on most nests, so warning here was pure noise.
+        //
+        // If nests read "--" forever, look here first: no device means no
+        // `device_assignment` row, and `resolve_reading_nest` refuses every
+        // reading without one.
+        return try await deviceService.devices().first {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(name) == .orderedSame
         }
     }
 
@@ -166,12 +232,18 @@ final class NestController {
         guard let nests = try? await nestService.nests(hatcheryID: hatcheryID) else { return }
         let next = Self.nextIdentifier(after: nests.map(\.nestNumber))
         draft.nestNumber = next
-        draft.bucketID = next
+        // A scanned tag already named the bucket after its own logger. Issuing
+        // a sequence number over it would relabel a physical bucket that is
+        // sitting in front of the ranger with the wrong ID.
+        if draft.scannedDeviceID == nil {
+            draft.bucketID = next
+        }
     }
 
     func reset() {
         draft = .sample
         errorMessage = nil
+        bucketScanMessage = nil
         lastSavedNest = nil
     }
 

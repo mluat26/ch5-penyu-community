@@ -4,11 +4,16 @@ import MapKit
 import SwiftUI
 import UIKit
 
-/// The one screen ahead of the numbered stepper: prompts scanning the bucket's
-/// NFC tag before the form begins. That scan isn't wired up yet, so nothing
-/// here reads a real tag -- the whole page is a tap target standing in for
-/// what will become an automatic advance once a bucket is detected.
+/// The one screen ahead of the numbered stepper: scans the bucket's NFC tag
+/// before the form begins.
+///
+/// The scan is offered, never required. It does not exist on the simulator or
+/// on an iPhone without a reader, a tag can be missing or unreadable, and the
+/// nest is the record that matters -- so there is always a way past. Skipping
+/// costs the nest its logger link, nothing else, and that can be attached
+/// later.
 struct AddNestConnectBucketView: View {
+    @Bindable var controller: NestController
     let onContinue: () -> Void
     let onCancel: () -> Void
 
@@ -43,24 +48,70 @@ struct AddNestConnectBucketView: View {
                 howItWorksCard
                     .padding(.horizontal, 16)
                     .padding(.top, 45)
-                    .padding(.bottom, 24)
+
+                scanActions
+                    .padding(.horizontal, 16)
+                    .padding(.top, 24)
+                    .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
-            // Standing in for the real trigger: an NFC read will replace this
-            // once that integration exists.
-            //
-            // `contentShape` + `onTapGesture` rather than a simultaneous
-            // gesture on the whole ScrollView: that version also fired when
-            // the close button was tapped, so X advanced the flow instead of
-            // leaving it.
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onContinue)
 
             AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
                 .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
+    }
+
+    private var scanActions: some View {
+        VStack(spacing: 14) {
+            if let message = controller.bucketScanMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.appRed)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if controller.canScanBucketTag {
+                Button {
+                    Task {
+                        await controller.scanBucketTag()
+                        // Advance only on a tag that named a usable logger.
+                        // A refused or dismissed scan leaves the person here
+                        // with the reason, free to retry or move on.
+                        if controller.draft.scannedDeviceID != nil {
+                            onContinue()
+                        }
+                    }
+                } label: {
+                    Group {
+                        if controller.isScanningTag {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Scan bucket tag")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(
+                        Color.appGreenPrimary,
+                        in: RoundedRectangle(cornerRadius: 26)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(controller.isScanningTag)
+            }
+
+            Button(controller.canScanBucketTag ? "Continue without scanning" : "Continue") {
+                onContinue()
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Color.appGreenPrimary)
+            .disabled(controller.isScanningTag)
+        }
     }
 
     private var howItWorksCard: some View {

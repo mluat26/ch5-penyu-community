@@ -241,6 +241,7 @@ struct ContentView: View {
                     switch route {
                     case .connectBucket:
                         AddNestConnectBucketView(
+                            controller: nestController,
                             onContinue: { router.push(.identity) },
                             onCancel: finishAddNestFlow
                         )

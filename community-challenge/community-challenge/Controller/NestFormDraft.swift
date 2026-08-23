@@ -10,6 +10,12 @@ enum NestInspectionDateMode: Hashable {
 struct NestFormDraft: Hashable {
     var bucketID: String
     var nestNumber: String
+    /// The logger named by the bucket's NFC tag, once one has been scanned.
+    ///
+    /// This, not `bucketID`, is what attaches readings to the nest: the tag
+    /// carries a `device.id`, and the assignment is made against that. The
+    /// bucket ID stays a human label for the container.
+    var scannedDeviceID: UUID? = nil
     var section: String
     var sectionRow: Int?
     var sectionColumn: Int?
