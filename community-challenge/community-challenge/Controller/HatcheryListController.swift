@@ -7,8 +7,22 @@ import Observation
 struct HatcheryManagementSummary: Identifiable, Hashable {
     let hatchery: HatcheryEntity
     let overview: HatcheryOverview?
+    /// Sections that fall on sand, from the current layout's stored mask.
+    ///
+    /// Nil when the hatchery has no layout revision, or when reading it
+    /// failed. `sectionsInUse` resolves that case rather than callers, so a
+    /// missing layout cannot quietly become a zero.
+    let activeSectionCount: Int?
 
     var id: UUID { hatchery.id }
+
+    /// The sections a nest can actually be placed in.
+    ///
+    /// Falls back to the whole grid without a layout, and that is the right
+    /// answer rather than a guess: `HatcheryGridGenerator` marks a cell active
+    /// when there is no sand region to test it against, so a hatchery with no
+    /// mask genuinely has every cell in use.
+    var sectionsInUse: Int { activeSectionCount ?? hatchery.sectionCount }
 }
 
 @MainActor
@@ -127,10 +141,40 @@ final class HatcheryListController {
             return overviews
         }
 
+        // A second concurrent pass rather than a field on `HatcheryOverview`:
+        // the overview is built by `HatcheryService`, which has no layout
+        // access, and the count comes from the layout's stored sand mask.
+        //
+        // This reads the revision row only. `sourcePhotoData` is what costs a
+        // private download, and it is deliberately not called here -- opening
+        // Management must not pull every hatchery's photo.
+        let activeSectionsByHatcheryID = await withTaskGroup(
+            of: (UUID, Int?).self,
+            returning: [UUID: Int].self
+        ) { group in
+            for hatchery in loadedHatcheries {
+                group.addTask { [layoutService] in
+                    let layout = try? await layoutService?.currentLayout(
+                        hatcheryID: hatchery.id
+                    )
+                    return (hatchery.id, layout?.grid.activeCells.count)
+                }
+            }
+
+            var counts: [UUID: Int] = [:]
+            for await (hatcheryID, count) in group {
+                if let count {
+                    counts[hatcheryID] = count
+                }
+            }
+            return counts
+        }
+
         managementSummaries = loadedHatcheries.map { hatchery in
             HatcheryManagementSummary(
                 hatchery: hatchery,
-                overview: overviewByHatcheryID[hatchery.id]
+                overview: overviewByHatcheryID[hatchery.id],
+                activeSectionCount: activeSectionsByHatcheryID[hatchery.id]
             )
         }
     }
