@@ -21,18 +21,27 @@ struct HomeView: View {
 
     private var hatchery: HatcherySessionState { controller.sessionState }
 
-    /// Height-over-width of the scanned photo, for sizing the grid box.
+    /// The photo's drawn size inside the fixed grid box: its own aspect ratio,
+    /// fitted, never cropped and never stretched.
     ///
-    /// `HatcheryImageProcessor.rectification` crops the corrected photo to the
-    /// sand region's bounding box, so this ratio is whatever shape was dragged
-    /// in the scan editor -- not a constant. The grid box used to be a fixed
-    /// 349:279, which made `scaledToFill` crop the sand back off while the
-    /// uniform cell grid still spanned the whole box, so the sections stopped
-    /// landing on the sand they were drawn from.
-    private var photoAspectRatio: CGFloat {
+    /// The box stays 349:279 so the dashboard's layout does not move when a
+    /// sand shape changes -- deriving the box from the photo made it collapse
+    /// for a small sand region and overflow the screen for a tall one.
+    ///
+    /// Fitting the photo inside that fixed box is what fixes the original bug.
+    /// `rectification` crops the corrected photo to the sand region's bounding
+    /// box, so its aspect ratio is whatever was dragged; `scaledToFill` cut the
+    /// sand back off while the cell grid still spanned the whole box, and the
+    /// sections stopped landing on the sand they came from. The grid is now
+    /// sized to this rect too, so the two cannot disagree. Space left over
+    /// shows the box's own sage fill, which was always behind the photo.
+    private func photoFit(in box: CGSize) -> CGSize {
         let size = hatchery.rectifiedPhoto.size
-        guard size.width > 0, size.height > 0 else { return 279 / 349 }
-        return size.height / size.width
+        guard size.width > 0, size.height > 0, box.width > 0, box.height > 0 else {
+            return box
+        }
+        let scale = min(box.width / size.width, box.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
     }
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
@@ -42,7 +51,7 @@ struct HomeView: View {
             let screenWidth = min(geometry.size.width, 402)
             let contentWidth = min(max(screenWidth - 32, 0), 370)
             let gridWidth = max(contentWidth - 21, 0)
-            let gridHeight = gridWidth * photoAspectRatio
+            let gridHeight = gridWidth * 279 / 349
 
             ZStack(alignment: .topLeading) {
                 HatcheryWarmBackdrop()
@@ -162,7 +171,9 @@ struct HomeView: View {
     }
 
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
-        VStack(spacing: 10) {
+        let photo = photoFit(in: CGSize(width: width, height: height))
+
+        return VStack(spacing: 10) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 21)
 
@@ -190,7 +201,7 @@ struct HomeView: View {
                             .frame(maxHeight: .infinity)
                     }
                 }
-                .frame(width: 9, height: height, alignment: .top)
+                .frame(width: 9, height: photo.height, alignment: .top)
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 24)
@@ -198,9 +209,8 @@ struct HomeView: View {
 
                     Image(uiImage: hatchery.rectifiedPhoto)
                         .resizable()
-                        .scaledToFill()
-                        .frame(width: width, height: height)
-                        .clipped()
+                        .scaledToFit()
+                        .frame(width: photo.width, height: photo.height)
                         .accessibilityLabel("Photo of \(hatchery.hatchery.name)")
 
                     VStack(spacing: 2) {
@@ -226,20 +236,29 @@ struct HomeView: View {
                                         .contentShape(Rectangle())
                                         .accessibilityLabel("Section \(sectionID)")
                                     } else {
-                                        Color.black
-                                            .opacity(0.14)
-                                            .overlay {
-                                                Rectangle()
-                                                    .stroke(.white.opacity(0.18), lineWidth: 1)
-                                            }
-                                            .accessibilityElement(children: .ignore)
-                                            .accessibilityLabel("Section \(sectionID), outside the marked sand area")
+                                        // Off-sand cells show the photo rather
+                                        // than a grey tile: there is no section
+                                        // there to select, place a nest in, or
+                                        // report on, so drawing one only hides
+                                        // the sand that decided it.
+                                        //
+                                        // Still laid out, never omitted. The
+                                        // lattice slot *is* the tie to the
+                                        // photo underneath -- dropping a cell
+                                        // from the stack reflows every cell
+                                        // after it and slides the whole grid
+                                        // out of register.
+                                        Color.clear
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
                         }
                     }
-                    .padding(8)
+                    .frame(
+                        width: max(0, photo.width - 16),
+                        height: max(0, photo.height - 16)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .frame(width: width, height: height)
@@ -248,8 +267,16 @@ struct HomeView: View {
             .frame(width: width + 21, height: height, alignment: .leading)
         }
         .frame(width: width + 21, alignment: .leading)
-        .padding(.leading, 16)
+        // Centres the photo rather than the block. The 21 pt row-label gutter
+        // is inside this frame, so centring the frame alone would leave the
+        // photo half a gutter right of centre -- which is what it looked like.
+        // Layout is otherwise untouched: same widths, same spacing, same rows.
+        .frame(maxWidth: .infinity, alignment: .center)
+        .offset(x: -Self.rowLabelGutter / 2)
     }
+
+    /// Width reserved to the left of the grid for the row labels.
+    private static let rowLabelGutter: CGFloat = 21
 
     private func overview(width: CGFloat) -> some View {
         VStack(spacing: 0) {
