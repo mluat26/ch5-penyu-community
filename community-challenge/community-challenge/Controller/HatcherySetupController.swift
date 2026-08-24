@@ -176,12 +176,27 @@ final class HatcherySetupController {
 
         guard
             let photo = draft.image,
-            let rectifiedPhoto = draft.rectifiedImage ?? draft.image,
             let boundary = draft.boundary,
             let sandRegion = draft.sandRegion,
             let grid = draft.grid
         else {
             errorMessage = "Finish the hatchery setup before saving."
+            return nil
+        }
+
+        // Was `draft.rectifiedImage ?? draft.image`, which saved the raw camera
+        // photo under the name `rectifiedPhoto` whenever perspective correction
+        // had not produced one -- and nothing downstream could tell. The
+        // dashboard drew an un-flattened photo and laid a uniform cell grid
+        // over it, so the sections did not match the sand, with no error shown
+        // at any point.
+        //
+        // Unreachable on every normal path: `skipScanning` sets this to the
+        // blank image, and `confirmBoundary` both sets it and refuses to
+        // advance without it. So this fires only when correction genuinely
+        // failed, which is worth saying out loud rather than papering over.
+        guard let rectifiedPhoto = draft.rectifiedImage else {
+            errorMessage = "This scan could not be flattened. Rescan the hatchery before saving."
             return nil
         }
 
