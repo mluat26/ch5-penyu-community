@@ -20,6 +20,17 @@ enum FigmaMeasurementHarness {
     @ViewBuilder
     static func view(for screen: String) -> some View {
         switch screen {
+        // Held on screen rather than played once: the real launch overlay is
+        // gone in well under a second, which is too short to watch the drop,
+        // the breath and the exit. `launch` never becomes ready, so the loop
+        // runs indefinitely; `launch-exit` reports ready immediately, so the
+        // exit plays as soon as the drop has settled.
+        case "launch":
+            AppLoadingHost(isReady: false)
+
+        case "launch-exit":
+            AppLoadingHost(isReady: true)
+
         case "invite":
             InvitationCodeView(invite: Fixtures.invite, onBack: {}, onRegenerate: {})
 

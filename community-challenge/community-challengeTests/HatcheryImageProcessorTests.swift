@@ -23,6 +23,16 @@ final class HatcheryImageProcessorTests: XCTestCase {
         XCTAssertEqual(masked.size, image.size)
     }
 
+    /// The sand region must survive the move into corrected coordinates, and
+    /// the corrected photo must stay a whole rectangle while it does.
+    ///
+    /// This used to assert the opposite of that second half: rectification
+    /// masked the photo to the sand polygon and cropped to its bounding box, so
+    /// pixels outside the sand were transparent. That made the stored photo the
+    /// shape of the polygon, and any sand area that was not a neat rectangle
+    /// came out slanted and clipped on every screen that drew it. The polygon
+    /// is stored beside the photo and is what marks a cell active, so cutting
+    /// it out of the pixels as well was both redundant and destructive.
     func testPerspectiveRectificationCarriesTheSegmentIntoTheCorrectedImage() throws {
         let boundary = HatcheryBoundary(
             topLeft: NormalizedPoint(x: 0.18, y: 0.18),
@@ -33,9 +43,8 @@ final class HatcheryImageProcessorTests: XCTestCase {
         let mapper = try XCTUnwrap(HatcheryPerspectiveMapper(boundary: boundary))
         let sourceRegion = try XCTUnwrap(
             HatcherySandRegion(
-                // A right triangle, not a rectangle: rectification crops to
-                // the sand's bounding box, so a region that filled its own box
-                // would fill the cropped image and prove nothing.
+                // A right triangle, not a rectangle, so the mapped region
+                // is distinguishable from the full unit square.
                 points: try [
                     NormalizedPoint(x: 0, y: 0),
                     NormalizedPoint(x: 0.55, y: 0),
@@ -63,6 +72,9 @@ final class HatcheryImageProcessorTests: XCTestCase {
         XCTAssertTrue(result.sandRegion.contains(NormalizedPoint(x: 0.25, y: 0.5)))
         XCTAssertFalse(result.sandRegion.contains(NormalizedPoint(x: 0.75, y: 0.5)))
 
+        // Both points are opaque: the photo is the corrected rectangle, not
+        // the sand's silhouette. A point outside the sand is still photo -- the
+        // region above is what says it is not sand.
         let inside = CGPoint(
             x: result.image.size.width * 0.25,
             y: result.image.size.height * 0.5
@@ -72,7 +84,7 @@ final class HatcheryImageProcessorTests: XCTestCase {
             y: result.image.size.height * 0.5
         )
         XCTAssertGreaterThan(alpha(at: inside, in: result.image), 0)
-        XCTAssertEqual(alpha(at: outside, in: result.image), 0)
+        XCTAssertGreaterThan(alpha(at: outside, in: result.image), 0)
     }
 
     private func makeSolidImage(size: CGSize) -> UIImage {

@@ -1,16 +1,30 @@
 import CoreGraphics
 
-/// Converts points between an aspect-filled image and its SwiftUI container.
+/// Converts points between a scaled image and its SwiftUI container.
+///
+/// `.fill` covers the container and crops the overflow; `.fit` shows the whole
+/// image and leaves space around it. The mode must match how the image itself
+/// is drawn -- a `scaledToFit` photo under a `.fill` mapper puts every overlay
+/// point in the wrong place.
 nonisolated struct AspectFillImageMapper {
+    enum ContentMode {
+        case fill
+        case fit
+    }
+
     let imageSize: CGSize
     let containerSize: CGSize
+    /// Defaults to `.fill` so existing callers keep their behaviour.
+    var contentMode: ContentMode = .fill
 
     private var scale: CGFloat {
         guard imageSize.width > 0, imageSize.height > 0 else { return 1 }
-        return max(
-            containerSize.width / imageSize.width,
-            containerSize.height / imageSize.height
-        )
+        let horizontal = containerSize.width / imageSize.width
+        let vertical = containerSize.height / imageSize.height
+        return switch contentMode {
+        case .fill: max(horizontal, vertical)
+        case .fit: min(horizontal, vertical)
+        }
     }
 
     private var origin: CGPoint {

@@ -37,6 +37,37 @@ struct AppRootView: View {
     /// (for example, after re-scanning). This forces ContentView to rebuild
     /// its stateful dashboard controllers for that fresh session.
     @State private var activeSessionRevision = UUID()
+    /// Owned here rather than derived from `hasLoaded`, because the launch
+    /// screen has to outlive the signal that ends it -- the exit animation
+    /// plays after the data has already arrived.
+    @State private var isShowingLaunchScreen = true
+    /// Held here so the loading animation's progress survives the branch
+    /// switches below. Inside the view it was reset by every one of them.
+    @State private var loadingPhase = AppLoadingPhase()
+
+    /// Whether a real screen is composed behind the launch overlay.
+    ///
+    /// Deliberately more than `hasLoaded`. With hatcheries present the root
+    /// still has to restore the chosen one's scan session, which downloads a
+    /// private photo -- and that step used to put up its own "Opening ..."
+    /// loader. Two loaders in a row read as a stall, so the launch screen holds
+    /// across the whole wait and there is only ever one.
+    private var hasScreenBehindLaunch: Bool {
+        if session.activeHatchery != nil { return true }
+        if isCreatingHatchery { return true }
+
+        guard hatcheryListController.hasLoaded else { return false }
+
+        // A failed query shows its own retry screen, which is a real screen.
+        if !hatcheryListController.hasSuccessfulLoad { return true }
+        if isShowingOnboarding || hatcheryListController.hatcheries.isEmpty {
+            return true
+        }
+
+        // A hatchery exists and is being opened. Only ready once it is -- or
+        // once opening failed, which falls through to the management list.
+        return initialHatcheryOpeningState == .failed
+    }
 
     init(container: AppContainer, session: AppSessionController) {
         self.container = container
@@ -68,6 +99,26 @@ struct AppRootView: View {
     }
 
     var body: some View {
+        // The loading screen is a sibling in this ZStack, not an `.overlay` on
+        // the Group. As an overlay it was mounted *inside* a view whose active
+        // branch changes three times during a cold launch, and each switch
+        // remounted it: first that reset its `@State` and replayed the drop
+        // three times, then -- with the state moved out to survive -- it cut the
+        // drop off mid-flight and the mark simply appeared in place. A fixed
+        // position in a ZStack keeps one instance mounted throughout.
+        ZStack {
+            routedContent
+            if isShowingLaunchScreen {
+                AppLoadingView(
+                    isReady: hasScreenBehindLaunch,
+                    onFinished: { isShowingLaunchScreen = false },
+                    phase: loadingPhase
+                )
+            }
+        }
+    }
+
+    private var routedContent: some View {
         Group {
             if let activeHatchery = session.activeHatchery {
                 ContentView(
@@ -136,7 +187,11 @@ struct AppRootView: View {
                         onRescan: beginRescan
                     )
                 } else {
-                    OpeningHatcheryView(name: firstHatchery.name)
+                    // Nothing of its own to show: the launch overlay is still
+                    // up and stays up until this finishes. The task is what
+                    // matters here, not the backdrop behind it.
+                    Color.appOffWhite
+                        .ignoresSafeArea()
                         .task(id: firstHatchery.id) {
                             await openFirstHatchery()
                         }
@@ -329,30 +384,6 @@ private enum AppleSignInFlowError: LocalizedError {
 
     var errorDescription: String? {
         "Your account was signed in, but your hatcheries could not be loaded. Please try again."
-    }
-}
-
-private struct OpeningHatcheryView: View {
-    let name: String
-
-    var body: some View {
-        ZStack {
-            Color.appOffWhite
-
-            VStack(spacing: 12) {
-                ProgressView()
-                    .tint(Color.appGreenPrimary)
-
-                Text("Opening \(name)…")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.appGreenPrimary)
-            }
-        }
-        .ignoresSafeArea()
-        .preferredColorScheme(.light)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Opening \(name)")
     }
 }
 

@@ -4,11 +4,16 @@ import MapKit
 import SwiftUI
 import UIKit
 
-/// The one screen ahead of the numbered stepper: prompts scanning the bucket's
-/// NFC tag before the form begins. That scan isn't wired up yet, so nothing
-/// here reads a real tag -- the whole page is a tap target standing in for
-/// what will become an automatic advance once a bucket is detected.
+/// The one screen ahead of the numbered stepper: scans the bucket's NFC tag
+/// before the form begins.
+///
+/// The scan is offered, never required. It does not exist on the simulator or
+/// on an iPhone without a reader, a tag can be missing or unreadable, and the
+/// nest is the record that matters -- so there is always a way past. Skipping
+/// costs the nest its logger link, nothing else, and that can be attached
+/// later.
 struct AddNestConnectBucketView: View {
+    @Bindable var controller: NestController
     let onContinue: () -> Void
     let onCancel: () -> Void
 
@@ -16,7 +21,11 @@ struct AddNestConnectBucketView: View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
 
-            ScrollView {
+            // One page, no scrolling: the scan button is the point of this
+            // screen and must never be below a fold. The hero image takes
+            // whatever vertical space is left over instead of the fixed
+            // paddings that used to push the buttons off the bottom.
+            VStack(spacing: 0) {
                 VStack(spacing: 12) {
                     Text("Connect your bucket")
                         .font(.largeTitle)
@@ -33,34 +42,81 @@ struct AddNestConnectBucketView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity)
 
+                // The one flexible element. `scaledToFit` inside a flexible
+                // frame shrinks the artwork rather than the text or the
+                // controls, so a short screen loses picture, not function.
                 Image("AddNestBucketHero")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 68)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.vertical, 20)
                     .accessibilityHidden(true)
 
                 howItWorksCard
                     .padding(.horizontal, 16)
-                    .padding(.top, 45)
+
+                scanActions
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
                     .padding(.bottom, 24)
             }
-            .scrollIndicators(.hidden)
-            // Standing in for the real trigger: an NFC read will replace this
-            // once that integration exists.
-            //
-            // `contentShape` + `onTapGesture` rather than a simultaneous
-            // gesture on the whole ScrollView: that version also fired when
-            // the close button was tapped, so X advanced the flow instead of
-            // leaving it.
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onContinue)
 
             AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
                 .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.light)
+    }
+
+    private var scanActions: some View {
+        VStack(spacing: 14) {
+            if let message = controller.bucketScanMessage {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.appRed)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if controller.canScanBucketTag {
+                Button {
+                    Task {
+                        await controller.scanBucketTag()
+                        // Advance only on a tag that named a usable logger.
+                        // A refused or dismissed scan leaves the person here
+                        // with the reason, free to retry or move on.
+                        if controller.draft.scannedDeviceID != nil {
+                            onContinue()
+                        }
+                    }
+                } label: {
+                    Group {
+                        if controller.isScanningTag {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Scan bucket tag")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(
+                        Color.appGreenPrimary,
+                        in: RoundedRectangle(cornerRadius: 26)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(controller.isScanningTag)
+            }
+
+            Button(controller.canScanBucketTag ? "Continue without scanning" : "Continue") {
+                onContinue()
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Color.appGreenPrimary)
+            .disabled(controller.isScanningTag)
+        }
     }
 
     private var howItWorksCard: some View {

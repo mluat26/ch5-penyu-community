@@ -257,7 +257,14 @@ struct HatcheryManagementView: View {
     private func cards(scale: CGFloat) -> some View {
         let summaries = controller.managementSummaries.isEmpty
             ? controller.hatcheries.map {
-                HatcheryManagementSummary(hatchery: $0, overview: nil)
+                // Placeholder cards drawn before the first Management load
+                // returns. No layout has been read yet, so the section count
+                // is unknown rather than zero.
+                HatcheryManagementSummary(
+                    hatchery: $0,
+                    overview: nil,
+                    activeSectionCount: nil
+                )
             }
             : controller.managementSummaries
 
@@ -673,16 +680,6 @@ private struct HatcheryManagementDetailSheet: View {
             }
         }
         .preferredColorScheme(.light)
-        .confirmationDialog(
-            "Delete this hatchery?",
-            isPresented: $isConfirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete hatchery", role: .destructive, action: confirmDelete)
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes \(hatchery.name) and its scan. It cannot be undone.")
-        }
     }
 
     private func sheetHeader(contentWidth: CGFloat) -> some View {
@@ -794,6 +791,21 @@ private struct HatcheryManagementDetailSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(isDeleting)
+        // Attached to the button, not to the sheet. A confirmation presented
+        // from the whole sheet anchors to the top of it, so the popover opened
+        // over the header with its arrow pointing at the rescan row -- nowhere
+        // near the button that had just been pressed. Anchoring it here puts it
+        // directly above the button.
+        .confirmationDialog(
+            "Delete this hatchery?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete hatchery", role: .destructive, action: confirmDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \(hatchery.name) and its scan. It cannot be undone.")
+        }
     }
 
     private func rescanAction(contentWidth: CGFloat) -> some View {
@@ -887,7 +899,7 @@ private struct HatcheryManagementDetailSheet: View {
             detailSeparator
 
             detailRow(title: "Section") {
-                detailValue(String(hatchery.sectionCount))
+                detailValue(String(sectionsInUse))
             }
             detailSeparator
 
@@ -998,6 +1010,18 @@ private struct HatcheryManagementDetailSheet: View {
             default: return "th"
             }
         }
+    }
+
+    /// Sections on sand, from the summary Management already loaded.
+    ///
+    /// The scan preview has always reported this (`grid.activeSectionCount`)
+    /// while this sheet reported rows x columns, so the same hatchery read two
+    /// different numbers depending on which screen you opened.
+    private var sectionsInUse: Int {
+        controller.managementSummaries
+            .first { $0.hatchery.id == hatchery.id }?
+            .sectionsInUse
+            ?? hatchery.sectionCount
     }
 
     private var canSave: Bool {

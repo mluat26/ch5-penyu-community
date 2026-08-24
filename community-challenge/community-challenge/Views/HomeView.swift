@@ -20,6 +20,26 @@ struct HomeView: View {
     @State private var presentedSection: HatcherySectionDashboard?
 
     private var hatchery: HatcherySessionState { controller.sessionState }
+
+    /// The photo's drawn size inside the fixed container: its own aspect
+    /// ratio, fitted, never cropped and never stretched. Centred by the
+    /// enclosing `ZStack`, so leftover space is even on both sides.
+    ///
+    /// `rectification` crops the corrected photo to the sand region's bounding
+    /// box, so its shape is whatever was dragged. `scaledToFill` used to crop
+    /// the sand back off to cover the container while the cell grid still
+    /// spanned the whole thing, and the sections stopped landing on the sand
+    /// they came from. The grid is sized to this rect too, so the two cannot
+    /// disagree. Space left over shows the container's own sage fill, which was
+    /// always painted behind the photo.
+    private func photoFit(in box: CGSize) -> CGSize {
+        let size = hatchery.rectifiedPhoto.size
+        guard size.width > 0, size.height > 0, box.width > 0, box.height > 0 else {
+            return box
+        }
+        let scale = min(box.width / size.width, box.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
 
@@ -28,6 +48,11 @@ struct HomeView: View {
             let screenWidth = min(geometry.size.width, 402)
             let contentWidth = min(max(screenWidth - 32, 0), 370)
             let gridWidth = max(contentWidth - 21, 0)
+            // A fixed container, deliberately. The photo is fitted and
+            // centred inside it, so a small or oddly shaped sand area changes
+            // nothing below: the overview cards and the Add-nest button stay
+            // exactly where they were. Deriving the container from the photo
+            // made the whole screen shift every time a scan shape differed.
             let gridHeight = gridWidth * 279 / 349
 
             ZStack(alignment: .topLeading) {
@@ -148,7 +173,9 @@ struct HomeView: View {
     }
 
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
-        VStack(spacing: 10) {
+        let photo = photoFit(in: CGSize(width: width, height: height))
+
+        return VStack(spacing: 10) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 21)
 
@@ -176,17 +203,22 @@ struct HomeView: View {
                             .frame(maxHeight: .infinity)
                     }
                 }
-                .frame(width: 9, height: height, alignment: .top)
+                .frame(width: 9, height: photo.height, alignment: .top)
 
                 ZStack {
+                    // Transparent, not sage. The container is fixed so the
+                    // layout below never moves, which means a photo that does
+                    // not share its shape leaves space above and below --
+                    // filling that space drew a slab around the photo. Clear
+                    // lets the page backdrop through, so only the photo reads
+                    // as content.
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(hex: "#BFCABD"))
+                        .fill(Color.clear)
 
                     Image(uiImage: hatchery.rectifiedPhoto)
                         .resizable()
-                        .scaledToFill()
-                        .frame(width: width, height: height)
-                        .clipped()
+                        .scaledToFit()
+                        .frame(width: photo.width, height: photo.height)
                         .accessibilityLabel("Photo of \(hatchery.hatchery.name)")
 
                     VStack(spacing: 2) {
@@ -212,20 +244,29 @@ struct HomeView: View {
                                         .contentShape(Rectangle())
                                         .accessibilityLabel("Section \(sectionID)")
                                     } else {
-                                        Color.black
-                                            .opacity(0.14)
-                                            .overlay {
-                                                Rectangle()
-                                                    .stroke(.white.opacity(0.18), lineWidth: 1)
-                                            }
-                                            .accessibilityElement(children: .ignore)
-                                            .accessibilityLabel("Section \(sectionID), outside the marked sand area")
+                                        // Off-sand cells show the photo rather
+                                        // than a grey tile: there is no section
+                                        // there to select, place a nest in, or
+                                        // report on, so drawing one only hides
+                                        // the sand that decided it.
+                                        //
+                                        // Still laid out, never omitted. The
+                                        // lattice slot *is* the tie to the
+                                        // photo underneath -- dropping a cell
+                                        // from the stack reflows every cell
+                                        // after it and slides the whole grid
+                                        // out of register.
+                                        Color.clear
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
                         }
                     }
-                    .padding(8)
+                    .frame(
+                        width: max(0, photo.width - 16),
+                        height: max(0, photo.height - 16)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .frame(width: width, height: height)
@@ -234,8 +275,16 @@ struct HomeView: View {
             .frame(width: width + 21, height: height, alignment: .leading)
         }
         .frame(width: width + 21, alignment: .leading)
-        .padding(.leading, 16)
+        // Centres the photo rather than the block. The 21 pt row-label gutter
+        // is inside this frame, so centring the frame alone would leave the
+        // photo half a gutter right of centre -- which is what it looked like.
+        // Layout is otherwise untouched: same widths, same spacing, same rows.
+        .frame(maxWidth: .infinity, alignment: .center)
+        .offset(x: -Self.rowLabelGutter / 2)
     }
+
+    /// Width reserved to the left of the grid for the row labels.
+    private static let rowLabelGutter: CGFloat = 21
 
     private func overview(width: CGFloat) -> some View {
         VStack(spacing: 0) {
@@ -676,6 +725,9 @@ private struct SectionOverviewSheet: View {
 
 }
 
+// The fixture this preview uses only exists in DEBUG, and a #Preview body still
+// compiles in Release -- without this guard the archive fails to build.
+#if DEBUG
 #Preview("Hatchery Overview", traits: .fixedLayout(width: 402, height: 874)) {
     let container = AppContainer()
 
@@ -686,3 +738,4 @@ private struct SectionOverviewSheet: View {
         onOpenHatcheryMenu: { }
     )
 }
+#endif

@@ -13,7 +13,6 @@ struct HatcheryBoundaryAdjustmentView: View {
     /// The user edits this many-point polygon to describe usable sand.
     @State private var sandRegion: HatcherySandRegion?
     @State private var pickerItem: PhotosPickerItem?
-    @State private var canvasSize: CGSize = .zero
     @State private var pickerLoadTask: Task<Void, Never>?
     @State private var replacementTask: Task<Void, Never>?
     @State private var replacementRequestID: UUID?
@@ -42,11 +41,15 @@ struct HatcheryBoundaryAdjustmentView: View {
             ZStack {
                 Color.black
 
+                // Fitted, not filled. This is the screen where the sand
+                // outline is dragged, and `scaledToFill` cropped part of the
+                // photo away -- you cannot place a vertex on sand you cannot
+                // see, so the crop silently limited the editable area.
                 Color.clear
                     .overlay {
                         Image(uiImage: image)
                             .resizable()
-                            .scaledToFill()
+                            .scaledToFit()
                     }
                     .clipped()
 
@@ -56,7 +59,8 @@ struct HatcheryBoundaryAdjustmentView: View {
                     region: $sandRegion,
                     imageSize: image.size,
                     fallbackBoundary: boundary,
-                    isEditable: !isConfirming
+                    isEditable: !isConfirming,
+                    contentMode: .fit
                 )
 
                 VStack(spacing: 0) {
@@ -72,10 +76,6 @@ struct HatcheryBoundaryAdjustmentView: View {
                         .padding(.bottom, 59)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .onAppear { canvasSize = geometry.size }
-            .onChange(of: geometry.size) { _, newSize in
-                canvasSize = newSize
             }
         }
         .ignoresSafeArea()
@@ -159,54 +159,30 @@ struct HatcheryBoundaryAdjustmentView: View {
         }
     }
 
+    /// Takes a library photo exactly the way a camera capture is taken.
+    ///
+    /// A capture hands over the raw image and its boundary, and
+    /// `confirmBoundary` prepares and rectifies it once. This path used to do
+    /// more: it ran `preparedImage` itself, then `detectStill` on the result,
+    /// and adopted whatever quadrilateral that found. Two consequences, both
+    /// gallery-only. The image was prepared twice, and -- far worse -- an
+    /// arbitrary photo has no hatchery in it, so the rectangle detector
+    /// returned whatever edges happened to be strongest. That quad became the
+    /// perspective boundary, and `CIPerspectiveCorrection` dutifully un-skewed
+    /// a skew that was never there.
+    ///
+    /// A library photo has no geometry worth guessing. `.fullImage` makes
+    /// rectification an identity transform, so the photo is shown exactly as
+    /// picked and the corners are dragged by hand -- which is what the screen
+    /// asks for anyway.
     private func replaceImage(with sourceImage: UIImage, requestID: UUID) {
-        let targetCanvasSize = canvasSize
-        let fallbackQuad = targetCanvasSize.width > 0 && targetCanvasSize.height > 0
-            ? QuadPoints.defaultShape(in: targetCanvasSize)
-            : nil
         replacementTask?.cancel()
-        let processingTask = Task.detached(priority: .userInitiated) {
-            let preparedImage = HatcheryImageProcessor.preparedImage(sourceImage)
-            let detectedBoundary = preparedImage.cgImage.flatMap { cgImage in
-                HatcheryBoundaryDetector().detectStill(
-                    cgImage: cgImage,
-                    orientation: .up
-                )?.boundary
-            }
-
-            guard let fallbackQuad else {
-                return ReplacementResult(
-                    image: preparedImage,
-                    boundary: detectedBoundary ?? .fullImage
-                )
-            }
-
-            let mapper = AspectFillImageMapper(
-                imageSize: preparedImage.size,
-                containerSize: targetCanvasSize
-            )
-            let fallback = mapper.boundary(
-                for: fallbackQuad
-            )
-            return ReplacementResult(
-                image: preparedImage,
-                boundary: detectedBoundary ?? fallback
-            )
-        }
         replacementTask = Task {
-            let result = await withTaskCancellationHandler {
-                await processingTask.value
-            } onCancel: {
-                processingTask.cancel()
-            }
+            guard replacementRequestID == requestID else { return }
 
-            guard
-                !Task.isCancelled,
-                replacementRequestID == requestID
-            else { return }
-            image = result.image
-            boundary = result.boundary
-            sandRegion = HatcherySandRegion.default(from: result.boundary)
+            image = sourceImage
+            boundary = .fullImage
+            sandRegion = HatcherySandRegion.default(from: .fullImage)
             finishReplacement()
         }
     }
@@ -253,10 +229,6 @@ struct HatcheryBoundaryAdjustmentView: View {
         pickerItem = nil
     }
 
-    private struct ReplacementResult {
-        let image: UIImage
-        let boundary: HatcheryBoundary
-    }
 }
 
 #Preview("Adjust Hatchery", traits: .fixedLayout(width: 402, height: 874)) {
