@@ -87,17 +87,49 @@ final class HatcherySetupController {
         errorMessage = nil
     }
 
-    func storeCapturedImage(_ image: UIImage, boundary: HatcheryBoundary) {
+    /// Stores a fresh capture with the whole frame as its starting outline.
+    ///
+    /// The camera's detected quad is deliberately not used as the seed. Since
+    /// `confirmBoundary` reads the outline as the plane to straighten, seeding
+    /// it from automatic detection meant pressing the tick without dragging
+    /// accepted whatever the detector had locked onto -- a window frame, a
+    /// floor seam -- and straightened that surface instead of the hatchery.
+    ///
+    /// Starting from the whole frame makes the two ways in behave identically:
+    /// accepting without dragging applies no correction and keeps the photo as
+    /// taken, and any correction is one somebody asked for by moving corners.
+    func storeCapturedImage(_ image: UIImage) {
         resetPreparedSourcePhoto()
         draft.image = image
         draft.rectifiedImage = nil
         draft.usesMockImage = false
         draft.isAwaitingScan = false
-        draft.boundary = boundary
-        draft.sandRegion = .default(from: boundary)
+        draft.boundary = .fullImage
+        draft.sandRegion = .default(from: .fullImage)
         draft.rectifiedSandRegion = nil
         draft.grid = nil
         errorMessage = nil
+    }
+
+    /// The outline someone drew, read as the hatchery's plane.
+    ///
+    /// Nil unless it has exactly four corners. A plane needs four; a polygon
+    /// with more describes an irregular sand shape that no single perspective
+    /// correction can flatten, and one with fewer is not a shape at all.
+    ///
+    /// The order is the order `HatcherySandRegion(boundary:)` writes and
+    /// `moveVertex` preserves -- top-left, top-right, bottom-right,
+    /// bottom-left -- so dragging corners keeps the correspondence.
+    private static func plane(from outline: HatcherySandRegion) -> HatcheryBoundary? {
+        guard outline.points.count == 4 else { return nil }
+
+        let candidate = HatcheryBoundary(
+            topLeft: outline.points[0],
+            topRight: outline.points[1],
+            bottomRight: outline.points[2],
+            bottomLeft: outline.points[3]
+        )
+        return candidate.isValid ? candidate : nil
     }
 
     func confirmBoundary(
@@ -105,18 +137,31 @@ final class HatcherySetupController {
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion
     ) async -> Bool {
+        // Straighten what was outlined, not what a detector guessed.
+        //
+        // `boundary` arrives from automatic rectangle detection and is not
+        // editable anywhere in the flow, while `inputCrop` makes the corrected
+        // photo *be* that quad -- so a detector that locked onto a window frame
+        // or a floor seam produced a photo of the wrong surface, with the drawn
+        // outline squashed into a corner of it. Nothing in the UI could correct
+        // that, because the only shape a person can move is the outline.
+        //
+        // So the outline is the plane. Falling back to the detected quad only
+        // when the outline is not four corners, where no homography applies.
+        let plane = Self.plane(from: sandRegion) ?? boundary
+
         do {
             let sourcePayload = try HatcheryImageProcessor.payload(from: image)
             resetPreparedSourcePhoto()
             let preparedCapture = try await HatcheryImageProcessor.prepareCapturedLayout(
                 from: sourcePayload,
-                boundary: boundary,
+                boundary: plane,
                 sandRegion: sandRegion
             )
             try Task.checkCancellation()
 
             draft.image = HatcheryImageProcessor.displayImage(from: preparedCapture.photo)
-            draft.boundary = boundary
+            draft.boundary = plane
             draft.sandRegion = sandRegion
             draft.rectifiedSandRegion = preparedCapture.rectifiedSandRegion
             draft.isAwaitingScan = false

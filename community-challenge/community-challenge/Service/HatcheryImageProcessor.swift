@@ -239,17 +239,24 @@ nonisolated enum HatcheryImageProcessor {
             return nil
         }
 
+        // The corrected rectangle, kept whole. It used to be masked to the sand
+        // polygon and then cropped to that polygon's bounding box, which made
+        // the stored photo the *shape of the polygon* -- so any sand area that
+        // was not a neat rectangle produced a slanted, clipped photo on every
+        // screen that drew it. Importing from the library hit this every time,
+        // because the outline has to be dragged onto the area by hand; a camera
+        // capture usually escaped it only because the detected boundary already
+        // fitted and nobody moved the corners.
+        //
+        // Masking is also redundant now. The sand polygon is stored beside the
+        // photo and is what marks a grid cell active, and off-sand cells draw
+        // as transparent -- so the area outside the sand is already expressed
+        // by the grid rather than by cutting pixels out of the scan.
         let correctedImage = UIImage(cgImage: cgImage, scale: 1, orientation: .up)
-        let masked = maskedImage(correctedImage, to: rectifiedSandRegion)
-
-        // Masking leaves the sand sitting inside the full boundary rectangle,
-        // so the transparent margin is what the viewer ends up showing. Trim to
-        // the sand itself: the photo then fills the viewer, and the grid drawn
-        // over that viewer covers the sand rather than the margin.
-        guard let cropped = croppedToSandRegion(masked, region: rectifiedSandRegion) else {
-            return HatcheryRectification(image: masked, sandRegion: rectifiedSandRegion)
-        }
-        return HatcheryRectification(image: cropped.image, sandRegion: cropped.region)
+        return HatcheryRectification(
+            image: correctedImage,
+            sandRegion: rectifiedSandRegion
+        )
     }
 
     /// Crops a masked scan to its sand region and re-expresses the region in
