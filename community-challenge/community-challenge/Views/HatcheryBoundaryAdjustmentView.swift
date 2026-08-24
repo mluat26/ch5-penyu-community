@@ -42,11 +42,15 @@ struct HatcheryBoundaryAdjustmentView: View {
             ZStack {
                 Color.black
 
+                // Fitted, not filled. This is the screen where the sand
+                // outline is dragged, and `scaledToFill` cropped part of the
+                // photo away -- you cannot place a vertex on sand you cannot
+                // see, so the crop silently limited the editable area.
                 Color.clear
                     .overlay {
                         Image(uiImage: image)
                             .resizable()
-                            .scaledToFill()
+                            .scaledToFit()
                     }
                     .clipped()
 
@@ -56,7 +60,8 @@ struct HatcheryBoundaryAdjustmentView: View {
                     region: $sandRegion,
                     imageSize: image.size,
                     fallbackBoundary: boundary,
-                    isEditable: !isConfirming
+                    isEditable: !isConfirming,
+                    contentMode: .fit
                 )
 
                 VStack(spacing: 0) {
@@ -181,9 +186,12 @@ struct HatcheryBoundaryAdjustmentView: View {
                 )
             }
 
+            // Same mode the quad was drawn under, or carrying it onto the
+            // replacement photo moves every corner.
             let mapper = AspectFillImageMapper(
                 imageSize: preparedImage.size,
-                containerSize: targetCanvasSize
+                containerSize: targetCanvasSize,
+                contentMode: .fit
             )
             let fallback = mapper.boundary(
                 for: fallbackQuad

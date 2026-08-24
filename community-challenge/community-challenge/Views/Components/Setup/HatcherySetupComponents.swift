@@ -25,6 +25,9 @@ struct HatcherySetupBackdrop: View {
 struct HatcherySetupImage: View {
     let image: UIImage
     let usesMockCrop: Bool
+    /// `.fit` shows the whole photo. `.fill` crops it to cover the box, which
+    /// reads as an unexplained zoom on a photo whose shape does not match.
+    var contentMode: AspectFillImageMapper.ContentMode = .fill
 
     var body: some View {
         GeometryReader { geometry in
@@ -41,10 +44,18 @@ struct HatcherySetupImage: View {
                         y: -geometry.size.height * 0.4283
                     )
             } else {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                switch contentMode {
+                case .fill:
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                case .fit:
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
             }
         }
         .clipped()

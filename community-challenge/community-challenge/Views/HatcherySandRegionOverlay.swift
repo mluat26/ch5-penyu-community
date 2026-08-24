@@ -13,6 +13,9 @@ struct HatcherySandRegionOverlay: View {
     var fallbackBoundary: HatcheryBoundary?
     var color: Color = .appGreenPrimary
     var isEditable = true
+    /// Must match how the photo beneath is drawn, or every mapped point lands
+    /// somewhere the sand is not.
+    var contentMode: AspectFillImageMapper.ContentMode = .fill
 
     private let handleRadius: CGFloat = 4.52
     private let handleHitSize: CGFloat = 44
@@ -25,20 +28,23 @@ struct HatcherySandRegionOverlay: View {
         imageSize: CGSize,
         fallbackBoundary: HatcheryBoundary? = nil,
         color: Color = .appGreenPrimary,
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        contentMode: AspectFillImageMapper.ContentMode = .fill
     ) {
         _region = region
         self.imageSize = imageSize
         self.fallbackBoundary = fallbackBoundary
         self.color = color
         self.isEditable = isEditable
+        self.contentMode = contentMode
     }
 
     var body: some View {
         GeometryReader { geometry in
             let mapper = AspectFillImageMapper(
                 imageSize: imageSize,
-                containerSize: geometry.size
+                containerSize: geometry.size,
+                contentMode: contentMode
             )
             let displayedRegion = region ?? initialRegion(using: mapper, in: geometry.size)
 

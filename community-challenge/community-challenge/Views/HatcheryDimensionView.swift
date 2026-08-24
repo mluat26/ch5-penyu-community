@@ -118,15 +118,24 @@ struct HatcheryDimensionView: View {
             Color.white
 
             if showsCapturedImage {
+                // Fitted, not filled. `scaledToFill` cropped the photo to
+                // cover this box, which reads as an unexplained zoom whenever
+                // the photo's shape does not match it -- and there is nothing
+                // to gain by hiding part of the scan on the screen that asks
+                // you to describe it.
                 HatcherySetupImage(
                     image: image,
-                    usesMockCrop: usesMockImage
+                    usesMockCrop: usesMockImage,
+                    contentMode: .fit
                 )
 
+                // Same mode as the photo. A fitted photo under a fill-mode
+                // mapper would draw the sand outline somewhere the sand is not.
                 HatcherySandRegionOverlay(
                     region: .constant(sandRegion),
                     imageSize: image.size,
-                    isEditable: false
+                    isEditable: false,
+                    contentMode: .fit
                 )
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
