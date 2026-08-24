@@ -21,20 +21,17 @@ struct HomeView: View {
 
     private var hatchery: HatcherySessionState { controller.sessionState }
 
-    /// The photo's drawn size inside the fixed grid box: its own aspect ratio,
-    /// fitted, never cropped and never stretched.
+    /// The photo's drawn size inside the fixed container: its own aspect
+    /// ratio, fitted, never cropped and never stretched. Centred by the
+    /// enclosing `ZStack`, so leftover space is even on both sides.
     ///
-    /// The box stays 349:279 so the dashboard's layout does not move when a
-    /// sand shape changes -- deriving the box from the photo made it collapse
-    /// for a small sand region and overflow the screen for a tall one.
-    ///
-    /// Fitting the photo inside that fixed box is what fixes the original bug.
     /// `rectification` crops the corrected photo to the sand region's bounding
-    /// box, so its aspect ratio is whatever was dragged; `scaledToFill` cut the
-    /// sand back off while the cell grid still spanned the whole box, and the
-    /// sections stopped landing on the sand they came from. The grid is now
-    /// sized to this rect too, so the two cannot disagree. Space left over
-    /// shows the box's own sage fill, which was always behind the photo.
+    /// box, so its shape is whatever was dragged. `scaledToFill` used to crop
+    /// the sand back off to cover the container while the cell grid still
+    /// spanned the whole thing, and the sections stopped landing on the sand
+    /// they came from. The grid is sized to this rect too, so the two cannot
+    /// disagree. Space left over shows the container's own sage fill, which was
+    /// always painted behind the photo.
     private func photoFit(in box: CGSize) -> CGSize {
         let size = hatchery.rectifiedPhoto.size
         guard size.width > 0, size.height > 0, box.width > 0, box.height > 0 else {
@@ -51,6 +48,11 @@ struct HomeView: View {
             let screenWidth = min(geometry.size.width, 402)
             let contentWidth = min(max(screenWidth - 32, 0), 370)
             let gridWidth = max(contentWidth - 21, 0)
+            // A fixed container, deliberately. The photo is fitted and
+            // centred inside it, so a small or oddly shaped sand area changes
+            // nothing below: the overview cards and the Add-nest button stay
+            // exactly where they were. Deriving the container from the photo
+            // made the whole screen shift every time a scan shape differed.
             let gridHeight = gridWidth * 279 / 349
 
             ZStack(alignment: .topLeading) {
@@ -204,8 +206,14 @@ struct HomeView: View {
                 .frame(width: 9, height: photo.height, alignment: .top)
 
                 ZStack {
+                    // Transparent, not sage. The container is fixed so the
+                    // layout below never moves, which means a photo that does
+                    // not share its shape leaves space above and below --
+                    // filling that space drew a slab around the photo. Clear
+                    // lets the page backdrop through, so only the photo reads
+                    // as content.
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(hex: "#BFCABD"))
+                        .fill(Color.clear)
 
                     Image(uiImage: hatchery.rectifiedPhoto)
                         .resizable()

@@ -76,7 +76,13 @@ struct HatcheryDimensionView: View {
                         // and crop rules intact; only its visible canvas gets
                         // shorter. No additional scale effect or altered
                         // aspect mode is applied to the image.
-                        .frame(width: contentWidth, height: photoHeight)
+                        .frame(
+                            width: photoBoxWidth(
+                                forHeight: photoHeight,
+                                maximum: contentWidth
+                            ),
+                            height: photoHeight
+                        )
 
                     Spacer().frame(height: photoToFormSpacing)
 
@@ -111,6 +117,26 @@ struct HatcheryDimensionView: View {
                 Button("Done") { focusedField = nil }
             }
         }
+    }
+
+    /// The photo card's width: the image's own aspect ratio at the fixed card
+    /// height, never wider than the content width.
+    ///
+    /// The height stays fixed so the dimension form below never moves. The card
+    /// narrows instead, which is what removes the white plate either side of a
+    /// tall scan. `rectification` crops the corrected photo to the sand
+    /// region's bounding box, so a tall narrow sand area genuinely produces a
+    /// tall narrow photo -- `scaledToFill` used to hide that by cropping it
+    /// back to a wide box, which is what read as a zoom.
+    ///
+    /// The skipped-scan grid keeps the full width: it draws section geometry
+    /// rather than a photo, so it has no aspect ratio to respect.
+    private func photoBoxWidth(forHeight height: CGFloat, maximum: CGFloat) -> CGFloat {
+        guard showsCapturedImage else { return maximum }
+
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return maximum }
+        return min(maximum, height * size.width / size.height)
     }
 
     private var photo: some View {
