@@ -21,7 +21,11 @@ struct AddNestConnectBucketView: View {
         ZStack(alignment: .top) {
             AddNestFlowBackground()
 
-            ScrollView {
+            // One page, no scrolling: the scan button is the point of this
+            // screen and must never be below a fold. The hero image takes
+            // whatever vertical space is left over instead of the fixed
+            // paddings that used to push the buttons off the bottom.
+            VStack(spacing: 0) {
                 VStack(spacing: 12) {
                     Text("Connect your bucket")
                         .font(.largeTitle)
@@ -38,23 +42,24 @@ struct AddNestConnectBucketView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity)
 
+                // The one flexible element. `scaledToFit` inside a flexible
+                // frame shrinks the artwork rather than the text or the
+                // controls, so a short screen loses picture, not function.
                 Image("AddNestBucketHero")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 68)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.vertical, 20)
                     .accessibilityHidden(true)
 
                 howItWorksCard
                     .padding(.horizontal, 16)
-                    .padding(.top, 45)
 
                 scanActions
                     .padding(.horizontal, 16)
-                    .padding(.top, 24)
-                    .padding(.bottom, 32)
+                    .padding(.top, 20)
+                    .padding(.bottom, 24)
             }
-            .scrollIndicators(.hidden)
 
             AddNestFlowHeader(style: .closeOnly, onBack: nil, onClose: onCancel)
                 .zIndex(1)
