@@ -504,11 +504,19 @@ struct HomeView: View {
             
             // Drawn whatever the selection: with no section chosen the row
             // opens the hatchery-wide list, so there is always somewhere to go.
-            Image(systemName: "chevron.right")
-                .font(.body)
-                .foregroundStyle(Color(hex: "#0C7C4D"))
-                .accessibilityHidden(true)
-                .frame(width: 44, height: 44, alignment: .trailing)
+            // The words carry the affordance -- a lone chevron on a row of
+            // plain text did not read as a destination.
+            HStack(spacing: 4) {
+                Text("View list")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Image(systemName: "chevron.right")
+                    .font(.body)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Color(hex: "#0C7C4D"))
+            .frame(height: 44, alignment: .trailing)
         }
         .frame(height: 44)
         .contentShape(Rectangle())
