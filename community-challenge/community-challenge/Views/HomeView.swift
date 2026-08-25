@@ -193,6 +193,13 @@ struct HomeView: View {
     
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
         let photo = photoFit(in: CGSize(width: width, height: height))
+        // Drawn on every active cell now, so it has to fit the smallest one.
+        // A nine-column grid gives roughly 19pt cells; the design's fixed 35pt
+        // circle overflowed them and each row fused into one white bar.
+        let badgeDiameter = min(35, min(
+            (photo.width - 16 - 2 * CGFloat(columns.count - 1)) / CGFloat(max(columns.count, 1)),
+            (photo.height - 16 - 2 * CGFloat(rows.count - 1)) / CGFloat(max(rows.count, 1))
+        ) - 6)
         
         return VStack(spacing: 10) {
             HStack(spacing: 0) {
@@ -256,7 +263,16 @@ struct HomeView: View {
                                             Color(hex: "#003C22")
                                                 .opacity(isSelected ? 0.70 : 0.30)
                                                 .overlay {
-                                                    nestCountBadge(count: nestCount, isSelected: isSelected)
+                                                    // Below about 12pt the circle is
+                                                    // unreadable anyway, so a very dense
+                                                    // grid shows the tint alone.
+                                                    if badgeDiameter >= 12 {
+                                                        nestCountBadge(
+                                                            count: nestCount,
+                                                            isSelected: isSelected,
+                                                            diameter: badgeDiameter
+                                                        )
+                                                    }
                                                 }
                                         }
                                         .buttonStyle(.plain)
@@ -501,15 +517,15 @@ struct HomeView: View {
             .foregroundColor(Color(hex: "#757575"))
     }
     
-    private func nestCountBadge(count: Int, isSelected: Bool) -> some View {
+    private func nestCountBadge(count: Int, isSelected: Bool, diameter: CGFloat) -> some View {
         Text("\(count)")
-            .font(.caption)
-            .fontWeight(.bold)
+            .font(.system(size: max(9, diameter * 0.42), weight: .bold))
             .foregroundStyle(.black)
-            .frame(width: 35, height: 36)
-            .background(.white, in: Capsule())
-            .padding(4)
-            .background(Color.white.opacity(isSelected ? 0.24 : 0), in: Capsule())
+            .minimumScaleFactor(0.5)
+            .frame(width: diameter, height: diameter)
+            .background(.white, in: Circle())
+            .padding(diameter * 0.1)
+            .background(Color.white.opacity(isSelected ? 0.24 : 0), in: Circle())
             .accessibilityHidden(true)
     }
     
