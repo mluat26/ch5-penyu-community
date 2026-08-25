@@ -536,13 +536,16 @@ struct HomeView: View {
             .foregroundColor(Color(hex: "#757575"))
     }
     
+    /// Unselected badges sit back into the photo; the selected one comes
+    /// forward to solid white. Every cell carries one now, so at full opacity
+    /// the grid read as a sheet of white dots with nothing to choose between.
     private func nestCountBadge(count: Int, isSelected: Bool, diameter: CGFloat) -> some View {
         Text("\(count)")
             .font(.system(size: max(9, diameter * 0.42), weight: .bold))
-            .foregroundStyle(.black)
+            .foregroundStyle(.black.opacity(isSelected ? 1 : 0.6))
             .minimumScaleFactor(0.5)
             .frame(width: diameter, height: diameter)
-            .background(.white, in: Circle())
+            .background(Color.white.opacity(isSelected ? 1 : 0.4), in: Circle())
             .padding(diameter * 0.1)
             .background(Color.white.opacity(isSelected ? 0.24 : 0), in: Circle())
             .accessibilityHidden(true)
