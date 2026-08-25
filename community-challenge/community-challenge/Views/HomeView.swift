@@ -214,11 +214,17 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
+                // Both label runs measure the photo, not the container it is
+                // fitted into. The container is deliberately fixed while the
+                // photo is centred inside it, so labels spanning the container
+                // name columns the photo never draws -- which is what pushed A
+                // and I past the ends of the grid. The 8pt inset is the
+                // lattice's own, so the cells divide identically.
                 .padding(.horizontal, 8)
-                .frame(width: width)
+                .frame(width: photo.width)
             }
-            .frame(width: width + 21, height: 16, alignment: .leading)
-            
+            .frame(width: photo.width + 21, height: 16, alignment: .leading)
+
             HStack(spacing: 12) {
                 VStack(spacing: 0) {
                     ForEach(rows, id: \.self) { row in
@@ -229,6 +235,7 @@ struct HomeView: View {
                             .frame(maxHeight: .infinity)
                     }
                 }
+                .padding(.vertical, 8)
                 .frame(width: 9, height: photo.height, alignment: .top)
                 
                 ZStack {
@@ -307,12 +314,16 @@ struct HomeView: View {
                         coachMask(size: photo)
                     }
                 }
-                .frame(width: width, height: height)
+                // Width follows the photo so the row labels sit beside it
+                // rather than beside the container's empty edge. Height stays
+                // the container's: that is what keeps the overview cards and
+                // the Add-nest button from moving when a scan's shape differs.
+                .frame(width: photo.width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
             }
-            .frame(width: width + 21, height: height, alignment: .leading)
+            .frame(width: photo.width + 21, height: height, alignment: .leading)
         }
-        .frame(width: width + 21, alignment: .leading)
+        .frame(width: photo.width + 21, alignment: .leading)
         // Centres the photo rather than the block. The 21 pt row-label gutter
         // is inside this frame, so centring the frame alone would leave the
         // photo half a gutter right of centre -- which is what it looked like.
