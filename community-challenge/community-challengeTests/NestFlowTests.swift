@@ -712,6 +712,53 @@ final class NestFlowTests: XCTestCase {
         XCTAssertFalse(nest.isPartiallyHatched)
     }
 
+    /// The hatching-soon queue counts a nest that is already late. Bounding it
+    /// at zero would drop exactly the nests that most need a ranger, which is
+    /// the failure this asserts against rather than the happy path.
+    func testHatchingSoonSpansThreeDaysAndKeepsOverdueNests() {
+        func nest(daysOut: Int?, hatched: Bool = false) -> NestEntity {
+            var nest = NestEntity(
+                id: UUID(),
+                hatcheryID: UUID(),
+                founderID: nil,
+                numberOfEggs: 100,
+                dateEggsLaid: nil,
+                datePredictedHatch: daysOut.map {
+                    Calendar.current.date(byAdding: .day, value: $0, to: Date())!
+                },
+                successEggsHatch: nil,
+                failEggsHatch: nil,
+                placementRow: 1,
+                placementColumn: 1
+            )
+            if hatched { nest.eggsUnhatched = 0 }
+            return nest
+        }
+
+        XCTAssertTrue(nest(daysOut: 0).isHatchingSoon, "hatching today")
+        XCTAssertTrue(nest(daysOut: 3).isHatchingSoon, "the far edge of the window")
+        XCTAssertTrue(nest(daysOut: -2).isHatchingSoon, "overdue stays in the queue")
+        XCTAssertFalse(nest(daysOut: 4).isHatchingSoon, "outside the window")
+        XCTAssertFalse(nest(daysOut: nil).isHatchingSoon, "no predicted date, nothing to count")
+        XCTAssertFalse(nest(daysOut: 1, hatched: true).isHatchingSoon, "already hatched")
+    }
+
+    /// Tapping the selected section again clears it. Without this the overview
+    /// is stuck on one section and the hatchery-wide numbers are unreachable.
+    func testSelectingTheSameSectionTwiceDeselectsIt() {
+        let controller = AppContainer().makeHatcheryController(sessionState: .previewSample)
+        let sectionID = controller.sessionState.grid.sections.first { $0.isActive }!.id
+
+        controller.selectSection(id: sectionID)
+        XCTAssertEqual(controller.selectedSectionID, sectionID)
+
+        controller.selectSection(id: sectionID)
+        XCTAssertNil(controller.selectedSectionID, "a second tap on the same cell clears it")
+
+        controller.selectSection(id: sectionID)
+        XCTAssertEqual(controller.selectedSectionID, sectionID, "and a third re-selects")
+    }
+
     private func makeController() -> NestController {
         NestController(
             hatcheryID: UUID(),

@@ -90,6 +90,16 @@ struct NestEntity: Identifiable, Hashable, Sendable {
         guard !hasHatched, let nextInspectionDate else { return false }
         return nextInspectionDate <= date
     }
+    
+    /// Hatching within three days, overdue included: a nest past its predicted
+       /// date still needs a ranger, so it stays in the queue rather than dropping
+       /// silently out of it.
+    ///
+    ///
+    var isHatchingSoon: Bool {
+        guard !hasHatched, let daysUntilHatch else { return false }
+        return daysUntilHatch <= 3
+    }
 
     var hatchRate: Double? {
         guard let successEggsHatch, numberOfEggs > 0 else { return nil }

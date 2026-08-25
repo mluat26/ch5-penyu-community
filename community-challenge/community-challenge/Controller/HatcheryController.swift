@@ -37,9 +37,11 @@ final class HatcheryController {
         }
     }
 
+    /// Tapping the selected section again clears it, which is how the
+       /// hatchery-wide numbers are reachable again without leaving the screen.
     func selectSection(id: String) {
         guard isSectionActive(id: id) else { return }
-        selectedSectionID = id
+        selectedSectionID = (selectedSectionID == id) ? nil : id
     }
 
     func clearInactiveSelection() {
