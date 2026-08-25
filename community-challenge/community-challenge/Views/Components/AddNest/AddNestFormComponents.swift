@@ -474,7 +474,11 @@ struct AddNestInlineDatePicker: View {
             .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
             .overlay {
-                RoundedRectangle(cornerRadius: 120)
+                // Matches the fill above. 120 belongs to the 50pt segmented
+                // control, where it clamps to half the height and reads as a
+                // capsule; this container is ~500pt tall, so nothing clamps
+                // and the corner ate its way into the calendar grid.
+                RoundedRectangle(cornerRadius: 16)
                     .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
