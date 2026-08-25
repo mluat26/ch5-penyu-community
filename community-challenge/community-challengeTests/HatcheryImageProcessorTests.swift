@@ -87,6 +87,26 @@ final class HatcheryImageProcessorTests: XCTestCase {
         XCTAssertGreaterThan(alpha(at: outside, in: result.image), 0)
     }
 
+    /// A tall scan is turned; a wide one is left exactly as it is.
+    ///
+    /// Idempotence is the half that matters: `prepareCapturedLayout` runs after
+    /// the boundary has been drawn, so a second turn there would rotate the
+    /// photo out from under an outline already recorded against it.
+    func testOnlyPortraitScansAreTurnedLandscape() {
+        let portrait = makeSolidImage(size: CGSize(width: 600, height: 900))
+        let turned = HatcheryImageProcessor.landscapeOriented(portrait)
+        XCTAssertEqual(turned.size, CGSize(width: 900, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(turned).size, turned.size)
+
+        let landscape = makeSolidImage(size: CGSize(width: 900, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(landscape).size, landscape.size)
+
+        // A square has no wrong way round, so it is left alone rather than
+        // spun for nothing.
+        let square = makeSolidImage(size: CGSize(width: 600, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(square).size, square.size)
+    }
+
     private func makeSolidImage(size: CGSize) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1

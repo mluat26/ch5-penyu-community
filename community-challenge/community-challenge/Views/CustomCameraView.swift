@@ -194,7 +194,11 @@ struct CustomCameraView: View {
 
         deliveryTask?.cancel()
         let processingTask = Task.detached(priority: .userInitiated) {
-            let image = HatcheryImageProcessor.preparedImage(sourceImage)
+            // Landscape before the boundary is detected or dragged, so the
+            // outline is recorded against the shape the grid is drawn on.
+            let image = HatcheryImageProcessor.landscapeOriented(
+                HatcheryImageProcessor.preparedImage(sourceImage)
+            )
             let mapper = AspectFillImageMapper(
                 imageSize: image.size,
                 containerSize: canvasSize

@@ -180,7 +180,9 @@ struct HatcheryBoundaryAdjustmentView: View {
         replacementTask = Task {
             guard replacementRequestID == requestID else { return }
 
-            image = sourceImage
+            // Landscape before the corners are dragged, for the same reason a
+            // capture is: the outline is stored as fractions of this photo.
+            image = HatcheryImageProcessor.landscapeOriented(sourceImage)
             boundary = .fullImage
             sandRegion = HatcherySandRegion.default(from: .fullImage)
             finishReplacement()
