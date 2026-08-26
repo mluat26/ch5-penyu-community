@@ -47,14 +47,14 @@ final class BucketTagScanner: NSObject {
     /// scanning simply does not exist.
     static var isSupported: Bool {
         #if canImport(CoreNFC)
-        return NFCNDEFReaderSession.readingAvailable
+        return NFCTagReaderSession.readingAvailable
         #else
         return false
         #endif
     }
 
     #if canImport(CoreNFC)
-    private var session: NFCNDEFReaderSession?
+    private var session: NFCTagReaderSession?
     private var continuation: CheckedContinuation<UUID, any Error>?
     #endif
 
@@ -73,14 +73,20 @@ final class BucketTagScanner: NSObject {
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
 
-            let session = NFCNDEFReaderSession(
+            // `NFCTagReaderSession`, not `NFCNDEFReaderSession`. App Store
+            // Connect rejects an NDEF-format entitlement built against this
+            // SDK -- "NDEF is disallowed ... TAG is missing" -- so the
+            // entitlement is `TAG`, and that format only authorises the tag
+            // reader. The payload is still read as NDEF off the tag below;
+            // only the session type changed.
+            let session = NFCTagReaderSession(
+                pollingOption: [.iso14443, .iso15693, .iso18092],
                 delegate: self,
-                queue: .main,
-                invalidateAfterFirstRead: true
+                queue: .main
             )
-            session.alertMessage = "Hold your iPhone near the tag on the bucket."
+            session?.alertMessage = "Hold your iPhone near the tag on the bucket."
             self.session = session
-            session.begin()
+            session?.begin()
         }
         #else
         throw Failure.unsupported
@@ -108,27 +114,52 @@ final class BucketTagScanner: NSObject {
 }
 
 #if canImport(CoreNFC)
-extension BucketTagScanner: NFCNDEFReaderSessionDelegate {
-    nonisolated func readerSession(
-        _ session: NFCNDEFReaderSession,
-        didDetectNDEFs messages: [NFCNDEFMessage]
-    ) {
-        // Parsed before hopping actors so only a `UUID` crosses.
-        let sensorID = Self.sensorID(in: messages)
+extension BucketTagScanner: NFCTagReaderSessionDelegate {
+    nonisolated func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
 
-        MainActor.assumeIsolated {
-            guard let sensorID else {
-                session.invalidate(errorMessage: Failure.notABucketTag.localizedDescription)
-                finish(.failure(Failure.notABucketTag))
+    nonisolated func tagReaderSession(
+        _ session: NFCTagReaderSession,
+        didDetect tags: [NFCTag]
+    ) {
+        guard let tag = tags.first, let ndefTag = Self.ndefTag(from: tag) else {
+            session.invalidate(errorMessage: Failure.notABucketTag.localizedDescription)
+            MainActor.assumeIsolated { finish(.failure(Failure.notABucketTag)) }
+            return
+        }
+
+        // Connect, then read. Every step reports through the same two paths --
+        // a sensor ID, or an invalidation carrying the reason -- so a tag that
+        // is present but unreadable cannot leave the sheet hanging.
+        session.connect(to: tag) { error in
+            if let error {
+                session.invalidate(errorMessage: error.localizedDescription)
+                MainActor.assumeIsolated { self.finish(.failure(error)) }
                 return
             }
-            session.alertMessage = "Bucket detected."
-            finish(.success(sensorID))
+
+            ndefTag.readNDEF { message, error in
+                guard
+                    let message,
+                    let sensorID = Self.sensorID(in: [message])
+                else {
+                    session.invalidate(
+                        errorMessage: Failure.notABucketTag.localizedDescription
+                    )
+                    MainActor.assumeIsolated {
+                        self.finish(.failure(error ?? Failure.notABucketTag))
+                    }
+                    return
+                }
+
+                session.alertMessage = "Bucket detected."
+                session.invalidate()
+                MainActor.assumeIsolated { self.finish(.success(sensorID)) }
+            }
         }
     }
 
-    nonisolated func readerSession(
-        _ session: NFCNDEFReaderSession,
+    nonisolated func tagReaderSession(
+        _ session: NFCTagReaderSession,
         didInvalidateWithError error: any Error
     ) {
         MainActor.assumeIsolated {
@@ -142,6 +173,18 @@ extension BucketTagScanner: NFCNDEFReaderSessionDelegate {
             } else {
                 finish(.failure(error))
             }
+        }
+    }
+
+    /// The NDEF face of whichever tag technology was polled. Every case here
+    /// conforms to `NFCNDEFTag`; a technology that does not is not a bucket tag.
+    private nonisolated static func ndefTag(from tag: NFCTag) -> (any NFCNDEFTag)? {
+        switch tag {
+        case .miFare(let tag): return tag
+        case .iso7816(let tag): return tag
+        case .iso15693(let tag): return tag
+        case .feliCa(let tag): return tag
+        @unknown default: return nil
         }
     }
 

@@ -170,8 +170,8 @@ struct HatcherySetupFlowView: View {
         case .camera:
             CustomCameraView(
                 onClose: router.pop,
-                onCapture: { image, _ in
-                    controller.storeCapturedImage(image)
+                onCapture: { image, boundary in
+                    controller.storeCapturedImage(image, boundary: boundary)
                     router.push(.adjustBoundary)
                 }
             )

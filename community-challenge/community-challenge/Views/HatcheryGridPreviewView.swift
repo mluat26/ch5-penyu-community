@@ -208,64 +208,30 @@ private struct HatcheryGridDiagram: View {
     /// Width reserved to the left of the photo for the row labels.
     static let rowLabelGutter: CGFloat = 21
 
-    /// The tallest the photo may be drawn, which is the height this screen was
-    /// laid out around.
-    ///
-    /// A ceiling, not a fixed size. `rectification` crops the corrected photo
-    /// to the sand region's bounding box, so a tall narrow sand shape has a
-    /// tall narrow photo -- and taking the height straight from the aspect
-    /// ratio let it grow past the whole screen.
-    static let maximumPhotoHeight: CGFloat = 279
-
-    /// The photo's drawn size: the image's own aspect ratio fitted inside the
-    /// available width and `maximumPhotoHeight`.
-    ///
-    /// Fitted, never stretched. Width binds for a wide sand shape and the photo
-    /// is simply shorter than the old fixed 279; height binds for a tall one
-    /// and the photo narrows instead of running off the screen. Either way the
-    /// full photo is drawn, so the cell grid still lands on the sand.
-    static func photoSize(forContentWidth width: CGFloat, image: UIImage) -> CGSize {
-        let availableWidth = max(0, width - rowLabelGutter)
-        guard image.size.width > 0, image.size.height > 0 else {
-            return CGSize(width: availableWidth, height: maximumPhotoHeight)
-        }
-
-        let aspectRatio = image.size.height / image.size.width
-        let heightAtFullWidth = availableWidth * aspectRatio
-
-        guard heightAtFullWidth > maximumPhotoHeight else {
-            return CGSize(width: availableWidth, height: heightAtFullWidth)
-        }
-        return CGSize(
-            width: maximumPhotoHeight / aspectRatio,
-            height: maximumPhotoHeight
-        )
-    }
+    /// The photo's drawn height. Fixed, because the photo is stretched onto
+    /// the card rather than fitted into it: after `rectification` it is the
+    /// hatchery plane seen square-on, so its pixel aspect carries no meaning
+    /// the layout needs to respect.
+    static let photoHeight: CGFloat = 279
 
     /// What the caller must reserve: the label gap plus the photo.
     static func height(forContentWidth width: CGFloat, image: UIImage) -> CGFloat {
-        photoTopOffset + photoSize(forContentWidth: width, image: image).height
+        photoTopOffset + photoHeight
     }
 
     var body: some View {
         GeometryReader { geometry in
-            let photoSize = Self.photoSize(
-                forContentWidth: geometry.size.width,
-                image: image
-            )
-            let innerWidth = max(0, photoSize.width - 16)
+            let photoWidth = max(0, geometry.size.width - Self.rowLabelGutter)
+            let innerWidth = max(0, photoWidth - 16)
             let columnGap = CGFloat(max(columnCount - 1, 0)) * 2
             let cellWidth = max(0, (innerWidth - columnGap) / CGFloat(columnCount))
 
-            // A photo narrowed by the height ceiling is centred, and both label
-            // runs move with it -- labels pinned to a fixed x would drift off
-            // the cells they name.
-            let availableWidth = max(0, geometry.size.width - Self.rowLabelGutter)
-            let photoLeft = Self.rowLabelGutter + (availableWidth - photoSize.width) / 2
-
             ZStack(alignment: .topLeading) {
-                columnLabels(cellWidth: cellWidth, photoLeft: photoLeft)
-                rowLabels(photoHeight: photoSize.height, photoLeft: photoLeft)
+                columnLabels(cellWidth: cellWidth, photoLeft: Self.rowLabelGutter)
+                rowLabels(
+                    photoHeight: Self.photoHeight,
+                    photoLeft: Self.rowLabelGutter
+                )
 
                 HatcheryGridPhoto(
                     image: image,
@@ -273,8 +239,8 @@ private struct HatcheryGridDiagram: View {
                     usesMockImage: usesMockImage,
                     grid: grid
                 )
-                .frame(width: photoSize.width, height: photoSize.height)
-                .offset(x: photoLeft, y: Self.photoTopOffset)
+                .frame(width: photoWidth, height: Self.photoHeight)
+                .offset(x: Self.rowLabelGutter, y: Self.photoTopOffset)
             }
         }
         .accessibilityElement(children: .ignore)

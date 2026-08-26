@@ -26,6 +26,34 @@ struct NestDashboardItem: Identifiable, Hashable, Sendable {
         guard let latestBatteryVoltage else { return nil }
         return min(max((latestBatteryVoltage - 3.0) / 1.2, 0), 1)
     }
+
+    /// What the dashboard warns about for this nest, or nil when it is fine.
+    enum TemperatureAlert: Hashable, Sendable {
+        /// The logger has never reported, or is not installed.
+        case noData
+        /// It reported, and the reading is outside the incubation range.
+        case outOfRange
+    }
+
+    /// The range a clutch is expected to sit in.
+    ///
+    /// Decided here rather than in the firmware. A logger is sealed in a bucket
+    /// under sand, so a threshold baked into it could only be changed by
+    /// digging every one of them up and reflashing; here it is one constant,
+    /// and past readings re-classify against it the moment it changes.
+    ///
+    /// ponytail: 26-33 degrees, which brackets the pivotal temperature near 29
+    /// where the sex ratio turns, with losses climbing past about 34. Narrow it
+    /// once there is field data from this beach to fit it against.
+    static let incubationRange: ClosedRange<Double> = 26...33
+
+    /// Nil when the nest is fine. `noData` outranks nothing -- a silent logger
+    /// and a bad reading are different problems with different fixes, so they
+    /// are reported separately rather than collapsed into one warning.
+    var temperatureAlert: TemperatureAlert? {
+        guard let latestTemperatureC else { return .noData }
+        return Self.incubationRange.contains(latestTemperatureC) ? nil : .outOfRange
+    }
 }
 
 struct HatcherySectionDashboard: Identifiable, Hashable, Sendable {
