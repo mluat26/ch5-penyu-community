@@ -218,7 +218,14 @@
       }
     },
     "Average temperature" : {
-
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Temperature rata-rata"
+          }
+        }
+      }
     },
     "Avg. temperature" : {
       "localizations" : {
@@ -725,7 +732,14 @@
       }
     },
     "Eggs" : {
-
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "telur"
+          }
+        }
+      }
     },
     "Enable camera access in Settings, or select a hatchery photo below." : {
       "comment" : "A description of the user's camera access.",
@@ -1397,10 +1411,24 @@
       }
     },
     "Nests" : {
-
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sarang"
+          }
+        }
+      }
     },
     "Nests in section" : {
-
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sarang di bagian ini"
+          }
+        }
+      }
     },
     "Next" : {
       "localizations" : {
