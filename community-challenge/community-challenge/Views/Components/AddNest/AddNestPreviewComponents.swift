@@ -63,28 +63,30 @@ struct AddNestPreviewCard: View {
     }
 }
 
-/// The identifiers that are not part of the headline summary: which bucket the
-/// clutch is in, which grid cell it went to, and when someone is due to look at
-/// it. Confirming these is the point of this screen, so they are shown rather
-/// than trusted.
+/// A flat row of identifiers, each an icon over a label over its value, split
+/// by thin vertical rules. The caller decides which facts belong in it -- the
+/// review screen shows bucket, section and inspection date, but nothing here
+/// is tied to those three.
 struct AddNestPreviewDetailRow: View {
-    let bucketID: String
-    let section: String
-    let inspectionDate: String
+    struct Item: Identifiable {
+        let id = UUID()
+        let systemImage: String
+        let label: String
+        let value: String
+    }
+
+    let items: [Item]
 
     var body: some View {
         HStack(spacing: 0) {
-            item(systemImage: "arrow.up.bin", label: "Bucket ID", value: bucketID)
-            divider
-            item(systemImage: "square.grid.3x3.square", label: "Section", value: section)
-            divider
-            // "Apr 1, 2026", the same reading format the card's hatch date
-            // uses -- not the dd.MM.yyyy the draft stores mid-edit.
-            item(
-                systemImage: "dot.circle.viewfinder",
-                label: "Inspection",
-                value: AppDateFormatting.longNestDraftDate(inspectionDate)
-            )
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, entry in
+                if index > 0 { divider }
+                item(
+                    systemImage: entry.systemImage,
+                    label: entry.label,
+                    value: entry.value
+                )
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -279,7 +281,10 @@ private struct AddNestPreviewMetric: View {
 }
 
 struct AddNestTemperatureCard: View {
-    let temperatureC: Double
+    /// Nil until the nest's logger has reported, which is the ordinary state
+    /// for a nest registered seconds ago. It reads "--" rather than a number,
+    /// so a nest with no data cannot be mistaken for a healthy one.
+    let temperatureC: Double?
     let accentColor: Color
 
     var body: some View {
@@ -290,13 +295,18 @@ struct AddNestTemperatureCard: View {
                 .foregroundStyle(Color.appNeutralGray2.opacity(0.8))
 
             HStack(alignment: .top, spacing: 0) {
-                Text(temperatureC.formatted(.number.precision(.fractionLength(1))))
+                Text(NestTemperature.text(temperatureC))
                     .font(.system(size: 70, weight: .regular))
                     .frame(height: 48, alignment: .top)
-                Text("°C")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .frame(height: 48, alignment: .top)
+                // No unit on an absent reading: "--°C" reads as a measurement
+                // in degrees that happens to be missing its digits, when the
+                // truth is that nothing has been measured at all.
+                if temperatureC != nil {
+                    Text("°C")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .frame(height: 48, alignment: .top)
+                }
             }
             .frame(height: 48, alignment: .top)
             .foregroundStyle(accentColor)

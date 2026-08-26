@@ -14,6 +14,9 @@ final class ProfileController {
     private(set) var isLoading = false
     private(set) var isSaving = false
     private(set) var isGeneratingInvite = false
+    /// The member whose role or membership is being written, so the row that
+    /// was tapped can show the wait instead of the whole list.
+    private(set) var pendingMemberID: UUID?
     private(set) var errorMessage: String?
 
     /// Edited in place by the sheet's edit mode; committed by `save()`.
@@ -43,6 +46,36 @@ final class ProfileController {
     /// Managers issue invites. The database refuses anyone else, so hiding the
     /// action keeps the UI from offering something that cannot succeed.
     var canGenerateInvite: Bool { role.canGenerateInviteCode }
+
+    /// Deleting a hatchery is a manager's job. Someone with no organization is
+    /// the only person who can see their own hatcheries at all, so they keep
+    /// it -- otherwise a solo account, whose role is `agent` by definition,
+    /// could never remove a hatchery it created by mistake.
+    ///
+    /// Deliberately stricter than the database rule, which also allows the
+    /// hatchery's owner: an officer who happens to own one is refused here,
+    /// because "only a manager may delete" is the point. The guard matters --
+    /// `role` reads `.agent` before the profile has loaded.
+    var canDeleteHatchery: Bool {
+        guard let profile else { return false }
+        return profile.role == .manager || profile.organizationID == nil
+    }
+
+    /// Only the organization's owner may change roles or remove people. This is
+    /// `organization.owner_id`, not a role: a manager can be appointed, an
+    /// owner is whoever created the organization's first hatchery. Same check
+    /// the two database functions make, mirrored so the UI does not offer an
+    /// action that would be refused.
+    var canManageMembers: Bool {
+        guard let ownerID = organization?.ownerID, let id = profile?.id else { return false }
+        return ownerID == id
+    }
+
+    /// The owner's own row is not manageable — they cannot demote or remove
+    /// themselves, and the database refuses both.
+    func canManage(_ member: ProfileEntity) -> Bool {
+        canManageMembers && member.id != profile?.id
+    }
 
     func load() async {
         isLoading = true
@@ -146,6 +179,42 @@ final class ProfileController {
 
     func clearInvite() {
         invite = nil
+    }
+
+    func setRole(_ role: OrganizationRole, for member: ProfileEntity) async {
+        await manage(member) { try await $0.setMemberRole(memberID: member.id, role: role) }
+    }
+
+    func remove(_ member: ProfileEntity) async {
+        await manage(member) { try await $0.removeMember(memberID: member.id) }
+    }
+
+    /// Both member actions are the same shape: write, then re-read the list.
+    ///
+    /// The list is re-read rather than patched in place because the database
+    /// decides more than the one field written — removing somebody also revokes
+    /// the invite codes they issued — and a locally edited row would show an
+    /// answer the server never gave.
+    private func manage(
+        _ member: ProfileEntity,
+        _ write: (any ProfileRepository) async throws -> Void
+    ) async {
+        guard pendingMemberID == nil else { return }
+        pendingMemberID = member.id
+        errorMessage = nil
+        defer { pendingMemberID = nil }
+
+        do {
+            try await write(repository)
+            if let organizationID = profile?.organizationID {
+                members = try await repository.fetchOrganizationMembers(
+                    organizationID: organizationID
+                )
+            }
+        } catch {
+            guard !Self.isCancellation(error) else { return }
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// Lets the sheet surface a failure it handled itself, so every message on

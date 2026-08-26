@@ -116,8 +116,8 @@ nonisolated final class HatcheryCoreMLObjectCandidateProvider: @unchecked Sendab
             box.minY >= -Self.normalizedBoundsTolerance,
             box.maxX <= 1 + Self.normalizedBoundsTolerance,
             box.maxY <= 1 + Self.normalizedBoundsTolerance,
-            box.width > 0,
-            box.height > 0
+            box.size.width > 0,
+            box.size.height > 0
         else {
             return nil
         }

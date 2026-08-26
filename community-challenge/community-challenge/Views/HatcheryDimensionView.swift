@@ -118,15 +118,24 @@ struct HatcheryDimensionView: View {
             Color.white
 
             if showsCapturedImage {
+                // Stretched to the card. The rectified photo is the hatchery
+                // plane seen square-on, so its pixel aspect is an artefact of
+                // the outline rather than a proportion worth preserving --
+                // and filling the card keeps the layout fixed with no plate
+                // around the photo.
                 HatcherySetupImage(
                     image: image,
-                    usesMockCrop: usesMockImage
+                    usesMockCrop: usesMockImage,
+                    contentMode: .stretch
                 )
 
+                // Same mode as the photo, or the sand outline lands somewhere
+                // the sand is not.
                 HatcherySandRegionOverlay(
                     region: .constant(sandRegion),
                     imageSize: image.size,
-                    isEditable: false
+                    isEditable: false,
+                    contentMode: .stretch
                 )
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)

@@ -7,8 +7,22 @@ import Observation
 struct HatcheryManagementSummary: Identifiable, Hashable {
     let hatchery: HatcheryEntity
     let overview: HatcheryOverview?
+    /// Sections that fall on sand, from the current layout's stored mask.
+    ///
+    /// Nil when the hatchery has no layout revision, or when reading it
+    /// failed. `sectionsInUse` resolves that case rather than callers, so a
+    /// missing layout cannot quietly become a zero.
+    let activeSectionCount: Int?
 
     var id: UUID { hatchery.id }
+
+    /// The sections a nest can actually be placed in.
+    ///
+    /// Falls back to the whole grid without a layout, and that is the right
+    /// answer rather than a guess: `HatcheryGridGenerator` marks a cell active
+    /// when there is no sand region to test it against, so a hatchery with no
+    /// mask genuinely has every cell in use.
+    var sectionsInUse: Int { activeSectionCount ?? hatchery.sectionCount }
 }
 
 @MainActor
@@ -19,6 +33,7 @@ final class HatcheryListController {
     private(set) var isLoading = false
     private(set) var isLoadingManagement = false
     private(set) var updatingHatcheryID: UUID?
+    private(set) var deletingHatcheryID: UUID?
     /// A layout restore may include a private Storage download. Keep it
     /// single-flight so two quick taps cannot finish out of order and activate
     /// a different hatchery from the one the person most recently saw.
@@ -126,10 +141,40 @@ final class HatcheryListController {
             return overviews
         }
 
+        // A second concurrent pass rather than a field on `HatcheryOverview`:
+        // the overview is built by `HatcheryService`, which has no layout
+        // access, and the count comes from the layout's stored sand mask.
+        //
+        // This reads the revision row only. `sourcePhotoData` is what costs a
+        // private download, and it is deliberately not called here -- opening
+        // Management must not pull every hatchery's photo.
+        let activeSectionsByHatcheryID = await withTaskGroup(
+            of: (UUID, Int?).self,
+            returning: [UUID: Int].self
+        ) { group in
+            for hatchery in loadedHatcheries {
+                group.addTask { [layoutService] in
+                    let layout = try? await layoutService?.currentLayout(
+                        hatcheryID: hatchery.id
+                    )
+                    return (hatchery.id, layout?.grid.activeCells.count)
+                }
+            }
+
+            var counts: [UUID: Int] = [:]
+            for await (hatcheryID, count) in group {
+                if let count {
+                    counts[hatcheryID] = count
+                }
+            }
+            return counts
+        }
+
         managementSummaries = loadedHatcheries.map { hatchery in
             HatcheryManagementSummary(
                 hatchery: hatchery,
-                overview: overviewByHatcheryID[hatchery.id]
+                overview: overviewByHatcheryID[hatchery.id],
+                activeSectionCount: activeSectionsByHatcheryID[hatchery.id]
             )
         }
     }
@@ -166,6 +211,35 @@ final class HatcheryListController {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Deletes a hatchery, and returns whether it went.
+    ///
+    /// The order is the whole of it, and it mirrors `AppContainer.deleteAccount`
+    /// for the same reason. The refusal comes first: a hatchery still holding
+    /// nests keeps its photographs, because removing them is not undoable and
+    /// the delete is about to be turned down anyway. Then the photographs, then
+    /// the row -- `hatchery_layout` cascades with the hatchery, and the bucket's
+    /// delete policy is written against a layout row that would no longer
+    /// exist, so this is the last moment those objects can be removed at all.
+    func delete(_ hatchery: HatcheryEntity) async -> Bool {
+        guard deletingHatcheryID == nil else { return false }
+        deletingHatcheryID = hatchery.id
+        errorMessage = nil
+        defer { deletingHatcheryID = nil }
+
+        do {
+            try await hatcheryService.assertHatcheryIsEmpty(id: hatchery.id)
+            await layoutService?.deletePhotos(hatcheryID: hatchery.id)
+            try await hatcheryService.deleteHatchery(id: hatchery.id)
+            hatcheries.removeAll { $0.id == hatchery.id }
+            managementSummaries.removeAll { $0.id == hatchery.id }
+            await loadManagement()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 

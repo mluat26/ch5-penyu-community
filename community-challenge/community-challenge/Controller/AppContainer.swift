@@ -51,7 +51,7 @@ final class AppContainer {
             client: client,
             identity: identity
         )
-        self.hatchingRepository = SupabaseHatchingRepository(client: client)
+        self.hatchingRepository = SupabaseHatchingRepository(client: client, identity: identity)
         self.profileRepository = SupabaseProfileRepository(
             client: client,
             identity: identity
@@ -106,7 +106,16 @@ final class AppContainer {
             ioTDataRepository: ioTDataRepository,
             inspectionService: inspectionService,
             nestService: nestService,
-            profileRepository: profileRepository
+            profileRepository: profileRepository,
+            hatchingService: hatchingService
+        )
+    }
+
+    func makeHatchingController(nest: NestEntity) -> HatchingController {
+        HatchingController(
+            nest: nest,
+            hatchingService: hatchingService,
+            ioTDataRepository: ioTDataRepository
         )
     }
 
@@ -114,7 +123,8 @@ final class AppContainer {
         NestController(
             hatcheryID: hatcheryID,
             nestService: nestService,
-            identity: authenticationService
+            identity: authenticationService,
+            deviceService: deviceService
         )
     }
 
@@ -204,6 +214,4 @@ final class AppContainer {
     func makeInspectionService() -> InspectionService { inspectionService }
 
     func makeDeviceService() -> DeviceService { deviceService }
-
-    func makeHatchingService() -> HatchingService { hatchingService }
 }

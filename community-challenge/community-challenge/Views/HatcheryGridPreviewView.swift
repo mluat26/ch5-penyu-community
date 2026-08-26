@@ -38,7 +38,13 @@ struct HatcheryGridPreviewView: View {
                         usesMockImage: usesMockImage,
                         grid: grid
                     )
-                    .frame(width: contentWidth, height: 305)
+                    .frame(
+                        width: contentWidth,
+                        height: HatcheryGridDiagram.height(
+                            forContentWidth: contentWidth,
+                            image: image
+                        )
+                    )
 
                     Spacer().frame(height: 33)
 
@@ -196,16 +202,36 @@ private struct HatcheryGridDiagram: View {
     private var rowCount: Int { max(grid.rows, 1) }
     private var columnCount: Int { max(grid.columns, 1) }
 
+    /// Gap above the photo, left for the column labels.
+    static let photoTopOffset: CGFloat = 26
+
+    /// Width reserved to the left of the photo for the row labels.
+    static let rowLabelGutter: CGFloat = 21
+
+    /// The photo's drawn height. Fixed, because the photo is stretched onto
+    /// the card rather than fitted into it: after `rectification` it is the
+    /// hatchery plane seen square-on, so its pixel aspect carries no meaning
+    /// the layout needs to respect.
+    static let photoHeight: CGFloat = 279
+
+    /// What the caller must reserve: the label gap plus the photo.
+    static func height(forContentWidth width: CGFloat, image: UIImage) -> CGFloat {
+        photoTopOffset + photoHeight
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let imageWidth = max(0, geometry.size.width - 21)
-            let innerWidth = max(0, imageWidth - 16)
+            let photoWidth = max(0, geometry.size.width - Self.rowLabelGutter)
+            let innerWidth = max(0, photoWidth - 16)
             let columnGap = CGFloat(max(columnCount - 1, 0)) * 2
             let cellWidth = max(0, (innerWidth - columnGap) / CGFloat(columnCount))
 
             ZStack(alignment: .topLeading) {
-                columnLabels(cellWidth: cellWidth)
-                rowLabels
+                columnLabels(cellWidth: cellWidth, photoLeft: Self.rowLabelGutter)
+                rowLabels(
+                    photoHeight: Self.photoHeight,
+                    photoLeft: Self.rowLabelGutter
+                )
 
                 HatcheryGridPhoto(
                     image: image,
@@ -213,15 +239,15 @@ private struct HatcheryGridDiagram: View {
                     usesMockImage: usesMockImage,
                     grid: grid
                 )
-                .frame(width: imageWidth, height: 279)
-                .offset(x: 21, y: 26)
+                .frame(width: photoWidth, height: Self.photoHeight)
+                .offset(x: Self.rowLabelGutter, y: Self.photoTopOffset)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Hatchery grid, \(grid.columns) columns and \(grid.rows) rows")
     }
 
-    private func columnLabels(cellWidth: CGFloat) -> some View {
+    private func columnLabels(cellWidth: CGFloat, photoLeft: CGFloat) -> some View {
         ForEach(0..<columnCount, id: \.self) { column in
             Text(column < grid.columnLabels.count
                  ? grid.columnLabels[column]
@@ -230,30 +256,35 @@ private struct HatcheryGridDiagram: View {
                 .foregroundStyle(.black.opacity(0.5))
                 .frame(height: 16)
                 .position(
-                    x: 29 + cellWidth / 2 + CGFloat(column) * (cellWidth + 2),
+                    // 8 pt is `HatcheryGridPhoto`'s own content padding.
+                    x: photoLeft + 8 + cellWidth / 2
+                        + CGFloat(column) * (cellWidth + 2),
                     y: 8
                 )
         }
     }
 
-    private var rowLabels: some View {
+    private func rowLabels(photoHeight: CGFloat, photoLeft: CGFloat) -> some View {
         ForEach(0..<rowCount, id: \.self) { row in
             Text(row < grid.rowLabels.count ? grid.rowLabels[row] : "\(row + 1)")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.black.opacity(0.5))
                 .frame(width: 9, height: 16)
                 .minimumScaleFactor(0.7)
-                .position(x: 4.5, y: rowLabelCenter(for: row))
+                .position(
+                    x: max(4.5, photoLeft - 16.5),
+                    y: rowLabelCenter(for: row, photoHeight: photoHeight)
+                )
         }
     }
 
     /// Mirrors `HatcheryGridPhoto`'s own row layout (photo offset y=26, 8 pt
-    /// content padding, 2 pt row spacing, 279 pt photo height) so labels land
-    /// on the real cell centers for any row count, not just the 3-row mock
-    /// this was originally tuned against.
-    private func rowLabelCenter(for row: Int) -> CGFloat {
-        let photoTop: CGFloat = 26
-        let photoHeight: CGFloat = 279
+    /// content padding, 2 pt row spacing) so labels land on the real cell
+    /// centers for any row count, not just the 3-row mock this was originally
+    /// tuned against. `photoHeight` is passed in rather than hardcoded so it
+    /// cannot drift from the height the photo is actually drawn at.
+    private func rowLabelCenter(for row: Int, photoHeight: CGFloat) -> CGFloat {
+        let photoTop = Self.photoTopOffset
         let contentPadding: CGFloat = 8
         let rowSpacing: CGFloat = 2
 
@@ -302,11 +333,16 @@ private struct HatcheryGridPhoto: View {
                             ForEach(0..<columns, id: \.self) { column in
                                 let isActive = grid.isSectionActive(row: row, column: column)
 
+                                // Off-sand cells are transparent, not grey:
+                                // no section exists there, so the photo should
+                                // show through. They keep their slot in the
+                                // stack -- omitting one reflows the rest and
+                                // breaks alignment with the photo.
                                 Rectangle()
                                     .fill(
                                         isActive
                                             ? HatcherySetupPalette.gridOverlay.opacity(0.34)
-                                            : Color.black.opacity(0.14)
+                                            : Color.clear
                                     )
                                     .frame(width: cellWidth, height: cellHeight)
                             }

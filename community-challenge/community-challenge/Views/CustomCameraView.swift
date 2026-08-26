@@ -45,22 +45,20 @@ struct CustomCameraView: View {
                     )
                 }
 
-                GlassEffectContainer(spacing: 20) {
-                    VStack(spacing: 0) {
-                        HatcheryScanInstructionBanner(
-                            systemName: "camera.viewfinder",
-                            text: "Get ready to check out the whole turtle hatching area"
-                        )
-                        .padding(.top, 68)
+                VStack(spacing: 0) {
+                    HatcheryScanInstructionBanner(
+                        systemName: "camera.viewfinder",
+                        text: "Get ready to check out the whole turtle hatching area"
+                    )
+                    .padding(.top, 68)
 
-                        Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                        captureControls
-                            .padding(.bottom, 59)
-                    }
+                    captureControls
+                        .padding(.bottom, 59)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear {
                 invalidatePendingWork()
                 previewSize = geometry.size
@@ -196,6 +194,14 @@ struct CustomCameraView: View {
 
         deliveryTask?.cancel()
         let processingTask = Task.detached(priority: .userInitiated) {
+            // Deliberately not turned landscape here, unlike a library import.
+            // `snapshot.quad` is in the preview canvas's coordinates, and the
+            // mapper below reads it against this image's size -- turning the
+            // image first leaves a portrait quad mapped onto a landscape photo
+            // and the boundary lands on the wrong part of it. A capture does
+            // not need it either: the photo is already rotated to match the
+            // interface, so holding the phone landscape produces a landscape
+            // photo on its own.
             let image = HatcheryImageProcessor.preparedImage(sourceImage)
             let mapper = AspectFillImageMapper(
                 imageSize: image.size,

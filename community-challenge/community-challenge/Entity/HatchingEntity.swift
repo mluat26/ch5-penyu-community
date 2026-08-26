@@ -15,6 +15,12 @@ struct HatchingEntity: Identifiable, Hashable, Sendable {
     var eggsHatched: Int
     var eggsRotten: Int
     var eggsUnhatched: Int
+    /// Who tapped Save. Stamped from `auth.uid()` by a database trigger, never
+    /// sent by the client, so it cannot be claimed on someone else's behalf.
+    /// Nil for tallies recorded before the column existed.
+    var recordedBy: UUID? = nil
+    /// When the tally was written down, which may be days after `hatchedOn`.
+    var createdAt: Date? = nil
 
     var totalAccountedFor: Int {
         eggsHatched + eggsRotten + eggsUnhatched

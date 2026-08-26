@@ -55,6 +55,42 @@ nonisolated enum HatcheryImageProcessor {
         }
     }
 
+    /// Turns a portrait scan a quarter turn so it is drawn landscape, which is
+    /// the shape a hatchery grid is always laid out in -- `HatcherySectionSolver`
+    /// derives rows and columns from the hatchery's metres, so a wide grid ends
+    /// up over a tall photo and the cells stretch to nothing.
+    ///
+    /// Applied where a photo *enters* the scan flow, before the boundary is
+    /// drawn. The outline and the sand polygon are stored as fractions of the
+    /// photo they were drawn on, so rotating afterwards would leave both
+    /// pointing at the wrong edge -- and the grid's active cells with them.
+    /// Doing it first means nothing downstream needs a coordinate transform.
+    ///
+    /// An already-landscape photo comes back untouched, so this is safe to
+    /// apply more than once, and a saved scan is never re-oriented on restore:
+    /// its stored geometry belongs to the shape it was drawn against.
+    ///
+    // ponytail: always clockwise. Which way is up cannot be recovered once
+    // `preparedImage` has flattened EXIF orientation, and a hatchery is not a
+    // scene with a right way round. Offer a rotate control in the scan editor
+    // if anyone ever needs the other one.
+    static func landscapeOriented(_ image: UIImage) -> UIImage {
+        let size = image.size
+        guard size.width > 0, size.height > size.width else { return image }
+
+        let rotatedSize = CGSize(width: size.height, height: size.width)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: rotatedSize, format: format).image { context in
+            // Clockwise: the photo's left edge becomes the top of the result.
+            context.cgContext.translateBy(x: rotatedSize.width, y: 0)
+            context.cgContext.rotate(by: .pi / 2)
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
     /// Takes a small, immutable snapshot on the UI actor before a renderer task
     /// begins. `UIImage` itself never crosses the actor boundary.
     @MainActor
@@ -239,17 +275,24 @@ nonisolated enum HatcheryImageProcessor {
             return nil
         }
 
+        // The corrected rectangle, kept whole. It used to be masked to the sand
+        // polygon and then cropped to that polygon's bounding box, which made
+        // the stored photo the *shape of the polygon* -- so any sand area that
+        // was not a neat rectangle produced a slanted, clipped photo on every
+        // screen that drew it. Importing from the library hit this every time,
+        // because the outline has to be dragged onto the area by hand; a camera
+        // capture usually escaped it only because the detected boundary already
+        // fitted and nobody moved the corners.
+        //
+        // Masking is also redundant now. The sand polygon is stored beside the
+        // photo and is what marks a grid cell active, and off-sand cells draw
+        // as transparent -- so the area outside the sand is already expressed
+        // by the grid rather than by cutting pixels out of the scan.
         let correctedImage = UIImage(cgImage: cgImage, scale: 1, orientation: .up)
-        let masked = maskedImage(correctedImage, to: rectifiedSandRegion)
-
-        // Masking leaves the sand sitting inside the full boundary rectangle,
-        // so the transparent margin is what the viewer ends up showing. Trim to
-        // the sand itself: the photo then fills the viewer, and the grid drawn
-        // over that viewer covers the sand rather than the margin.
-        guard let cropped = croppedToSandRegion(masked, region: rectifiedSandRegion) else {
-            return HatcheryRectification(image: masked, sandRegion: rectifiedSandRegion)
-        }
-        return HatcheryRectification(image: cropped.image, sandRegion: cropped.region)
+        return HatcheryRectification(
+            image: correctedImage,
+            sandRegion: rectifiedSandRegion
+        )
     }
 
     /// Crops a masked scan to its sand region and re-expresses the region in

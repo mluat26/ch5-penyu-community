@@ -541,6 +541,11 @@ private actor LayoutRepositorySpy: HatcheryLayoutRepository {
         return storedPhotoPaths
     }
 
+    func photoPaths(hatcheryID: UUID) async throws -> [String] {
+        callLog.append("photoPaths")
+        return storedPhotoPaths
+    }
+
     func operations() -> [String] { callLog }
 }
 

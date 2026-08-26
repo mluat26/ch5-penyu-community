@@ -12,8 +12,24 @@ struct NestDetailSheet: View {
     let ordinal: Int
     let sectionLabel: String
     @Bindable var controller: NestDetailController
+    /// Just the one thing this sheet needs from the composition root, rather
+    /// than the root itself: the measurement harness has no AppContainer and
+    /// should not have to build a Supabase client to lay out a sheet.
+    let makeHatchingController: (NestEntity) -> HatchingController
+    let hatcheryName: String
     let onClose: () -> Void
     let onDelete: () -> Void
+    /// Called once a hatch is recorded. The nest's own row changes server-side,
+    /// so every list holding a copy of it needs to hear about it.
+    let onNestChanged: () async -> Void
+    /// "Back to Hatchery" -- all the way, not just off this sheet.
+    ///
+    /// Separate from `onClose` because the two differ by caller: reached from
+    /// ContentView this sheet sits directly on the hatchery, but reached
+    /// through the section list it sits on a sheet that is itself over the
+    /// hatchery, and closing one leaves the other up. Only the host knows how
+    /// deep it is.
+    let onReturnToHatchery: () -> Void
 
     enum Layout {
         static let sheetWidth: CGFloat = 390
@@ -38,9 +54,43 @@ struct NestDetailSheet: View {
     /// Holds the nest after a save so the rows show the new values without
     /// refetching the section behind this sheet.
     @State private var editedNest: NestEntity?
-    /// Drives one full-screen map for both modes: editing picks a pin,
-    /// reading only looks at the stored one.
-    @State private var isShowingLocationMap = false
+    /// Every full-screen destination this sheet owns, in one enum.
+    ///
+    /// SwiftUI honours a single `.fullScreenCover` per view -- a second
+    /// modifier silently loses -- so the map and the hatchling flow have to
+    /// share one, the same way ContentView funnels its sheets through
+    /// `HomeSheet`.
+    private enum Cover: Identifiable {
+        case locationMap
+        /// Carries the controller rather than leaving the builder to read it
+        /// out of `@State`.
+        ///
+        /// It used to be an `if let` over a separate `@State` property, set in
+        /// the same button action that set this one. The cover's content
+        /// closure captures the view before that second write lands, so it read
+        /// nil, the ViewBuilder produced an EmptyView, and the flow presented
+        /// as a blank white screen. A presented value that carries its own
+        /// dependency cannot get out of step with it.
+        case hatchFlow(HatchedFlowView.Step, HatchingController)
+
+        var id: String {
+            switch self {
+            case .locationMap: "locationMap"
+            case let .hatchFlow(step, _): "hatchFlow-\(step)"
+            }
+        }
+    }
+
+    @State private var presentedCover: Cover?
+    /// Set when the flow asks to return to the hatchery, read once the cover
+    /// has actually gone. Dismissing this sheet while its own cover is still on
+    /// screen does nothing, and the report adds a third layer -- it presents a
+    /// sheet of its own -- so there is no interval worth guessing at. The
+    /// cover's own onDismiss is the event, so wait for it.
+    @State private var isReturningToHatchery = false
+    /// Built on demand: it needs the nest, and a nest that is never hatched
+    /// should never pay for one.
+    @State private var hatchingController: HatchingController?
 
     private var nest: NestEntity { editedNest ?? item.nest }
 
@@ -54,25 +104,23 @@ struct NestDetailSheet: View {
                 ScrollView {
                     content(scale: scale)
                         .frame(width: Layout.sheetWidth * scale, alignment: .topLeading)
-                        // Clears the floating Hatched bar in read mode; in edit
-                        // mode only the home indicator has to be cleared, since
-                        // the sheet ignores the safe area.
-                        .padding(.bottom, (isEditing ? 34 : 96) * scale)
+                        // Clears the floating action, which both modes show.
+                        .padding(.bottom, 96 * scale)
                 }
+                .scrollIndicators(.hidden)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     toolbar(scale: scale)
                         .padding(.top, 16 * scale)
                         .background(Color(uiColor: .systemGroupedBackground))
                 }
 
-                // Not in 199:3729, but kept deliberately: the action it stands
-                // for is still to be built, and dropping it would lose the
-                // placeholder rather than a decoration.
-                if !isEditing {
-                    hatchedBar(scale: scale)
-                        .frame(width: geometry.size.width, alignment: .center)
-                        .offset(y: geometry.size.height - 96 * scale)
-                }
+                // One slot, one action. Editing offers Delete nest, reading
+                // offers Hatched / View report -- the two are alternatives, not
+                // companions, and showing both put a destructive button and the
+                // primary action on screen together.
+                floatingAction(scale: scale)
+                    .frame(width: geometry.size.width, alignment: .center)
+                    .offset(y: geometry.size.height - 96 * scale)
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
@@ -86,22 +134,45 @@ struct NestDetailSheet: View {
         // a preview, editing opens it as the picker the add-nest flow uses.
         // Presenting from inside this sheet is the pattern already in use, so
         // nothing has to wait on another screen's dismissal.
-        .fullScreenCover(isPresented: $isShowingLocationMap) {
-            NestLocationPickerView(
-                initialLatitude: isEditing ? controller.draftLatitude : nest.latitude,
-                initialLongitude: isEditing ? controller.draftLongitude : nest.longitude,
-                initialAddress: isEditing
-                    ? (controller.draftLocation.isEmpty ? nil : controller.draftLocation)
-                    : nest.locationAddress,
-                isReadOnly: !isEditing,
-                onCancel: { isShowingLocationMap = false },
-                onSave: { latitude, longitude, address in
-                    controller.draftLatitude = latitude
-                    controller.draftLongitude = longitude
-                    controller.draftLocation = address ?? ""
-                    isShowingLocationMap = false
-                }
-            )
+        .fullScreenCover(item: $presentedCover) {
+            guard isReturningToHatchery else { return }
+            isReturningToHatchery = false
+            onReturnToHatchery()
+        } content: { cover in
+            switch cover {
+            case .locationMap:
+                NestLocationPickerView(
+                    initialLatitude: isEditing ? controller.draftLatitude : nest.latitude,
+                    initialLongitude: isEditing ? controller.draftLongitude : nest.longitude,
+                    initialAddress: isEditing
+                        ? (controller.draftLocation.isEmpty ? nil : controller.draftLocation)
+                        : nest.locationAddress,
+                    isReadOnly: !isEditing,
+                    onCancel: { presentedCover = nil },
+                    onSave: { latitude, longitude, address in
+                        controller.draftLatitude = latitude
+                        controller.draftLongitude = longitude
+                        controller.draftLocation = address ?? ""
+                        presentedCover = nil
+                    }
+                )
+
+            case let .hatchFlow(step, flowController):
+                HatchedFlowView(
+                    controller: flowController,
+                    detailController: controller,
+                    ordinal: ordinal,
+                    sectionLabel: sectionLabel,
+                    hatcheryName: hatcheryName,
+                    startAt: step,
+                    onClose: { presentedCover = nil },
+                    onSaved: onNestChanged,
+                    onFinish: {
+                        isReturningToHatchery = true
+                        presentedCover = nil
+                    }
+                )
+            }
         }
         .confirmationDialog(
             "Delete this nest?",
@@ -191,15 +262,10 @@ struct NestDetailSheet: View {
 
             inspectionSection(scale: scale)
                 .offset(x: 16 * scale, y: 1321.09 * scale)
-
-            if isEditing {
-                deleteButton(scale: scale)
-                    .offset(x: 16 * scale, y: 1617.09 * scale)
-            }
         }
         .frame(
             width: Layout.sheetWidth * scale,
-            height: (isEditing ? 1707 : 1573) * scale,
+            height: (1573 + editingGrowth) * scale,
             alignment: .topLeading
         )
     }
@@ -382,21 +448,8 @@ struct NestDetailSheet: View {
             NestTemperatureChart(readings: readings, scale: scale)
                 .frame(width: 341 * scale, height: 173 * scale, alignment: .bottomLeading)
 
-            // 199:3814 — 12pt bold on a 21pt × 152pt column at x349, evenly
-            // spaced. `fixedSize` keeps the degree sign from clipping.
-            VStack(spacing: 0) {
-                ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
-                    Text("\(degrees)°")
-                        .font(.system(size: 12 * scale, weight: .bold))
-                        .foregroundStyle(Color(hex: "#8E8E93"))
-                        .fixedSize()
-                        .frame(height: 16 * scale)
-
-                    if degrees != 18 { Spacer(minLength: 0) }
-                }
-            }
-            .frame(width: 21 * scale, height: 152 * scale)
-            .offset(x: 349 * scale)
+            NestTemperatureDegreeAxis(scale: scale)
+                .offset(x: 349 * scale)
         }
         .frame(width: 370 * scale, height: 173 * scale, alignment: .topLeading)
     }
@@ -482,25 +535,92 @@ struct NestDetailSheet: View {
         let height = isEditing ? Layout.rowHeight : Layout.compactRowHeight
 
         return detailSection(title: "Inspection list", subtitle: "Hatching timeline", scale: scale) {
-            if controller.inspections.isEmpty {
-                Text("No inspections recorded yet")
-                    .font(.system(size: 15 * scale, weight: .regular))
-                    .foregroundStyle(Color(hex: "#8E8E93"))
-                    .frame(width: Layout.sectionWidth * scale, height: height * scale, alignment: .leading)
-                    .padding(.leading, 16 * scale)
-            } else {
+            if !controller.inspections.isEmpty {
                 ForEach(Array(controller.inspections.enumerated()), id: \.element.id) { index, inspection in
                     if index > 0 { rowSeparator(scale: scale) }
 
+                    // Recorded visits are their own rows in another table, and
+                    // nothing on this screen saves them, so they stay read-only
+                    // in both modes -- the badge is styling, not an affordance.
                     infoRow(
                         title: "#\(index + 1)",
-                        value: formatted(inspection.inspectedOn),
+                        value: AppDateFormatting.ordinalDate(inspection.inspectedOn),
                         isBadge: isEditing,
                         height: height,
                         scale: scale
                     )
                 }
+            } else if isEditing || nest.nextInspectionDate != nil {
+                plannedInspectionRow(height: height, scale: scale)
+            } else {
+                Text("No inspections recorded yet")
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .frame(width: Layout.sectionWidth * scale, height: height * scale, alignment: .leading)
+                    .padding(.leading, 16 * scale)
             }
+        }
+    }
+
+    /// The one visit planned in the Add Nest flow, standing in for a real
+    /// inspection list until the inspection flow writes rows.
+    ///
+    /// It edits `draftInspectionDate` -- the same value the Timeline's
+    /// "Inspection date" row above writes -- because there is exactly one date
+    /// and this is it. Two controls on one value is the honest shape of a
+    /// stand-in; a second stored date would be inventing data the schema does
+    /// not have.
+    // ponytail: delete this row, not the section, once inspections are real.
+    private func plannedInspectionRow(height: CGFloat, scale: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text("#1")
+                .font(.system(size: 17 * scale, weight: .regular))
+                .foregroundStyle(.black)
+
+            Spacer(minLength: 12 * scale)
+
+            if isEditing {
+                // `.compact` renders as the grey rounded field the edit frame
+                // draws, and is a real picker rather than a badge that only
+                // looks tappable.
+                DatePicker(
+                    "",
+                    selection: $controller.draftInspectionDate,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+            } else {
+                Text(nest.nextInspectionDate.map(AppDateFormatting.ordinalDate) ?? "\u{2014}")
+                    .font(.system(size: 15 * scale, weight: .regular))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 16 * scale)
+        .frame(width: Layout.sectionWidth * scale, height: height * scale)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Inspection 1")
+    }
+
+    /// How much taller the coordinate-placed content gets while editing.
+    ///
+    /// 1573 is calibrated against read mode's 52pt inspection rows; editing
+    /// draws them at 68 (199:3721). The old figure folded in 134pt of runway
+    /// for an inline Delete nest button, which now floats instead.
+    private var editingGrowth: CGFloat {
+        guard isEditing else { return 0 }
+        return 16 * CGFloat(max(controller.inspections.count, 1))
+    }
+
+    /// Editing replaces the primary action rather than adding to it, so both
+    /// land in the same place at the same size -- 358 × 55, corner 26.
+    @ViewBuilder
+    private func floatingAction(scale: CGFloat) -> some View {
+        if isEditing {
+            deleteButton(scale: scale)
+        } else {
+            hatchedBar(scale: scale)
         }
     }
 
@@ -518,15 +638,31 @@ struct NestDetailSheet: View {
         .buttonStyle(.plain)
     }
 
-    /// The floating "Hatched" action, full width like the other section cards.
+    /// The floating action, full width like the other section cards.
     ///
-    /// Read mode only: recording the result is not an edit to the record.
+    /// One button, two jobs, because a nest has only one final tally: before
+    /// there is one it records the hatch, afterwards it opens the report. The
+    /// database refuses a second tally outright, so offering "Hatched" again
+    /// would be offering something that cannot happen.
     private func hatchedBar(scale: CGFloat) -> some View {
-        Text("Hatched")
-            .font(.system(size: 17 * scale, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
-            .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
+        Button {
+            // Reused across openings so a half-filled form survives closing the
+            // flow, but passed along explicitly so the cover never has to look
+            // it up.
+            let flowController = hatchingController ?? makeHatchingController(nest)
+            hatchingController = flowController
+            presentedCover = .hatchFlow(
+                controller.hatching == nil ? .details : .report,
+                flowController
+            )
+        } label: {
+            Text(controller.hatching == nil ? "Hatched" : "View report")
+                .font(.system(size: 17 * scale, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
+                .background(Color.appGreenPrimary, in: RoundedRectangle(cornerRadius: 26 * scale))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Building blocks
@@ -671,7 +807,7 @@ struct NestDetailSheet: View {
             : (nest.locationAddress ?? "—")
 
         return Button {
-            isShowingLocationMap = true
+            presentedCover = .locationMap
         } label: {
             HStack(spacing: 0) {
                 Text("Location")
@@ -747,14 +883,39 @@ struct NestDetailSheet: View {
 /// This is a heat map over the 18–33°C axis, deliberately distinct from the
 /// discrete `NestTemperature.Band` colours used by the pills — the pills
 /// answer "is this nest healthy", the chart shows the shape of the day.
-private struct NestTemperatureChart: View {
-    let readings: [IoTDataEntity]
+struct NestTemperatureChart: View {
+    /// One value per bar, oldest first. `nil` draws a grey stub, so a range
+    /// with gaps keeps its shape instead of closing up.
+    ///
+    /// What a bar spans is the caller's business: the nest sheet passes hours
+    /// of one day, the hatch report passes days of the whole incubation.
+    let values: [Double?]
     let scale: CGFloat
 
-    /// 199:3789 draws 24 bars — one per hour of the day.
-    private static let barCount = 24
-    private static let barWidth: CGFloat = 8.458_333
-    private static let pitch: CGFloat = 14.458_333
+    /// Today's shape — 199:3789's 24 bars, one per hour.
+    init(readings: [IoTDataEntity], scale: CGFloat) {
+        var buckets = [Double?](repeating: nil, count: 24)
+        let calendar = Calendar.current
+
+        for reading in readings {
+            let hour = calendar.component(.hour, from: reading.timestamp)
+            buckets[min(23, max(0, hour))] = reading.temperatureC
+        }
+        self.init(values: buckets, scale: scale)
+    }
+
+    init(values: [Double?], scale: CGFloat) {
+        self.values = values
+        self.scale = scale
+    }
+
+    /// 199:3789 spaces 24 bars on a 14.458pt pitch and draws them 8.458pt
+    /// wide. Kept as that ratio rather than the two measurements, so the bars
+    /// spread to fill whatever width the chart is given and a screen with a
+    /// different bar count keeps the design's proportions.
+    private static let barWidthRatio: CGFloat = 8.458_333 / 14.458_333
+    private static let nominalPitch: CGFloat = 14.458_333
+
     private static let fullHeight: CGFloat = 173
     private static let stubHeight: CGFloat = 7.75
     private static let axisRange: ClosedRange<Double> = 18...33
@@ -773,23 +934,6 @@ private struct NestTemperatureChart: View {
         endPoint: .top
     )
 
-    /// One slot per bar across the day, so a partial day leaves stubs at the
-    /// end rather than stretching a few readings across the whole axis.
-    private var slots: [Double?] {
-        var buckets = [Double?](repeating: nil, count: Self.barCount)
-        let calendar = Calendar.current
-
-        for reading in readings {
-            let temperature = reading.temperatureC
-            let hour = calendar.component(.hour, from: reading.timestamp)
-            let minute = calendar.component(.minute, from: reading.timestamp)
-            let fraction = (Double(hour) + Double(minute) / 60) / 24
-            let index = min(Self.barCount - 1, max(0, Int(fraction * Double(Self.barCount))))
-            buckets[index] = temperature
-        }
-        return buckets
-    }
-
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // The infobook's acceptable band, behind the bars so a reading can
@@ -797,32 +941,44 @@ private struct NestTemperatureChart: View {
             thresholdLine(at: NestTemperature.maximumAcceptableC)
             thresholdLine(at: NestTemperature.minimumAcceptableC)
 
-            // Empty hours are flat grey stubs, drawn separately because they
+            // Empty slots are flat grey stubs, drawn separately because they
             // must not take the heat gradient.
             barShapes(filled: false)
                 .foregroundStyle(.black.opacity(0.1))
 
             // One gradient for the whole plot, revealed only where bars are.
             Self.heatGradient
+                .frame(maxWidth: .infinity)
                 .frame(height: Self.fullHeight * scale)
                 .mask(alignment: .bottomLeading) { barShapes(filled: true) }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Temperature through the day")
+        .accessibilityLabel("Temperature range")
         .accessibilityValue(accessibilityValue)
     }
 
+    /// Every slot takes an equal share of the width, so the bars spread to
+    /// fill the plot however many there are. Both passes lay out all the
+    /// slots and hide the ones they are not drawing, which is what keeps the
+    /// grey stubs and the gradient bars on the same grid.
     private func barShapes(filled: Bool) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            ForEach(Array(slots.enumerated()), id: \.offset) { index, temperature in
-                if (temperature != nil) == filled {
-                    Capsule()
-                        .frame(width: Self.barWidth * scale, height: height(for: temperature) * scale)
-                        .offset(x: Self.pitch * CGFloat(index) * scale)
-                }
+        // `.bottom`, not the HStack default of `.center`: bars stand on the
+        // 18° baseline. Centred, a tall bar grows downward as much as upward
+        // and the foot of the chart curves along with its top.
+        HStack(alignment: .bottom, spacing: 0) {
+            ForEach(Array(values.enumerated()), id: \.offset) { _, temperature in
+                Capsule()
+                    .frame(
+                        width: Self.nominalPitch * Self.barWidthRatio * scale,
+                        height: height(for: temperature) * scale
+                    )
+                    .opacity((temperature != nil) == filled ? 1 : 0)
+                    .frame(maxWidth: .infinity)
             }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: Self.fullHeight * scale, alignment: .bottomLeading)
     }
 
@@ -849,8 +1005,71 @@ private struct NestTemperatureChart: View {
     }
 
     private var accessibilityValue: String {
-        let values = readings.map(\.temperatureC)
-        guard let low = values.min(), let high = values.max() else { return "No readings" }
+        let recorded = values.compactMap { $0 }
+        guard let low = recorded.min(), let high = recorded.max() else { return "No readings" }
         return String(format: "From %.1f to %.1f degrees", low, high)
     }
 }
+
+/// 199:3814 — the chart's temperature axis: 12pt bold on a 21pt × 152pt
+/// column, evenly spaced. Shared by the nest sheet and the hatch report so the
+/// two cannot end up labelling the same gradient with different degrees.
+/// `fixedSize` keeps the degree sign from clipping.
+struct NestTemperatureDegreeAxis: View {
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach([33, 30, 27, 24, 21, 18], id: \.self) { degrees in
+                Text("\(degrees)°")
+                    .font(.system(size: 12 * scale, weight: .bold))
+                    .foregroundStyle(Color(hex: "#8E8E93"))
+                    .fixedSize()
+                    .frame(height: 16 * scale)
+
+                if degrees != 18 { Spacer(minLength: 0) }
+            }
+        }
+        .frame(width: 21 * scale, height: 152 * scale)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Both feeds side by side, which is the point of the chart taking values
+/// rather than readings: same gradient, same 18–33° axis, different bar spans.
+/// The nest sheet passes the top one, the hatch report the bottom one.
+#Preview("Temperature chart", traits: .sizeThatFitsLayout) {
+    /// A warm middle and a cool start, with a couple of gaps so the grey
+    /// stubs a dead logger leaves are visible too.
+    func curve(count: Int, low: Double, high: Double, gaps: Set<Int>) -> [Double?] {
+        (0..<count).map { index in
+            guard !gaps.contains(index) else { return nil }
+            let progress = Double(index) / Double(max(count - 1, 1))
+            return low + (high - low) * sin(progress * .pi)
+        }
+    }
+
+    return VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Nest sheet — 24 hours of one day")
+                .font(.caption).foregroundStyle(.secondary)
+            NestTemperatureChart(
+                values: curve(count: 24, low: 21, high: 32, gaps: [20, 21, 22, 23]),
+                scale: 1
+            )
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Hatch report — a 90-day incubation, grouped into 23 bars")
+                .font(.caption).foregroundStyle(.secondary)
+            NestTemperatureChart(
+                values: curve(count: 23, low: 24, high: 33, gaps: [5, 12]),
+                scale: 1
+            )
+        }
+    }
+    .padding(24)
+    .frame(width: 402)
+}
+
+

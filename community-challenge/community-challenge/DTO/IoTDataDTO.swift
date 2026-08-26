@@ -59,3 +59,43 @@ extension IoTDataDTO {
         )
     }
 }
+
+/// Arguments for the `nest_temperature_stats` RPC.
+///
+/// The bounds are `String`, not `Date`, and that is not an oversight. Both are
+/// `timestamptz` on the Postgres side, but the shared encoder in
+/// SupabaseConfig writes every `Date` as `yyyy-MM-dd` -- correct for the five
+/// `date` columns this app saves, and fatal here: it would collapse the window
+/// to whole days. `SupabaseIoTDataRepository.instant(_:)` formats them, the
+/// same helper the reading-window filter already uses.
+struct NestTemperatureStatsParamsDTO: Encodable, Sendable {
+    let nestID: UUID
+    let from: String
+    let to: String
+
+    enum CodingKeys: String, CodingKey {
+        case nestID = "p_nest_id"
+        case from = "p_from"
+        case to = "p_to"
+    }
+}
+
+/// One row back from `nest_temperature_stats`. Every column is nullable: the
+/// aggregate over an empty window is NULL, not zero.
+struct NestTemperatureStatsDTO: Decodable, Sendable {
+    let avgC: Double?
+    let maxC: Double?
+    let minC: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case avgC = "avg_c"
+        case maxC = "max_c"
+        case minC = "min_c"
+    }
+}
+
+extension NestTemperatureStatsDTO {
+    func toEntity() -> NestTemperatureStats {
+        NestTemperatureStats(avgC: avgC, maxC: maxC, minC: minC)
+    }
+}

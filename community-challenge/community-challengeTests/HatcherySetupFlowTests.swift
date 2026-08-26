@@ -28,9 +28,9 @@ final class HatcherySetupFlowTests: XCTestCase {
         // The skipped path has no photo, but it must still produce the same
         // section layout once the user confirms the displayed dimensions.
         XCTAssertTrue(controller.generateGrid(for: controller.draft.dimension))
-        XCTAssertEqual(controller.draft.grid?.columns, 7)
+        XCTAssertEqual(controller.draft.grid?.columns, 9)
         XCTAssertEqual(controller.draft.grid?.rows, 3)
-        XCTAssertEqual(controller.draft.grid?.activeSectionCount, 21)
+        XCTAssertEqual(controller.draft.grid?.activeSectionCount, 27)
     }
 
     func testConcurrentCompletionCreatesOnlyOneHatchery() async throws {

@@ -23,6 +23,16 @@ final class HatcheryImageProcessorTests: XCTestCase {
         XCTAssertEqual(masked.size, image.size)
     }
 
+    /// The sand region must survive the move into corrected coordinates, and
+    /// the corrected photo must stay a whole rectangle while it does.
+    ///
+    /// This used to assert the opposite of that second half: rectification
+    /// masked the photo to the sand polygon and cropped to its bounding box, so
+    /// pixels outside the sand were transparent. That made the stored photo the
+    /// shape of the polygon, and any sand area that was not a neat rectangle
+    /// came out slanted and clipped on every screen that drew it. The polygon
+    /// is stored beside the photo and is what marks a cell active, so cutting
+    /// it out of the pixels as well was both redundant and destructive.
     func testPerspectiveRectificationCarriesTheSegmentIntoTheCorrectedImage() throws {
         let boundary = HatcheryBoundary(
             topLeft: NormalizedPoint(x: 0.18, y: 0.18),
@@ -33,10 +43,11 @@ final class HatcheryImageProcessorTests: XCTestCase {
         let mapper = try XCTUnwrap(HatcheryPerspectiveMapper(boundary: boundary))
         let sourceRegion = try XCTUnwrap(
             HatcherySandRegion(
+                // A right triangle, not a rectangle, so the mapped region
+                // is distinguishable from the full unit square.
                 points: try [
                     NormalizedPoint(x: 0, y: 0),
                     NormalizedPoint(x: 0.55, y: 0),
-                    NormalizedPoint(x: 0.55, y: 1),
                     NormalizedPoint(x: 0, y: 1)
                 ].map { rectifiedPoint in
                     let sourcePoint = try XCTUnwrap(
@@ -61,6 +72,9 @@ final class HatcheryImageProcessorTests: XCTestCase {
         XCTAssertTrue(result.sandRegion.contains(NormalizedPoint(x: 0.25, y: 0.5)))
         XCTAssertFalse(result.sandRegion.contains(NormalizedPoint(x: 0.75, y: 0.5)))
 
+        // Both points are opaque: the photo is the corrected rectangle, not
+        // the sand's silhouette. A point outside the sand is still photo -- the
+        // region above is what says it is not sand.
         let inside = CGPoint(
             x: result.image.size.width * 0.25,
             y: result.image.size.height * 0.5
@@ -70,7 +84,27 @@ final class HatcheryImageProcessorTests: XCTestCase {
             y: result.image.size.height * 0.5
         )
         XCTAssertGreaterThan(alpha(at: inside, in: result.image), 0)
-        XCTAssertEqual(alpha(at: outside, in: result.image), 0)
+        XCTAssertGreaterThan(alpha(at: outside, in: result.image), 0)
+    }
+
+    /// A tall scan is turned; a wide one is left exactly as it is.
+    ///
+    /// Idempotence is the half that matters: `prepareCapturedLayout` runs after
+    /// the boundary has been drawn, so a second turn there would rotate the
+    /// photo out from under an outline already recorded against it.
+    func testOnlyPortraitScansAreTurnedLandscape() {
+        let portrait = makeSolidImage(size: CGSize(width: 600, height: 900))
+        let turned = HatcheryImageProcessor.landscapeOriented(portrait)
+        XCTAssertEqual(turned.size, CGSize(width: 900, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(turned).size, turned.size)
+
+        let landscape = makeSolidImage(size: CGSize(width: 900, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(landscape).size, landscape.size)
+
+        // A square has no wrong way round, so it is left alone rather than
+        // spun for nothing.
+        let square = makeSolidImage(size: CGSize(width: 600, height: 600))
+        XCTAssertEqual(HatcheryImageProcessor.landscapeOriented(square).size, square.size)
     }
 
     private func makeSolidImage(size: CGSize) -> UIImage {

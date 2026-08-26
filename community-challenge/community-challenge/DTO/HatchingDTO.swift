@@ -8,6 +8,13 @@ struct HatchingDTO: Codable, Sendable {
     let eggsHatched: Int
     let eggsRotten: Int
     let eggsUnhatched: Int
+    /// Both read-only, and deliberately absent from the insert and update
+    /// payloads below. `recorded_by` is owned by the assign_hatching_recorder
+    /// trigger and `created_at` by a column default; sending either would be
+    /// ignored at best, and `created_at` is a `timestamptz` the shared encoder
+    /// would truncate to a bare date on the way out.
+    let recordedBy: UUID?
+    let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -16,6 +23,8 @@ struct HatchingDTO: Codable, Sendable {
         case eggsHatched = "eggs_hatched"
         case eggsRotten = "eggs_rotten"
         case eggsUnhatched = "eggs_unhatched"
+        case recordedBy = "recorded_by"
+        case createdAt = "created_at"
     }
 }
 
@@ -60,7 +69,9 @@ extension HatchingDTO {
             hatchedOn: hatchedOn,
             eggsHatched: eggsHatched,
             eggsRotten: eggsRotten,
-            eggsUnhatched: eggsUnhatched
+            eggsUnhatched: eggsUnhatched,
+            recordedBy: recordedBy,
+            createdAt: createdAt
         )
     }
 }

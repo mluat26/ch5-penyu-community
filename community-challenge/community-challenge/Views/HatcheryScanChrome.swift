@@ -22,7 +22,7 @@ struct HatcheryScanInstructionBanner: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: 366)
-        .glassEffect(in: RoundedRectangle(cornerRadius: 26))
+        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 26))
         .padding(.horizontal, 20)
     }
 }
@@ -52,7 +52,7 @@ struct HatcheryScanSideLabel: View {
                 .font(.title3)
                 .foregroundStyle(.white)
                 .frame(width: 48, height: 48)
-                .glassEffect()
+                .glassEffect(.clear, in: .circle)
                 .frame(width: 72, height: 48)
 
             Text(label)

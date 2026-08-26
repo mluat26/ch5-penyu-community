@@ -25,9 +25,15 @@ struct PreFirstHatchOnboardingView: View {
     /// Redeems an invite code and joins that organization. Throws so the join
     /// screen can show the database's own reason for refusing a code.
     var onJoinWithCode: ((String) async throws -> Void)?
+    /// Skips the welcome frame for someone who is already signed in and simply
+    /// has no hatchery -- after deleting their last one. "Welcome to Turterra"
+    /// and its Sign in with Apple button are for a new account, and `step` only
+    /// ever moves forward, so starting here keeps that identity exchange out of
+    /// reach of a session that already has a profile and an organization.
+    var startsAtGetStarted = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var step = Step.welcome
+    @State private var step: Step
     @State private var isShowingJoinWithCode = false
     /// Only reachable when no join handler was supplied, so the button still
     /// explains itself rather than doing nothing.
@@ -37,6 +43,19 @@ struct PreFirstHatchOnboardingView: View {
     @State private var isSigningInWithApple = false
     @State private var appleSignInError: String?
     @State private var isShowingAppleSignInError = false
+
+    init(
+        onCreateHatchery: @escaping () -> Void,
+        onSignInWithApple: @escaping (String, String, String?) async throws -> Void,
+        onJoinWithCode: ((String) async throws -> Void)? = nil,
+        startsAtGetStarted: Bool = false
+    ) {
+        self.onCreateHatchery = onCreateHatchery
+        self.onSignInWithApple = onSignInWithApple
+        self.onJoinWithCode = onJoinWithCode
+        self.startsAtGetStarted = startsAtGetStarted
+        _step = State(initialValue: startsAtGetStarted ? .start : .welcome)
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -108,7 +127,7 @@ struct PreFirstHatchOnboardingView: View {
                 .accessibilityHidden(true)
 
             introCopy(
-                title: "Welcome to\nSmart Nest",
+                title: "Welcome to\nTurterra",
                 subtitle: "Protect every nest\nfrom egg to hatchling.",
                 titleHeight: 82,
                 scale: scale

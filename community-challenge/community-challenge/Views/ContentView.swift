@@ -14,6 +14,9 @@ struct ContentView: View {
     /// Called after signing out or deleting the account, so the root can leave
     /// this dashboard — the session it was built on no longer exists.
     var onAccountEnded: () -> Void = {}
+    /// The hatchery this screen is built around has just been deleted, so the
+    /// root has to route somewhere else before anything reads it again.
+    var onActiveHatcheryDeleted: (UUID) -> Void = { _ in }
     let onCreateHatchery: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,7 +24,10 @@ struct ContentView: View {
     @State private var router = NestRouter()
     @State private var hatcheryController: HatcheryController
     @State private var nestController: NestController
-    @State private var hatcheryListController: HatcheryListController
+    /// Shared with the root rather than built here. Two instances meant a
+    /// delete made on this screen left the root routing off a list that still
+    /// contained the hatchery that had just gone.
+    let hatcheryListController: HatcheryListController
     @State private var isShowingHatcheryMenu = false
     @State private var rescanRequest: RescanRequest?
     /// Held while the management cover dismisses.
@@ -35,7 +41,7 @@ struct ContentView: View {
     /// Every sheet this screen owns, in one place. SwiftUI keeps only the
     /// last `.sheet` attached to a view, so they cannot be separate modifiers.
     @State private var presentedSheet: HomeSheet?
-    @State private var profileController: ProfileController
+    let profileController: ProfileController
     /// Held while the profile sheet dismisses, then promoted to
     /// `presentedCover` — the same wait-for-dismissal rule every other
     /// presentation here follows.
@@ -51,26 +57,26 @@ struct ContentView: View {
     init(
         hatchery: HatcherySessionState,
         container: AppContainer,
+        hatcheryListController: HatcheryListController,
+        profileController: ProfileController,
         onSwitchHatchery: @escaping (HatcherySessionState) -> Void = { _ in },
         onCreateHatchery: @escaping () -> Void = {},
-        onAccountEnded: @escaping () -> Void = {}
+        onAccountEnded: @escaping () -> Void = {},
+        onActiveHatcheryDeleted: @escaping (UUID) -> Void = { _ in }
     ) {
         self.hatchery = hatchery
         self.container = container
+        self.hatcheryListController = hatcheryListController
+        self.profileController = profileController
         self.onSwitchHatchery = onSwitchHatchery
         self.onCreateHatchery = onCreateHatchery
         self.onAccountEnded = onAccountEnded
+        self.onActiveHatcheryDeleted = onActiveHatcheryDeleted
         _hatcheryController = State(
             initialValue: container.makeHatcheryController(sessionState: hatchery)
         )
         _nestController = State(
             initialValue: container.makeNestController(hatcheryID: hatchery.hatchery.id)
-        )
-        _hatcheryListController = State(
-            initialValue: container.makeHatcheryListController()
-        )
-        _profileController = State(
-            initialValue: container.makeProfileController()
         )
     }
 
@@ -135,6 +141,8 @@ struct ContentView: View {
                             ordinal: selection.ordinal,
                             sectionLabel: selection.sectionID,
                             controller: container.makeNestDetailController(nestID: selection.item.id),
+                            makeHatchingController: { container.makeHatchingController(nest: $0) },
+                            hatcheryName: hatchery.hatchery.name,
                             onClose: { presentedSheet = nil },
                             onDelete: {
                                 Task {
@@ -142,7 +150,9 @@ struct ContentView: View {
                                     presentedSheet = nil
                                     await hatcheryController.load()
                                 }
-                            }
+                            },
+                            onNestChanged: { await hatcheryController.load() },
+                            onReturnToHatchery: { presentedSheet = nil }
                         )
                         .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                         .presentationDragIndicator(.visible)
@@ -201,6 +211,10 @@ struct ContentView: View {
                             },
                             onRescan: beginRescan,
                             onRename: updateActiveHatchery,
+                            onDelete: { deleted in
+                                pendingManagementAction = .hatcheryDeleted(deleted.id)
+                                presentedCover = nil
+                            },
                             // Management presents the profile sheet itself, so
                             // opening it no longer bounces through the
                             // dashboard. Only the exits that outlive that cover
@@ -227,6 +241,7 @@ struct ContentView: View {
                     switch route {
                     case .connectBucket:
                         AddNestConnectBucketView(
+                            controller: nestController,
                             onContinue: { router.push(.identity) },
                             onCancel: finishAddNestFlow
                         )
@@ -275,18 +290,14 @@ struct ContentView: View {
                             nestNumber: savedNestNumber,
                             eggCount: savedEggCount,
                             hatchDate: savedHatchDate,
-                            temperatureC: hatcheryController.overview?.averageTemperatureC ?? 30,
+                            temperatureC: savedNestItem?.latestTemperatureC,
                             onViewNest: {
-                                guard let nest = nestController.lastSavedNest else { return }
+                                guard let item = savedNestItem else { return }
                                 // Figma shows nest detail as a sheet, so this
                                 // leaves the flow first and presents rather
                                 // than pushing another page onto it.
                                 pendingNestDetail = NestDetailPresentation(
-                                    item: NestDashboardItem(
-                                        nest: nest,
-                                        latestTemperatureC: nil,
-                                        latestBatteryVoltage: nil
-                                    ),
+                                    item: item,
                                     ordinal: Int(nestController.draft.nestNumber) ?? 0,
                                     sectionID: nestController.draft.section
                                 )
@@ -383,6 +394,28 @@ struct ContentView: View {
         nestController.lastSavedNest?.nestNumber ?? nestController.draft.nestNumber
     }
 
+    /// The nest that was just saved, carrying whatever its logger has
+    /// reported. `save()` is followed by a dashboard reload, so this reads the
+    /// freshly loaded readings rather than the pre-save ones.
+    ///
+    /// It deliberately does not fall back to the hatchery average: that is
+    /// every other nest's temperature, and a nest registered seconds ago
+    /// almost never has a reading of its own yet -- so the average showed as
+    /// this nest's own healthy 30C on a nest nothing had ever measured.
+    ///
+    /// If the reload missed the new nest the nest itself still stands in, with
+    /// its readings absent rather than invented. Dropping to nil here would
+    /// leave "View nest" doing nothing.
+    private var savedNestItem: NestDashboardItem? {
+        guard let nest = nestController.lastSavedNest else { return nil }
+        return hatcheryController.dashboard?.nest(id: nest.id)
+            ?? NestDashboardItem(
+                nest: nest,
+                latestTemperatureC: nil,
+                latestBatteryVoltage: nil
+            )
+    }
+
     private var savedEggCount: String {
         nestController.lastSavedNest.map { String($0.numberOfEggs) }
             ?? nestController.draft.numberOfEggs
@@ -445,6 +478,12 @@ struct ContentView: View {
         switch action {
         case .switchHatchery(let session):
             onSwitchHatchery(session)
+        case .hatcheryDeleted(let id):
+            // Only the active hatchery needs a route out. Any other one simply
+            // left the list, which already reloaded.
+            if id == hatchery.hatchery.id {
+                onActiveHatcheryDeleted(id)
+            }
         case .createHatchery:
             onCreateHatchery()
         case .rescan(let request):
@@ -534,6 +573,7 @@ private enum HomeCover: Identifiable {
 
 private enum PendingManagementAction {
     case switchHatchery(HatcherySessionState)
+    case hatcheryDeleted(UUID)
     case createHatchery
     case signOut
     case accountEnded
@@ -550,6 +590,17 @@ struct RescanRequest: Identifiable {
     var id: UUID { hatchery.id }
 }
 
+// The fixture this preview uses only exists in DEBUG, and a #Preview body still
+// compiles in Release -- without this guard the archive fails to build.
+#if DEBUG
 #Preview {
-    ContentView(hatchery: .previewSample, container: AppContainer())
+    let container = AppContainer()
+
+    return ContentView(
+        hatchery: .previewSample,
+        container: container,
+        hatcheryListController: container.makeHatcheryListController(),
+        profileController: container.makeProfileController()
+    )
 }
+#endif

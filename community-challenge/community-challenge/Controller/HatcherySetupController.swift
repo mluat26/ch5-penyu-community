@@ -87,6 +87,20 @@ final class HatcherySetupController {
         errorMessage = nil
     }
 
+    /// Stores a fresh capture, seeding the outline with what the camera
+    /// detected so the adjust screen opens on the hatchery rather than on the
+    /// whole frame.
+    ///
+    /// The seed is a starting position, never a commitment. `confirmBoundary`
+    /// reads the outline as the plane to straighten, and the outline is drawn
+    /// on screen with draggable handles -- so a detector that locked onto a
+    /// window frame costs one drag to correct, and is visible before anything
+    /// is saved.
+    ///
+    /// The library-import path has no equivalent and starts from the whole
+    /// frame instead: an arbitrary photo has no hatchery in it, so running the
+    /// still detector over it produced confident nonsense rather than a useful
+    /// starting point.
     func storeCapturedImage(_ image: UIImage, boundary: HatcheryBoundary) {
         resetPreparedSourcePhoto()
         draft.image = image
@@ -100,23 +114,82 @@ final class HatcherySetupController {
         errorMessage = nil
     }
 
+    /// The outline someone drew, read as the hatchery's plane.
+    ///
+    /// The four extreme corners of the polygon, which is the heuristic a
+    /// document scanner uses: `x + y` is smallest at the top-left and largest
+    /// at the bottom-right, `x - y` largest at the top-right and smallest at
+    /// the bottom-left.
+    ///
+    /// For a four-corner outline these are simply its own corners, so a
+    /// rectangular hatchery flattens exactly as before. The reason to derive
+    /// them is everything else: a real hatchery is an oval concrete ring or an
+    /// irregular plot behind mesh, traced with as many points as the curve
+    /// needs, and requiring exactly four meant adding a fifth point silently
+    /// switched perspective correction off altogether.
+    ///
+    /// Deriving the roles from position also stops the stored order from
+    /// lying. Dragging the top-left handle past the top-right one used to
+    /// leave the labels in place while the quad crossed itself, which
+    /// `isValid` then refused -- so a corner could be moved into a shape that
+    /// could no longer be flattened.
+    private static func plane(from outline: HatcherySandRegion) -> HatcheryBoundary? {
+        let points = outline.points
+        guard let first = points.first else { return nil }
+
+        // Strict comparison, so ties keep the earliest point and the result
+        // does not depend on iteration order. A shape that ties on every axis
+        // -- a square rotated 45 degrees -- collapses to a degenerate quad,
+        // which `isValid` rejects below rather than handing a broken
+        // transform to `CIPerspectiveCorrection`.
+        func corner(
+            by score: (NormalizedPoint) -> Double,
+            preferring isBetter: (Double, Double) -> Bool
+        ) -> NormalizedPoint {
+            points.dropFirst().reduce(first) { best, point in
+                isBetter(score(point), score(best)) ? point : best
+            }
+        }
+
+        let candidate = HatcheryBoundary(
+            topLeft: corner(by: { $0.x + $0.y }, preferring: <),
+            topRight: corner(by: { $0.x - $0.y }, preferring: >),
+            bottomRight: corner(by: { $0.x + $0.y }, preferring: >),
+            bottomLeft: corner(by: { $0.x - $0.y }, preferring: <)
+        )
+        return candidate.isValid ? candidate : nil
+    }
+
     func confirmBoundary(
         image: UIImage,
         boundary: HatcheryBoundary,
         sandRegion: HatcherySandRegion
     ) async -> Bool {
+        // Straighten what was outlined, not what a detector guessed.
+        //
+        // `boundary` arrives from automatic rectangle detection and is not
+        // editable anywhere in the flow, while `inputCrop` makes the corrected
+        // photo *be* that quad -- so a detector that locked onto a window frame
+        // or a floor seam produced a photo of the wrong surface, with the drawn
+        // outline squashed into a corner of it. Nothing in the UI could correct
+        // that, because the only shape a person can move is the outline.
+        //
+        // So the outline is the plane. Falling back to the detected quad only
+        // when the outline is not four corners, where no homography applies.
+        let plane = Self.plane(from: sandRegion) ?? boundary
+
         do {
             let sourcePayload = try HatcheryImageProcessor.payload(from: image)
             resetPreparedSourcePhoto()
             let preparedCapture = try await HatcheryImageProcessor.prepareCapturedLayout(
                 from: sourcePayload,
-                boundary: boundary,
+                boundary: plane,
                 sandRegion: sandRegion
             )
             try Task.checkCancellation()
 
             draft.image = HatcheryImageProcessor.displayImage(from: preparedCapture.photo)
-            draft.boundary = boundary
+            draft.boundary = plane
             draft.sandRegion = sandRegion
             draft.rectifiedSandRegion = preparedCapture.rectifiedSandRegion
             draft.isAwaitingScan = false
@@ -176,12 +249,27 @@ final class HatcherySetupController {
 
         guard
             let photo = draft.image,
-            let rectifiedPhoto = draft.rectifiedImage ?? draft.image,
             let boundary = draft.boundary,
             let sandRegion = draft.sandRegion,
             let grid = draft.grid
         else {
             errorMessage = "Finish the hatchery setup before saving."
+            return nil
+        }
+
+        // Was `draft.rectifiedImage ?? draft.image`, which saved the raw camera
+        // photo under the name `rectifiedPhoto` whenever perspective correction
+        // had not produced one -- and nothing downstream could tell. The
+        // dashboard drew an un-flattened photo and laid a uniform cell grid
+        // over it, so the sections did not match the sand, with no error shown
+        // at any point.
+        //
+        // Unreachable on every normal path: `skipScanning` sets this to the
+        // blank image, and `confirmBoundary` both sets it and refuses to
+        // advance without it. So this fires only when correction genuinely
+        // failed, which is worth saying out loud rather than papering over.
+        guard let rectifiedPhoto = draft.rectifiedImage else {
+            errorMessage = "This scan could not be flattened. Rescan the hatchery before saving."
             return nil
         }
 

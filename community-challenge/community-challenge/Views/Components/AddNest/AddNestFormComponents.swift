@@ -427,7 +427,7 @@ struct AddNestInspectionModeControl: View {
         .padding(4)
         .frame(maxWidth: .infinity)
         .frame(height: 50)
-        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(hex: "#F1F1F1").opacity(0.5), in: RoundedRectangle(cornerRadius: 120))
     }
 
     private func segment(
@@ -450,7 +450,7 @@ struct AddNestInspectionModeControl: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 isSelected ? Color.white : Color.clear,
-                in: RoundedRectangle(cornerRadius: 12)
+                in: RoundedRectangle(cornerRadius: 120)
             )
             .shadow(color: .black.opacity(isSelected ? 0.08 : 0), radius: 4, y: 1)
         }
@@ -474,6 +474,10 @@ struct AddNestInlineDatePicker: View {
             .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
             .overlay {
+                // Matches the fill above. 120 belongs to the 50pt segmented
+                // control, where it clamps to half the height and reads as a
+                // capsule; this container is ~500pt tall, so nothing clamps
+                // and the corner ate its way into the calendar grid.
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color(hex: "#EBEBEB"), lineWidth: 1)
             }

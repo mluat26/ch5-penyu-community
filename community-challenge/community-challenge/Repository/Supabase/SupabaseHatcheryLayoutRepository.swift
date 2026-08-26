@@ -132,6 +132,18 @@ actor SupabaseHatcheryLayoutRepository: HatcheryLayoutRepository {
             .execute()
             .value
     }
+
+    func photoPaths(hatcheryID: UUID) async throws -> [String] {
+        _ = try await identity.ensureAuthenticatedUserID()
+
+        return try await client
+            .rpc(
+                "hatchery_layout_photo_paths",
+                params: HatcheryLayoutHatcheryIDDTO(hatcheryID: hatcheryID)
+            )
+            .execute()
+            .value
+    }
 }
 
 /// Private Storage access for layout source photos. Every operation first

@@ -11,12 +11,14 @@ struct OrganizationDTO: Codable, Sendable {
     /// The human-readable identifier shown on the profile screen
     /// ("ORG-0000000"), distinct from the primary key.
     let code: String?
+    let ownerID: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case createdAt = "date_created"
         case code
+        case ownerID = "owner_id"
     }
 }
 
@@ -33,7 +35,8 @@ extension OrganizationDTO {
             id: id,
             name: name,
             createdAt: createdAt,
-            code: code
+            code: code,
+            ownerID: ownerID
         )
     }
 }

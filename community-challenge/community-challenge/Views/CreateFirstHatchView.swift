@@ -75,6 +75,10 @@ struct CreateFirstHatchView: View {
     let style: HatcheryNameEntryStyle
     let onCreate: (String) async -> String?
     let onBack: (() -> Void)?
+    /// Nil during first-hatch onboarding, where there is no account to show
+    /// yet. Supplied when an existing member is adding another hatchery, which
+    /// is the case that left the icon decorative.
+    var onProfile: (() -> Void)?
 
     @State private var hatchName: String
     @State private var nameValidationMessage: String?
@@ -86,11 +90,13 @@ struct CreateFirstHatchView: View {
     init(
         style: HatcheryNameEntryStyle = .firstHatch,
         onCreate: @escaping (String) async -> String? = { _ in nil },
-        onBack: (() -> Void)? = nil
+        onBack: (() -> Void)? = nil,
+        onProfile: (() -> Void)? = nil
     ) {
         self.style = style
         self.onCreate = onCreate
         self.onBack = onBack
+        self.onProfile = onProfile
         _hatchName = State(initialValue: style.configuration.defaultName)
     }
 
@@ -261,7 +267,7 @@ struct CreateFirstHatchView: View {
 
             Spacer(minLength: 0)
 
-            HatcheryToolbarAccessories(scale: scale)
+            HatcheryToolbarAccessories(scale: scale, onProfile: onProfile)
         }
         .frame(
             width: max(0, contentWidth - 16 * scale),

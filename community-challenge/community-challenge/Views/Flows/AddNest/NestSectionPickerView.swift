@@ -249,6 +249,8 @@ struct NestSectionPickerView: View {
 }
 
 private struct NestSectionMapView: View {
+
+
     let image: UIImage
     let usesMockCrop: Bool
     let grid: HatcheryGrid
@@ -297,7 +299,14 @@ private struct NestSectionMapView: View {
 
                 GeometryReader { geometry in
                     ZStack {
-                        HatcherySetupImage(image: image, usesMockCrop: usesMockCrop)
+                        // Stretched to the box, so the cell grid below fills
+                        // the identical rect and a tapped cell is always the
+                        // sand under it.
+                        HatcherySetupImage(
+                            image: image,
+                            usesMockCrop: usesMockCrop,
+                            contentMode: .stretch
+                        )
 
                         VStack(spacing: 2) {
                             ForEach(0..<rows, id: \.self) { row in

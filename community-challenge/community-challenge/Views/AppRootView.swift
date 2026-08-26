@@ -15,6 +15,9 @@ struct AppRootView: View {
 
     @State private var hatcherySetupController: HatcherySetupController
     @State private var hatcheryListController: HatcheryListController
+    /// Built once here rather than per presentation, so the sheet keeps what it
+    /// loaded across openings of the name screen.
+    @State private var profileController: ProfileController
     @State private var isCreatingHatchery = false
     @State private var hatcheryBeforeCreation: HatcherySessionState?
     @State private var rescanRequest: RescanRequest?
@@ -26,10 +29,45 @@ struct AppRootView: View {
     /// came from. Back should land where the person was, not wherever the
     /// data happens to point.
     @State private var isShowingOnboarding = false
+    /// Set only when the last hatchery was deleted. The person is still signed
+    /// in, so the welcome frame would be a lie -- and its Sign in with Apple
+    /// button replaces the identity rather than linking to it.
+    @State private var onboardingStartsAtGetStarted = false
     /// The rich scan session can change even when a hatchery's UUID does not
     /// (for example, after re-scanning). This forces ContentView to rebuild
     /// its stateful dashboard controllers for that fresh session.
     @State private var activeSessionRevision = UUID()
+    /// Owned here rather than derived from `hasLoaded`, because the launch
+    /// screen has to outlive the signal that ends it -- the exit animation
+    /// plays after the data has already arrived.
+    @State private var isShowingLaunchScreen = true
+    /// Held here so the loading animation's progress survives the branch
+    /// switches below. Inside the view it was reset by every one of them.
+    @State private var loadingPhase = AppLoadingPhase()
+
+    /// Whether a real screen is composed behind the launch overlay.
+    ///
+    /// Deliberately more than `hasLoaded`. With hatcheries present the root
+    /// still has to restore the chosen one's scan session, which downloads a
+    /// private photo -- and that step used to put up its own "Opening ..."
+    /// loader. Two loaders in a row read as a stall, so the launch screen holds
+    /// across the whole wait and there is only ever one.
+    private var hasScreenBehindLaunch: Bool {
+        if session.activeHatchery != nil { return true }
+        if isCreatingHatchery { return true }
+
+        guard hatcheryListController.hasLoaded else { return false }
+
+        // A failed query shows its own retry screen, which is a real screen.
+        if !hatcheryListController.hasSuccessfulLoad { return true }
+        if isShowingOnboarding || hatcheryListController.hatcheries.isEmpty {
+            return true
+        }
+
+        // A hatchery exists and is being opened. Only ready once it is -- or
+        // once opening failed, which falls through to the management list.
+        return initialHatcheryOpeningState == .failed
+    }
 
     init(container: AppContainer, session: AppSessionController) {
         self.container = container
@@ -40,17 +78,58 @@ struct AppRootView: View {
         _hatcheryListController = State(
             initialValue: container.makeHatcheryListController()
         )
+        _profileController = State(
+            initialValue: container.makeProfileController()
+        )
+    }
+
+    /// Signing out from the name screen. Same shape as the dashboard's: the
+    /// container clears the session, then the root drops back to the welcome
+    /// route under whatever identity comes next.
+    private func signOut() {
+        Task {
+            do {
+                try await container.signOut()
+                isCreatingHatchery = false
+                endActiveAccount()
+            } catch {
+                profileController.setErrorMessage(error.localizedDescription)
+            }
+        }
     }
 
     var body: some View {
+        // The loading screen is a sibling in this ZStack, not an `.overlay` on
+        // the Group. As an overlay it was mounted *inside* a view whose active
+        // branch changes three times during a cold launch, and each switch
+        // remounted it: first that reset its `@State` and replayed the drop
+        // three times, then -- with the state moved out to survive -- it cut the
+        // drop off mid-flight and the mark simply appeared in place. A fixed
+        // position in a ZStack keeps one instance mounted throughout.
+        ZStack {
+            routedContent
+            if isShowingLaunchScreen {
+                AppLoadingView(
+                    isReady: hasScreenBehindLaunch,
+                    onFinished: { isShowingLaunchScreen = false },
+                    phase: loadingPhase
+                )
+            }
+        }
+    }
+
+    private var routedContent: some View {
         Group {
             if let activeHatchery = session.activeHatchery {
                 ContentView(
                     hatchery: activeHatchery,
                     container: container,
+                    hatcheryListController: hatcheryListController,
+                    profileController: profileController,
                     onSwitchHatchery: activateHatchery,
                     onCreateHatchery: startNewHatchery,
-                    onAccountEnded: endActiveAccount
+                    onAccountEnded: endActiveAccount,
+                    onActiveHatcheryDeleted: activeHatcheryDeleted
                 )
                 // ContentView builds its controllers in init, so switching
                 // hatcheries or re-scanning must create a new instance bound
@@ -63,7 +142,18 @@ struct AppRootView: View {
                     entryPoint: isCreatingAdditionalHatchery
                         ? .additionalHatch
                         : .firstHatch,
-                    onCancel: cancelHatcheryCreation
+                    onCancel: cancelHatcheryCreation,
+                    // Only when an account already exists. First-hatch
+                    // onboarding has no profile to show, which is why the icon
+                    // stays decorative there.
+                    profileController: isCreatingAdditionalHatchery
+                        ? profileController
+                        : nil,
+                    onSignOut: signOut,
+                    onDeleteAccount: {
+                        try await container.deleteAccount()
+                        endActiveAccount()
+                    }
                 )
             } else if !hatcheryListController.hasLoaded {
                 // Neither screen is right until the query returns; rendering
@@ -85,7 +175,8 @@ struct AppRootView: View {
                 PreFirstHatchOnboardingView(
                     onCreateHatchery: startNewHatchery,
                     onSignInWithApple: signInWithApple,
-                    onJoinWithCode: joinWithCode
+                    onJoinWithCode: joinWithCode,
+                    startsAtGetStarted: onboardingStartsAtGetStarted
                 )
             } else if let firstHatchery = hatcheryListController.hatcheries.first {
                 if initialHatcheryOpeningState == .failed {
@@ -96,7 +187,11 @@ struct AppRootView: View {
                         onRescan: beginRescan
                     )
                 } else {
-                    OpeningHatcheryView(name: firstHatchery.name)
+                    // Nothing of its own to show: the launch overlay is still
+                    // up and stays up until this finishes. The task is what
+                    // matters here, not the backdrop behind it.
+                    Color.appOffWhite
+                        .ignoresSafeArea()
                         .task(id: firstHatchery.id) {
                             await openFirstHatchery()
                         }
@@ -163,6 +258,24 @@ struct AppRootView: View {
     /// Clear the active hatchery and reload, which drops the app back to the
     /// welcome route under whatever identity comes next.
     private func endActiveAccount() {
+        session.activeHatchery = nil
+        initialHatcheryOpeningState = .idle
+        activeSessionRevision = UUID()
+        onboardingStartsAtGetStarted = false
+
+        Task { await hatcheryListController.load() }
+    }
+
+    /// The hatchery this session was built on has been deleted. The account is
+    /// untouched, so this only has to answer "what now": the next hatchery if
+    /// there is one, otherwise "Let's get started".
+    ///
+    /// The list is already right. `ContentView` shares this controller, so the
+    /// delete that just happened removed the row from it before this runs --
+    /// which matters, because the reroute happens on the very next render, long
+    /// before any reload could return.
+    private func activeHatcheryDeleted(_ hatcheryID: UUID) {
+        onboardingStartsAtGetStarted = hatcheryListController.hatcheries.isEmpty
         session.activeHatchery = nil
         initialHatcheryOpeningState = .idle
         activeSessionRevision = UUID()
@@ -271,30 +384,6 @@ private enum AppleSignInFlowError: LocalizedError {
 
     var errorDescription: String? {
         "Your account was signed in, but your hatcheries could not be loaded. Please try again."
-    }
-}
-
-private struct OpeningHatcheryView: View {
-    let name: String
-
-    var body: some View {
-        ZStack {
-            Color.appOffWhite
-
-            VStack(spacing: 12) {
-                ProgressView()
-                    .tint(Color.appGreenPrimary)
-
-                Text("Opening \(name)…")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.appGreenPrimary)
-            }
-        }
-        .ignoresSafeArea()
-        .preferredColorScheme(.light)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Opening \(name)")
     }
 }
 

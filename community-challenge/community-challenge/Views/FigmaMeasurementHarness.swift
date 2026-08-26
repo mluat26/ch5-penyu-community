@@ -20,6 +20,17 @@ enum FigmaMeasurementHarness {
     @ViewBuilder
     static func view(for screen: String) -> some View {
         switch screen {
+        // Held on screen rather than played once: the real launch overlay is
+        // gone in well under a second, which is too short to watch the drop,
+        // the breath and the exit. `launch` never becomes ready, so the loop
+        // runs indefinitely; `launch-exit` reports ready immediately, so the
+        // exit plays as soon as the drop has settled.
+        case "launch":
+            AppLoadingHost(isReady: false)
+
+        case "launch-exit":
+            AppLoadingHost(isReady: true)
+
         case "invite":
             InvitationCodeView(invite: Fixtures.invite, onBack: {}, onRegenerate: {})
 
@@ -67,8 +78,12 @@ enum FigmaMeasurementHarness {
                     ordinal: 23,
                     sectionLabel: "B1",
                     controller: Fixtures.nestDetailController,
+                    makeHatchingController: { HatchingPreviewFixtures.controller(for: $0) },
+                    hatcheryName: "Hatchery_01",
                     onClose: {},
-                    onDelete: {}
+                    onDelete: {},
+                    onNestChanged: {},
+                    onReturnToHatchery: {}
                 )
                 .presentationDetents([.height(NestDetailSheet.Layout.detentHeight)])
                 .presentationDragIndicator(.visible)
@@ -201,8 +216,20 @@ private struct StubProfileRepository: ProfileRepository {
     }
 
     func fetchOrganization(id: UUID) async throws -> OrganizationEntity {
-        OrganizationEntity(id: id, name: "Demo", createdAt: .now, code: "ORG-0000000")
+        OrganizationEntity(
+            id: id,
+            name: "Demo",
+            createdAt: .now,
+            code: "ORG-0000000",
+            // Nil, so the members list measures as Figma draws it: 200:4212
+            // is the plain read frame, without the owner's role menus.
+            ownerID: nil
+        )
     }
+
+    func setMemberRole(memberID: UUID, role: OrganizationRole) async throws {}
+
+    func removeMember(memberID: UUID) async throws {}
 
     func generateInvite() async throws -> OrganizationInviteEntity {
         FigmaMeasurementHarness.Fixtures.invite
@@ -242,6 +269,12 @@ private struct StubIoTDataRepository: IoTDataRepository {
     /// fabricated row would quietly corrupt a measurement run.
     func fetch(id: UUID) async throws -> IoTDataEntity {
         throw RepositoryError.notFound(resource: "IoTData", id: id)
+    }
+
+    /// Same reasoning: the harness measures layout, not aggregates. Nil renders
+    /// the "--" state, which is a layout worth measuring in its own right.
+    func temperatureStats(nestID: UUID, from: Date, to: Date) async throws -> NestTemperatureStats? {
+        nil
     }
 }
 

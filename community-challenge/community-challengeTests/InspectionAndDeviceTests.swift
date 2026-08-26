@@ -529,3 +529,69 @@ final class HatchingTests: XCTestCase {
         return (service, nestRepository, nest)
     }
 }
+
+/// The in-memory reading store has to agree with `nest_temperature_stats` on
+/// its window, or the previews and tests describe a nest differently from the
+/// database. The SQL asserts these same three boundaries in
+/// `supabase/tests/hatch_audit_and_temperature_stats_test.sql`.
+final class NestTemperatureStatsTests: XCTestCase {
+    private let dayStart = Date(timeIntervalSince1970: 1_781_481_600)
+    private var dayEnd: Date { dayStart.addingTimeInterval(24 * 3600) }
+
+    func testWindowIsHalfOpen() async throws {
+        let nestID = UUID()
+        let repository = InMemoryIoTDataRepository(seed: [
+            reading(nestID: nestID, at: dayStart, temperature: 26),
+            reading(nestID: nestID, at: dayStart.addingTimeInterval(12 * 3600), temperature: 30),
+            // Exactly on the upper bound, and therefore tomorrow's problem.
+            reading(nestID: nestID, at: dayEnd, temperature: 40)
+        ])
+
+        let stats = try await repository.temperatureStats(nestID: nestID, from: dayStart, to: dayEnd)
+
+        XCTAssertEqual(stats?.avgC, 28)
+        XCTAssertEqual(stats?.maxC, 30, "a reading exactly on the upper bound must be excluded")
+        XCTAssertEqual(stats?.minC, 26, "a reading exactly on the lower bound must be included")
+    }
+
+    func testEmptyWindowReportsNothingRatherThanZero() async throws {
+        let nestID = UUID()
+        let repository = InMemoryIoTDataRepository(seed: [
+            reading(nestID: nestID, at: dayStart, temperature: 26)
+        ])
+
+        let stats = try await repository.temperatureStats(
+            nestID: nestID,
+            from: dayStart.addingTimeInterval(-10 * 24 * 3600),
+            to: dayStart.addingTimeInterval(-9 * 24 * 3600)
+        )
+
+        // 0°C would render as a real measurement of a freezing nest.
+        XCTAssertNotNil(stats)
+        XCTAssertNil(stats?.avgC)
+        XCTAssertNil(stats?.maxC)
+        XCTAssertNil(stats?.minC)
+    }
+
+    func testOtherNestsReadingsAreNotCounted() async throws {
+        let nestID = UUID()
+        let repository = InMemoryIoTDataRepository(seed: [
+            reading(nestID: nestID, at: dayStart, temperature: 26),
+            reading(nestID: UUID(), at: dayStart, temperature: 40)
+        ])
+
+        let stats = try await repository.temperatureStats(nestID: nestID, from: dayStart, to: dayEnd)
+
+        XCTAssertEqual(stats?.avgC, 26)
+    }
+
+    private func reading(nestID: UUID, at timestamp: Date, temperature: Double) -> IoTDataEntity {
+        IoTDataEntity(
+            id: UUID(),
+            nestID: nestID,
+            sensorID: UUID(),
+            temperatureC: temperature,
+            timestamp: timestamp
+        )
+    }
+}
