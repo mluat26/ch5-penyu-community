@@ -1074,7 +1074,13 @@ private struct SectionOverviewSheet: View {
             
             HStack(spacing: 12) {
                 NestStatusPill.temperature(item.latestTemperatureC)
-                NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+                // A countdown to an event that has happened. The predicted
+                // date outlives the hatching -- it is what the nest was
+                // created with -- so the pill has to close with the nest
+                // rather than wait for the date to stop being computable.
+                if !item.nest.hasHatched {
+                    NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+                }
                 
                 Spacer(minLength: 0)
                 
