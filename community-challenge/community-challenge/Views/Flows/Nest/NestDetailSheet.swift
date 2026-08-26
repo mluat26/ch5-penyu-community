@@ -186,16 +186,23 @@ struct NestDetailSheet: View {
         }
     }
 
-    // MARK: - Toolbar (166:3251 — 44pt buttons at x16 / x330, title x177/y13)
+    // MARK: - Toolbar (166:3251 — 48pt buttons (44 in Figma) at x16 / x330, title x177/y13)
 
     private func toolbar(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Button(action: onClose) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 17 * scale, weight: .semibold))
+                    // The section sheet's glyph, unscaled like the frame that
+                    // holds it -- the two sit one on top of the other.
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black)
-                    .frame(width: 44 * scale, height: 44 * scale)
-                    .background(Color(hex: "#E9E9EB"), in: Circle())
+                    // Not scaled. `scale` is capped at 1, so scaling could only
+                    // ever take this under Apple's 44pt minimum. Everything
+                    // around it still scales; a touch target is not a drawing.
+                    .frame(width: 48, height: 48)
+                    // The material, not a fill over it: an opaque background
+                    // here covers the glass and the button reads flat grey.
+                    .glassEffect(.regular, in: .circle)
             }
             .buttonStyle(.plain)
             .offset(x: 16 * scale)
@@ -225,12 +232,15 @@ struct NestDetailSheet: View {
                 // Only the edit-mode confirm is the prominent button variant
                 // (199:3599); the pencil matches the close button (199:3733).
                 Image(systemName: isEditing ? "checkmark" : "pencil")
-                    .font(.system(size: 17 * scale, weight: .semibold))
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(isEditing ? .white : .black)
-                    .frame(width: 44 * scale, height: 44 * scale)
-                    .background(
-                        isEditing ? Color.accentColor : Color(hex: "#E9E9EB"),
-                        in: Circle()
+                    // Not scaled -- see the close button.
+                    .frame(width: 48, height: 48)
+                    // Confirm stays the prominent variant, but as a tint the
+                    // glass carries rather than a fill laid over it.
+                    .glassEffect(
+                        isEditing ? .regular.tint(.accentColor) : .regular,
+                        in: .circle
                     )
             }
             .buttonStyle(.plain)
@@ -400,6 +410,12 @@ struct NestDetailSheet: View {
                     .frame(width: 38 * scale, height: 18 * scale)
                     .offset(x: 54.333_333 * CGFloat(index) * scale, y: 1 * scale)
 
+                // The design's circle is 30pt, which is well under the 44pt
+                // minimum. The circle keeps its size and only the target grows
+                // around it, so nothing looks different.
+                let target: CGFloat = 44
+                let grown = (target - 30 * scale) / 2
+
                 Button {
                     selectedDay = day
                 } label: {
@@ -410,9 +426,15 @@ struct NestDetailSheet: View {
                         .background {
                             if isSelected { Circle().fill(Color(hex: "#999999")) }
                         }
+                        .frame(width: target, height: target)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .offset(x: 55.666_664 * CGFloat(index) * scale, y: 27 * scale)
+                // This strip positions by corner, not centre, so the growth is
+                // taken back out -- otherwise every day slides down and right
+                // by half of it. Days sit on 55.67pt centres, so 44pt targets
+                // still clear each other.
+                .offset(x: 55.666_664 * CGFloat(index) * scale - grown, y: 27 * scale - grown)
             }
         }
         .frame(width: 364 * scale, height: 64 * scale, alignment: .topLeading)
@@ -1073,3 +1095,14 @@ struct NestTemperatureDegreeAxis: View {
 }
 
 
+
+/// The whole sheet, presented the way the app presents it.
+///
+/// Reuses the measurement harness's `nest-detail` case rather than rebuilding
+/// the fixtures: it already wires the controllers, and a preview that built its
+/// own copy would drift from the screen being measured.
+#if DEBUG
+#Preview("Nest detail") {
+    FigmaMeasurementHarness.view(for: "nest-detail")
+}
+#endif

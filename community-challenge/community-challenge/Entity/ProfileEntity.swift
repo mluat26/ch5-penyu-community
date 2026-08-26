@@ -8,12 +8,19 @@ enum OrganizationRole: String, Codable, CaseIterable, Sendable {
     case officer
     case agent
 
+    /// Shown to a person, so it is translated. Deliberately separate from
+    /// `rawValue`, which is the `public.org_role` value the database stores
+    /// and must never change with the reader's language.
+    ///
+    /// `String(localized:)` rather than `LocalizedStringKey`: the latter is a
+    /// SwiftUI type, and an entity has no business importing SwiftUI to name
+    /// a role. Both are read by the same extractor.
     var displayName: String {
         switch self {
-        case .manager: "Manager"
-        case .coordinator: "Coordinator"
-        case .officer: "Officer"
-        case .agent: "Agent"
+        case .manager: String(localized: "Manager")
+        case .coordinator: String(localized: "Coordinator")
+        case .officer: String(localized: "Officer")
+        case .agent: String(localized: "Agent")
         }
     }
 

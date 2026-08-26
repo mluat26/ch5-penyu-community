@@ -48,6 +48,15 @@ private enum NestReportTab: String, CaseIterable, Identifiable {
     case timeline = "Timeline"
     case temperature = "Temperature"
     var id: String { rawValue }
+
+    /// Kept apart from `rawValue`, which is the tag the picker selects on.
+    var label: LocalizedStringKey {
+        switch self {
+        case .info: "Info"
+        case .timeline: "Timeline"
+        case .temperature: "Temperature"
+        }
+    }
 }
 
 struct NestReportView: View {
@@ -172,7 +181,7 @@ struct NestReportView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Picker("", selection: $selectedTab) {
                         ForEach(NestReportTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
+                            Text(tab.label).tag(tab)
                         }
                     }
                     .pickerStyle(.segmented)

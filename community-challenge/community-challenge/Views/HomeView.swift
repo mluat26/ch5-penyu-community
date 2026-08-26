@@ -375,7 +375,7 @@ struct HomeView: View {
     /// chevron -- the only thing separating the temperature card from the two
     /// that open the nest list.
     private func overviewCard(
-        title: String,
+        title: LocalizedStringKey,
         value: String,
         unit: String = "",
         valueColor: Color = .black,
@@ -770,7 +770,22 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
         }
     }
     
-    var emptyMessage: String {
+    /// The segment's label, kept apart from `rawValue`.
+    ///
+    /// A raw value is the case's identity -- it backs `id` and the tag the
+    /// picker selects on -- so it cannot also be the translated text without
+    /// the selection changing language along with the label.
+    var label: LocalizedStringKey {
+        switch self {
+        case .all: "All"
+        case .unhatched: "Unhatched"
+        case .hatched: "Hatched"
+        case .hatchingSoon: "Soon"
+        case .inspection: "Inspect"
+        }
+    }
+
+    var emptyMessage: LocalizedStringKey {
         switch self {
         case .all: "No nests here"
         case .hatched: "No hatched nests here"
@@ -882,7 +897,7 @@ private struct SectionOverviewSheet: View {
     var body: some View {
         // Nothing on this sheet is editable -- the nests are opened, not
         // changed here -- so the chrome's pencil is turned off.
-        SheetChrome(title: scope.title, showsEditButton: false) { sheetWidth in
+        SheetChrome(title: scope.title) { sheetWidth in
             if style == .full {
                 summary
                     .frame(width: 370, height: 85, alignment: .top)
@@ -1060,11 +1075,14 @@ private struct SectionOverviewSheet: View {
                 
                 Spacer(minLength: 0)
                 
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                // The gap is the stack's, not a space inside the word. A
+                // translator seeing `" eggs"` gets a fragment with a stray
+                // space and no number for context; `"eggs"` is a word.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(item.nest.numberOfEggs)")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.black)
-                    Text(" eggs")
+                    Text("eggs")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(Color(hex: "#8E8E93"))
                 }

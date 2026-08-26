@@ -3,10 +3,13 @@ import SwiftUI
 /// Shared sheet framing for hatchery dashboard details.
 struct SheetChrome<Content: View>: View {
     let title: String
-    /// The trailing pencil. Decorative everywhere it appears -- a bare `Image`
-    /// with nothing behind it -- so a sheet that has nothing to edit turns it
-    /// off rather than offering a control that does nothing when tapped.
-    var showsEditButton = true
+    /// Drawn only when there is something for it to do.
+    ///
+    /// The pencil used to be a bare `Image`: styled as the most prominent
+    /// control on the sheet, carrying an "Edit ..." accessibility label, and
+    /// wired to nothing. VoiceOver announced an action that could not be
+    /// performed, and a sighted reader had a primary button that ignored taps.
+    var onEdit: (() -> Void)? = nil
     @ViewBuilder var content: (CGFloat) -> Content
 
     @Environment(\.dismiss) private var dismiss
@@ -23,7 +26,7 @@ struct SheetChrome<Content: View>: View {
                 // white nest cards read as cards; on white they disappeared.
                 Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
-                header(width: sheetWidth)
+                header(width: sheetWidth, scale: contentScale)
                     .frame(height: 54)
                     .offset(y: 11)
 
@@ -34,22 +37,27 @@ struct SheetChrome<Content: View>: View {
         }
     }
 
-    private func header(width: CGFloat) -> some View {
+    private func header(width: CGFloat, scale: CGFloat) -> some View {
         let horizontalInset = max((width - 358) / 2, 0)
+        // Taken back out of the button, because the whole sheet is drawn
+        // through a `scaleEffect` and the nest sheet stacked on top of it is
+        // not. Left alone, an identical 48 here reached the screen ~4pt bigger
+        // than the identical 48 there.
+        let buttonSize = 48 / scale
 
         return ZStack {
             Button(action: dismiss.callAsFunction) {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black)
+                    .frame(width: buttonSize, height: buttonSize)
+                    // Sized and surfaced the same way as the nest sheet's
+                    // toolbar, which sits directly on top of this one: the
+                    // glass is the material, so nothing opaque goes over it.
+                    .glassEffect(.regular, in: .circle)
                     .accessibilityHidden(true)
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
-            .tint(.white)
-            .frame(width: 44, height: 44)
-            .glassEffect(.regular, in: .circle)
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, horizontalInset)
             .accessibilityLabel("Close \(title)")
@@ -59,20 +67,22 @@ struct SheetChrome<Content: View>: View {
                 .font(.system(size: 17, weight: .semibold))
                 .offset(y: 2)
 
-            if showsEditButton {
-                Image(systemName: "pencil")
-                    .font(.body)
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.blue, in: Circle())
-                    .glassEffect(.regular, in: .circle)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, horizontalInset)
-                    .accessibilityLabel("Edit \(title)")
+            if let onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.body)
+                        .foregroundStyle(.white)
+                        .frame(width: buttonSize, height: buttonSize)
+                        .glassEffect(.regular.tint(.blue), in: .circle)
+                        .accessibilityHidden(true)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, horizontalInset)
+                .accessibilityLabel("Edit \(title)")
             }
-                
         }
-        .frame(width: width, height: 44, alignment: .top)
+        .frame(width: width, height: buttonSize, alignment: .top)
     }
 }
 

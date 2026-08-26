@@ -275,7 +275,7 @@ final class HatcheryListController {
 
                 let legacySession = HatcherySessionState.reconstructed(from: resolvedHatchery)
                 if legacySession == nil {
-                    errorMessage = "This hatchery's saved dimensions are too small to open."
+                    errorMessage = String(localized: "This hatchery's saved dimensions are too small to open.")
                 }
                 return legacySession
             }
@@ -283,7 +283,7 @@ final class HatcheryListController {
             let currentHatchery = try await hatcheryService.hatchery(id: hatchery.id)
             let legacySession = HatcherySessionState.reconstructed(from: currentHatchery)
             if legacySession == nil {
-                errorMessage = "This hatchery's saved dimensions are too small to open."
+                errorMessage = String(localized: "This hatchery's saved dimensions are too small to open.")
             }
             return legacySession
         } catch {
