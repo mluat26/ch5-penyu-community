@@ -104,21 +104,14 @@ struct NestDetailSheet: View {
                 ScrollView {
                     content(scale: scale)
                         .frame(width: Layout.sheetWidth * scale, alignment: .topLeading)
-                        // Starts below the toolbar rather than being inset by
-                        // it, so at rest nothing is hidden and on scroll the
-                        // photo and the cards pass underneath it.
-                        .padding(.top, 70 * scale)
                         // Clears the floating action, which both modes show.
                         .padding(.bottom, 96 * scale)
                 }
                 .scrollIndicators(.hidden)
-                // An overlay, not a `safeAreaInset`: an inset reserves its own
-                // strip and used to paint the grouped grey behind itself, which
-                // left the toolbar's glass with a flat opaque field to refract
-                // and nothing moving behind it. Glass needs content under it.
-                .overlay(alignment: .top) {
+                .safeAreaInset(edge: .top, spacing: 0) {
                     toolbar(scale: scale)
                         .padding(.top, 16 * scale)
+                        .background(Color(uiColor: .systemGroupedBackground))
                 }
 
                 // One slot, one action. Editing offers Delete nest, reading
@@ -207,16 +200,13 @@ struct NestDetailSheet: View {
                     // ever take this under Apple's 44pt minimum. Everything
                     // around it still scales; a touch target is not a drawing.
                     .frame(width: 48, height: 48)
-                    // `.clear` like the scan chrome, the one place this
-                    // effect has ever been visible -- and it is visible there
-                    // because a camera feed moves behind it. Nothing opaque
-                    // goes over it, and the scroll content passes under it.
-                    .glassEffect(.clear.interactive(), in: .circle)
+                    // The material, not a fill over it: an opaque background
+                    // here covers the glass and the button reads flat grey.
+                    .glassEffect(.regular, in: .circle)
             }
             .buttonStyle(.plain)
             .offset(x: 16 * scale)
             .accessibilityLabel("Close")
-           
 
             // Centred full-width rather than pinned to Figma's text-node
             // width, which truncates a longer nest number.
@@ -249,9 +239,7 @@ struct NestDetailSheet: View {
                     // Confirm stays the prominent variant, but as a tint the
                     // glass carries rather than a fill laid over it.
                     .glassEffect(
-                        isEditing
-                            ? .clear.tint(.accentColor).interactive()
-                            : .clear.interactive(),
+                        isEditing ? .regular.tint(.accentColor) : .regular,
                         in: .circle
                     )
             }

@@ -54,7 +54,7 @@ struct SheetChrome<Content: View>: View {
                     // Sized and surfaced the same way as the nest sheet's
                     // toolbar, which sits directly on top of this one: the
                     // glass is the material, so nothing opaque goes over it.
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .glassEffect(.regular, in: .circle)
                     .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
@@ -73,7 +73,7 @@ struct SheetChrome<Content: View>: View {
                         .font(.body)
                         .foregroundStyle(.white)
                         .frame(width: buttonSize, height: buttonSize)
-                        .glassEffect(.regular.tint(.blue).interactive(), in: .circle)
+                        .glassEffect(.regular.tint(.blue), in: .circle)
                         .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
