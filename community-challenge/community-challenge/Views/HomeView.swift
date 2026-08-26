@@ -261,7 +261,7 @@ struct HomeView: View {
                                     let sectionID = "\(columns[column])\(rows[row])"
                                     let section = gridSection(row: row, column: column)
                                     let isSelected = controller.selectedSectionID == sectionID
-                                    let nestCount = controller.dashboard?.section(row: row, column: column)?.nestCount ?? 0
+                                    let nestCount = controller.dashboard?.section(row: row, column: column)?.activeNestCount ?? 0
                                     
                                     if section?.isActive == true {
                                         Button {
@@ -284,7 +284,7 @@ struct HomeView: View {
                                         }
                                         .buttonStyle(.plain)
                                         .contentShape(Rectangle())
-                                        .accessibilityLabel("Section \(sectionID), \(nestCount) nests")
+                                        .accessibilityLabel("Section \(sectionID), \(nestCount) unhatched nests")
                                     } else {
                                         // Off-sand cells show the photo rather
                                         // than a grey tile: there is no section
@@ -336,7 +336,10 @@ struct HomeView: View {
         VStack(spacing: 0) {
             // The whole row opens the list, not just the chevron -- scoped to
             // the selected section, or the whole hatchery when there is none.
-            Button { openNestList(filter: .all) } label: {
+            // It opens on Unhatched, matching the count on the grid: the list
+            // is reached from the overlay, and the two disagreeing about how
+            // many nests a section holds is the confusing part.
+            Button { openNestList(filter: .unhatched) } label: {
                 overviewHeaderRow
             }
             .buttonStyle(.plain)
