@@ -1924,6 +1924,7 @@
       }
     },
     "Section %@, %lld nests" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1935,6 +1936,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bagian %1$@, %2$lld sarang"
+          }
+        }
+      }
+    },
+    "Section %@, %lld unhatched nests" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Section %1$@, %2$lld unhatched nests"
           }
         }
       }
