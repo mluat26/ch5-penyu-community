@@ -194,7 +194,11 @@ struct NestDetailSheet: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(.black)
-                    .frame(width: 44 * scale, height: 44 * scale)
+                    // Not scaled. `scale` is capped at 1, so scaling a 44pt
+                    // control could only ever take it under Apple's 44pt
+                    // minimum -- 42.3pt on a 375pt phone. Everything around it
+                    // still scales; a touch target is not a drawing.
+                    .frame(width: 44, height: 44)
                     .background(Color(hex: "#E9E9EB"), in: Circle())
             }
             .buttonStyle(.plain)
@@ -227,7 +231,11 @@ struct NestDetailSheet: View {
                 Image(systemName: isEditing ? "checkmark" : "pencil")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(isEditing ? .white : .black)
-                    .frame(width: 44 * scale, height: 44 * scale)
+                    // Not scaled. `scale` is capped at 1, so scaling a 44pt
+                    // control could only ever take it under Apple's 44pt
+                    // minimum -- 42.3pt on a 375pt phone. Everything around it
+                    // still scales; a touch target is not a drawing.
+                    .frame(width: 44, height: 44)
                     .background(
                         isEditing ? Color.accentColor : Color(hex: "#E9E9EB"),
                         in: Circle()
@@ -400,6 +408,12 @@ struct NestDetailSheet: View {
                     .frame(width: 38 * scale, height: 18 * scale)
                     .offset(x: 54.333_333 * CGFloat(index) * scale, y: 1 * scale)
 
+                // The design's circle is 30pt, which is well under the 44pt
+                // minimum. The circle keeps its size and only the target grows
+                // around it, so nothing looks different.
+                let target: CGFloat = 44
+                let grown = (target - 30 * scale) / 2
+
                 Button {
                     selectedDay = day
                 } label: {
@@ -410,9 +424,15 @@ struct NestDetailSheet: View {
                         .background {
                             if isSelected { Circle().fill(Color(hex: "#999999")) }
                         }
+                        .frame(width: target, height: target)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .offset(x: 55.666_664 * CGFloat(index) * scale, y: 27 * scale)
+                // This strip positions by corner, not centre, so the growth is
+                // taken back out -- otherwise every day slides down and right
+                // by half of it. Days sit on 55.67pt centres, so 44pt targets
+                // still clear each other.
+                .offset(x: 55.666_664 * CGFloat(index) * scale - grown, y: 27 * scale - grown)
             }
         }
         .frame(width: 364 * scale, height: 64 * scale, alignment: .topLeading)

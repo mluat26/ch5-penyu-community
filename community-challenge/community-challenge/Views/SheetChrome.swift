@@ -3,6 +3,13 @@ import SwiftUI
 /// Shared sheet framing for hatchery dashboard details.
 struct SheetChrome<Content: View>: View {
     let title: String
+    /// Drawn only when there is something for it to do.
+    ///
+    /// The pencil used to be a bare `Image`: styled as the most prominent
+    /// control on the sheet, carrying an "Edit ..." accessibility label, and
+    /// wired to nothing. VoiceOver announced an action that could not be
+    /// performed, and a sighted reader had a primary button that ignored taps.
+    var onEdit: (() -> Void)? = nil
     @ViewBuilder var content: (CGFloat) -> Content
 
     @Environment(\.dismiss) private var dismiss
@@ -55,16 +62,21 @@ struct SheetChrome<Content: View>: View {
                 .font(.system(size: 17, weight: .semibold))
                 .offset(y: 2)
 
-            Image(systemName: "pencil")
-                .font(.body)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.blue, in: Circle())
+            if let onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.body)
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.blue, in: Circle())
+                        .accessibilityHidden(true)
+                }
+                .buttonStyle(.plain)
                 .glassEffect(.regular, in: .circle)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, horizontalInset)
                 .accessibilityLabel("Edit \(title)")
-                
+            }
         }
         .frame(width: width, height: 44, alignment: .top)
     }
