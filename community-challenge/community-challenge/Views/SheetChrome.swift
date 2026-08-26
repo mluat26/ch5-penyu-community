@@ -26,7 +26,7 @@ struct SheetChrome<Content: View>: View {
                 // white nest cards read as cards; on white they disappeared.
                 Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
-                header(width: sheetWidth)
+                header(width: sheetWidth, scale: contentScale)
                     .frame(height: 54)
                     .offset(y: 11)
 
@@ -37,15 +37,20 @@ struct SheetChrome<Content: View>: View {
         }
     }
 
-    private func header(width: CGFloat) -> some View {
+    private func header(width: CGFloat, scale: CGFloat) -> some View {
         let horizontalInset = max((width - 358) / 2, 0)
+        // Taken back out of the button, because the whole sheet is drawn
+        // through a `scaleEffect` and the nest sheet stacked on top of it is
+        // not. Left alone, an identical 48 here reached the screen ~4pt bigger
+        // than the identical 48 there.
+        let buttonSize = 48 / scale
 
         return ZStack {
             Button(action: dismiss.callAsFunction) {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black)
-                    .frame(width: 48, height: 48)
+                    .frame(width: buttonSize, height: buttonSize)
                     // Sized and surfaced the same way as the nest sheet's
                     // toolbar, which sits directly on top of this one: the
                     // glass is the material, so nothing opaque goes over it.
@@ -67,7 +72,7 @@ struct SheetChrome<Content: View>: View {
                     Image(systemName: "pencil")
                         .font(.body)
                         .foregroundStyle(.white)
-                        .frame(width: 48, height: 48)
+                        .frame(width: buttonSize, height: buttonSize)
                         .glassEffect(.regular.tint(.blue), in: .circle)
                         .accessibilityHidden(true)
                 }
@@ -77,7 +82,7 @@ struct SheetChrome<Content: View>: View {
                 .accessibilityLabel("Edit \(title)")
             }
         }
-        .frame(width: width, height: 48, alignment: .top)
+        .frame(width: width, height: buttonSize, alignment: .top)
     }
 }
 

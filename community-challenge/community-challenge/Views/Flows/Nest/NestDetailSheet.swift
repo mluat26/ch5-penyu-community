@@ -192,7 +192,9 @@ struct NestDetailSheet: View {
         ZStack(alignment: .topLeading) {
             Button(action: onClose) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 17 * scale, weight: .semibold))
+                    // The section sheet's glyph, unscaled like the frame that
+                    // holds it -- the two sit one on top of the other.
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black)
                     // Not scaled. `scale` is capped at 1, so scaling could only
                     // ever take this under Apple's 44pt minimum. Everything
@@ -230,7 +232,7 @@ struct NestDetailSheet: View {
                 // Only the edit-mode confirm is the prominent button variant
                 // (199:3599); the pencil matches the close button (199:3733).
                 Image(systemName: isEditing ? "checkmark" : "pencil")
-                    .font(.system(size: 17 * scale, weight: .semibold))
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(isEditing ? .white : .black)
                     // Not scaled -- see the close button.
                     .frame(width: 48, height: 48)
