@@ -712,6 +712,45 @@ final class NestFlowTests: XCTestCase {
         XCTAssertFalse(nest.isPartiallyHatched)
     }
 
+    /// Temperature is an incubation alert. A logger's last reading survives
+    /// the hatching report, so the alert calculation must explicitly close
+    /// with the nest instead of continuing to warn from stale sensor data.
+    func testTemperatureAlertsOnlyApplyUntilTheNestHasHatched() {
+        var nest = makeNestDashboardItem().nest
+
+        let incubating = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: 34,
+            latestBatteryVoltage: nil
+        )
+        XCTAssertEqual(incubating.temperatureAlert, .outOfRange)
+
+        // Some hatchlings can emerge while the remaining eggs still need
+        // monitoring. Only a final tally sets `eggsUnhatched`.
+        nest.successEggsHatch = 5
+        let partiallyHatched = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: 34,
+            latestBatteryVoltage: nil
+        )
+        XCTAssertEqual(partiallyHatched.temperatureAlert, .outOfRange)
+
+        nest.eggsUnhatched = 10
+        let hatchedWithBadReading = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: 34,
+            latestBatteryVoltage: nil
+        )
+        let hatchedWithNoReading = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: nil,
+            latestBatteryVoltage: nil
+        )
+
+        XCTAssertNil(hatchedWithBadReading.temperatureAlert)
+        XCTAssertNil(hatchedWithNoReading.temperatureAlert)
+    }
+
     /// The hatching-soon queue counts a nest that is already late. Bounding it
     /// at zero would drop exactly the nests that most need a ranger, which is
     /// the failure this asserts against rather than the happy path.

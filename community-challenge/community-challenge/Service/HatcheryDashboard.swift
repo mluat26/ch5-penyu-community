@@ -51,6 +51,10 @@ struct NestDashboardItem: Identifiable, Hashable, Sendable {
     /// and a bad reading are different problems with different fixes, so they
     /// are reported separately rather than collapsed into one warning.
     var temperatureAlert: TemperatureAlert? {
+        // A final hatching tally closes the incubation period. The logger may
+        // keep reporting (or its last reading may remain attached), but neither
+        // missing nor out-of-range data needs action once the nest has hatched.
+        guard !nest.hasHatched else { return nil }
         guard let latestTemperatureC else { return .noData }
         return Self.incubationRange.contains(latestTemperatureC) ? nil : .outOfRange
     }
