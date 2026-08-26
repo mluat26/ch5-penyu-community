@@ -55,6 +55,42 @@ nonisolated enum HatcheryImageProcessor {
         }
     }
 
+    /// Turns a portrait scan a quarter turn so it is drawn landscape, which is
+    /// the shape a hatchery grid is always laid out in -- `HatcherySectionSolver`
+    /// derives rows and columns from the hatchery's metres, so a wide grid ends
+    /// up over a tall photo and the cells stretch to nothing.
+    ///
+    /// Applied where a photo *enters* the scan flow, before the boundary is
+    /// drawn. The outline and the sand polygon are stored as fractions of the
+    /// photo they were drawn on, so rotating afterwards would leave both
+    /// pointing at the wrong edge -- and the grid's active cells with them.
+    /// Doing it first means nothing downstream needs a coordinate transform.
+    ///
+    /// An already-landscape photo comes back untouched, so this is safe to
+    /// apply more than once, and a saved scan is never re-oriented on restore:
+    /// its stored geometry belongs to the shape it was drawn against.
+    ///
+    // ponytail: always clockwise. Which way is up cannot be recovered once
+    // `preparedImage` has flattened EXIF orientation, and a hatchery is not a
+    // scene with a right way round. Offer a rotate control in the scan editor
+    // if anyone ever needs the other one.
+    static func landscapeOriented(_ image: UIImage) -> UIImage {
+        let size = image.size
+        guard size.width > 0, size.height > size.width else { return image }
+
+        let rotatedSize = CGSize(width: size.height, height: size.width)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: rotatedSize, format: format).image { context in
+            // Clockwise: the photo's left edge becomes the top of the result.
+            context.cgContext.translateBy(x: rotatedSize.width, y: 0)
+            context.cgContext.rotate(by: .pi / 2)
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
     /// Takes a small, immutable snapshot on the UI actor before a renderer task
     /// begins. `UIImage` itself never crosses the actor boundary.
     @MainActor
