@@ -27,10 +27,15 @@ final class HatcherySetupFlowTests: XCTestCase {
 
         // The skipped path has no photo, but it must still produce the same
         // section layout once the user confirms the displayed dimensions.
+        //
+        // The numbers are the default 8m x 6m solved against the 4 m² target:
+        // twelve exactly square 2x2 sections. Deliberately spelled out rather
+        // than read back from the solver, which is what generates them --
+        // asserting a value against its own source proves nothing.
         XCTAssertTrue(controller.generateGrid(for: controller.draft.dimension))
-        XCTAssertEqual(controller.draft.grid?.columns, 9)
+        XCTAssertEqual(controller.draft.grid?.columns, 4)
         XCTAssertEqual(controller.draft.grid?.rows, 3)
-        XCTAssertEqual(controller.draft.grid?.activeSectionCount, 27)
+        XCTAssertEqual(controller.draft.grid?.activeSectionCount, 12)
     }
 
     func testConcurrentCompletionCreatesOnlyOneHatchery() async throws {

@@ -22,7 +22,7 @@ struct HatcherySetupDraft {
     /// The same sand outline after it has been mapped into the perspective-
     /// corrected photo shown by the later setup screens.
     var rectifiedSandRegion: HatcherySandRegion?
-    var dimension = HatcheryDimension(widthM: 15, heightM: 7)
+    var dimension = HatcheryDimension(widthM: 8, heightM: 6)
     var grid: HatcheryGrid?
 }
 
