@@ -222,7 +222,7 @@
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Temperature rata-rata"
+            "value" : "Suhu rata-rata"
           }
         }
       }
@@ -736,7 +736,7 @@
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "telur"
+            "value" : "Telur"
           }
         }
       }
