@@ -217,6 +217,9 @@
         }
       }
     },
+    "Average temperature" : {
+
+    },
     "Avg. temperature" : {
       "localizations" : {
         "id" : {
@@ -720,6 +723,9 @@
           }
         }
       }
+    },
+    "Eggs" : {
+
     },
     "Enable camera access in Settings, or select a hatchery photo below." : {
       "comment" : "A description of the user's camera access.",
@@ -1389,6 +1395,12 @@
           }
         }
       }
+    },
+    "Nests" : {
+
+    },
+    "Nests in section" : {
+
     },
     "Next" : {
       "localizations" : {
