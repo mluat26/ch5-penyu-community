@@ -190,7 +190,7 @@ final class HatcherySetupController {
                 sandRegion: draft.sandRegion
               )
         else {
-            errorMessage = "Unable to create a grid for this hatchery."
+            errorMessage = String(localized: "Unable to create a grid for this hatchery.")
             return false
         }
 
@@ -225,7 +225,7 @@ final class HatcherySetupController {
             let sandRegion = draft.sandRegion,
             let grid = draft.grid
         else {
-            errorMessage = "Finish the hatchery setup before saving."
+            errorMessage = String(localized: "Finish the hatchery setup before saving.")
             return nil
         }
 
@@ -241,7 +241,7 @@ final class HatcherySetupController {
         // advance without it. So this fires only when correction genuinely
         // failed, which is worth saying out loud rather than papering over.
         guard let rectifiedPhoto = draft.rectifiedImage else {
-            errorMessage = "This scan could not be flattened. Rescan the hatchery before saving."
+            errorMessage = String(localized: "This scan could not be flattened. Rescan the hatchery before saving.")
             return nil
         }
 

@@ -433,15 +433,21 @@ struct AddNestEggInformationView: View {
         .preferredColorScheme(.light)
     }
 
-    private var inspectionRowLabel: String {
+    private var inspectionRowLabel: LocalizedStringKey {
         controller.draft.inspectionDateMode == .selectDate
             ? "Inspection date will be on"
             : "Inspection date will be in"
     }
 
+    /// One key with the count inside it, rather than a number glued to a
+    /// separately translated word. Languages that inflect the noun with the
+    /// number cannot be served by concatenation.
+    ///
+    /// Stays a `String` because `inspectionPill` also renders a formatted
+    /// date, which must never be looked up as a translation key.
     private var daysPillText: String {
         let days = Int(controller.draft.daysAfterCollection) ?? 0
-        return days == 1 ? "1 day" : "\(days) days"
+        return days == 1 ? String(localized: "1 day") : String(localized: "\(days) days")
     }
 
     private func inspectionPill(_ text: String) -> some View {

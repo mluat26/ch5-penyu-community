@@ -375,7 +375,7 @@ struct HomeView: View {
     /// chevron -- the only thing separating the temperature card from the two
     /// that open the nest list.
     private func overviewCard(
-        title: String,
+        title: LocalizedStringKey,
         value: String,
         unit: String = "",
         valueColor: Color = .black,
@@ -614,7 +614,22 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
         }
     }
     
-    var emptyMessage: String {
+    /// The segment's label, kept apart from `rawValue`.
+    ///
+    /// A raw value is the case's identity -- it backs `id` and the tag the
+    /// picker selects on -- so it cannot also be the translated text without
+    /// the selection changing language along with the label.
+    var label: LocalizedStringKey {
+        switch self {
+        case .all: "All"
+        case .unhatched: "Unhatched"
+        case .hatched: "Hatched"
+        case .hatchingSoon: "Soon"
+        case .inspection: "Inspect"
+        }
+    }
+
+    var emptyMessage: LocalizedStringKey {
         switch self {
         case .all: "No nests here"
         case .hatched: "No hatched nests here"
@@ -803,7 +818,7 @@ private struct SectionOverviewSheet: View {
     private var filterPicker: some View {
         Picker("Show", selection: $filter) {
             ForEach(NestHatchFilter.allCases) { option in
-                Text(option.rawValue).tag(option)
+                Text(option.label).tag(option)
             }
         }
         .pickerStyle(.segmented)
@@ -837,11 +852,14 @@ private struct SectionOverviewSheet: View {
                 
                 Spacer(minLength: 0)
                 
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                // The gap is the stack's, not a space inside the word. A
+                // translator seeing `" eggs"` gets a fragment with a stray
+                // space and no number for context; `"eggs"` is a word.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(item.nest.numberOfEggs)")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.black)
-                    Text(" eggs")
+                    Text("eggs")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(Color(hex: "#8E8E93"))
                 }

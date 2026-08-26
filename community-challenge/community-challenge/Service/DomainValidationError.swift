@@ -18,33 +18,31 @@ enum DomainValidationError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .emptyName:
-            "A name is required."
+            String(localized: "A name is required.")
         case .duplicateHatcheryName:
-            "Name already exists"
+            String(localized: "Name already exists")
         case .invalidDimensions:
-            "Hatchery dimensions and grid counts must be positive."
+            String(localized: "Hatchery dimensions and grid counts must be positive.")
         case .invalidEggCount:
-            "A nest must contain at least one egg."
+            String(localized: "A nest must contain at least one egg.")
         case let .hatcheryNotEmpty(nestCount):
-            "This hatchery still holds \(nestCount) nest\(nestCount == 1 ? "" : "s"). "
-                + "Delete or move them before deleting the hatchery."
+            String(localized: "This hatchery still holds ^[\(nestCount) nest](inflect: true). Delete or move them before deleting the hatchery.")
         case let .resizeWouldStrandNests(count):
-            "\(count) nest\(count == 1 ? "" : "s") would fall outside the smaller grid. "
-                + "Move them to a section that still exists first."
+            String(localized: "^[\(count) nest](inflect: true) would fall outside the smaller grid. Move them to a section that still exists first.")
         case .hatchResultMissingCounts:
-            "Record how many eggs hatched and how many were rotten."
+            String(localized: "Record how many eggs hatched and how many were rotten.")
         case .completeNestNeedsNoNextDate:
-            "A finished nest needs no further inspection."
+            String(localized: "A finished nest needs no further inspection.")
         case .unfinishedInspectionNeedsNextDate:
-            "Set the next inspection date: this nest still has eggs incubating."
+            String(localized: "Set the next inspection date: this nest still has eggs incubating.")
         case .partialHatchNeedsHatchlings:
-            "A partial hatch means at least one egg hatched."
+            String(localized: "A partial hatch means at least one egg hatched.")
         case .nestAlreadyHasDevice:
-            "That nest already has a device. Unassign it first."
+            String(localized: "That nest already has a device. Unassign it first.")
         case .nestAlreadyHatched:
-            "This nest already has a hatching result. Edit it instead."
+            String(localized: "This nest already has a hatching result. Edit it instead.")
         case let .hatchingExceedsClutch(counted, clutchSize):
-            "That totals \(counted) eggs, but the nest holds \(clutchSize)."
+            String(localized: "That totals \(counted) eggs, but the nest holds \(clutchSize).")
         }
     }
 }

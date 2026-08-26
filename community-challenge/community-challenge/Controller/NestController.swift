@@ -46,12 +46,12 @@ final class NestController {
 
     func save() async -> NestEntity? {
         guard let eggCount = Int(draft.numberOfEggs), eggCount > 0 else {
-            errorMessage = "Enter a valid number of eggs."
+            errorMessage = String(localized: "Enter a valid number of eggs.")
             return nil
         }
 
         guard let sectionRow = draft.sectionRow, let sectionColumn = draft.sectionColumn else {
-            errorMessage = "Select a section on the map."
+            errorMessage = String(localized: "Select a section on the map.")
             return nil
         }
 
@@ -180,7 +180,7 @@ final class NestController {
                 UpdateDeviceInput(name: device.name, nestID: nest.id)
             )
         } catch {
-            errorMessage = "Nest saved, but its logger could not be installed: \(error.localizedDescription)"
+            errorMessage = String(localized: "Nest saved, but its logger could not be installed: \(error.localizedDescription)")
         }
     }
 

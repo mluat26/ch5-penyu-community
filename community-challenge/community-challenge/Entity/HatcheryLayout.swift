@@ -547,17 +547,17 @@ nonisolated enum HatcheryLayoutPersistenceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidBoundary:
-            "The saved hatchery boundary is invalid. Please scan it again."
+            String(localized: "The saved hatchery boundary is invalid. Please scan it again.")
         case .invalidGridSnapshot:
-            "The saved hatchery grid is invalid. Please scan it again."
+            String(localized: "The saved hatchery grid is invalid. Please scan it again.")
         case .unsupportedGridSchema:
-            "This hatchery layout needs to be re-scanned before it can be opened."
+            String(localized: "This hatchery layout needs to be re-scanned before it can be opened.")
         case .malformedPhoto:
-            "The saved hatchery photo could not be opened. Please scan it again."
+            String(localized: "The saved hatchery photo could not be opened. Please scan it again.")
         case .missingSourcePhoto:
-            "The saved hatchery photo is missing. Please scan it again."
+            String(localized: "The saved hatchery photo is missing. Please scan it again.")
         case .unexpectedLayoutState:
-            "This hatchery layout is not ready yet. Please try again."
+            String(localized: "This hatchery layout is not ready yet. Please try again.")
         }
     }
 }
