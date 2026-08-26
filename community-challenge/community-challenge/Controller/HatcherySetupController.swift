@@ -87,25 +87,28 @@ final class HatcherySetupController {
         errorMessage = nil
     }
 
-    /// Stores a fresh capture with the whole frame as its starting outline.
+    /// Stores a fresh capture, seeding the outline with what the camera
+    /// detected so the adjust screen opens on the hatchery rather than on the
+    /// whole frame.
     ///
-    /// The camera's detected quad is deliberately not used as the seed. Since
-    /// `confirmBoundary` reads the outline as the plane to straighten, seeding
-    /// it from automatic detection meant pressing the tick without dragging
-    /// accepted whatever the detector had locked onto -- a window frame, a
-    /// floor seam -- and straightened that surface instead of the hatchery.
+    /// The seed is a starting position, never a commitment. `confirmBoundary`
+    /// reads the outline as the plane to straighten, and the outline is drawn
+    /// on screen with draggable handles -- so a detector that locked onto a
+    /// window frame costs one drag to correct, and is visible before anything
+    /// is saved.
     ///
-    /// Starting from the whole frame makes the two ways in behave identically:
-    /// accepting without dragging applies no correction and keeps the photo as
-    /// taken, and any correction is one somebody asked for by moving corners.
-    func storeCapturedImage(_ image: UIImage) {
+    /// The library-import path has no equivalent and starts from the whole
+    /// frame instead: an arbitrary photo has no hatchery in it, so running the
+    /// still detector over it produced confident nonsense rather than a useful
+    /// starting point.
+    func storeCapturedImage(_ image: UIImage, boundary: HatcheryBoundary) {
         resetPreparedSourcePhoto()
         draft.image = image
         draft.rectifiedImage = nil
         draft.usesMockImage = false
         draft.isAwaitingScan = false
-        draft.boundary = .fullImage
-        draft.sandRegion = .default(from: .fullImage)
+        draft.boundary = boundary
+        draft.sandRegion = .default(from: boundary)
         draft.rectifiedSandRegion = nil
         draft.grid = nil
         errorMessage = nil
@@ -113,21 +116,46 @@ final class HatcherySetupController {
 
     /// The outline someone drew, read as the hatchery's plane.
     ///
-    /// Nil unless it has exactly four corners. A plane needs four; a polygon
-    /// with more describes an irregular sand shape that no single perspective
-    /// correction can flatten, and one with fewer is not a shape at all.
+    /// The four extreme corners of the polygon, which is the heuristic a
+    /// document scanner uses: `x + y` is smallest at the top-left and largest
+    /// at the bottom-right, `x - y` largest at the top-right and smallest at
+    /// the bottom-left.
     ///
-    /// The order is the order `HatcherySandRegion(boundary:)` writes and
-    /// `moveVertex` preserves -- top-left, top-right, bottom-right,
-    /// bottom-left -- so dragging corners keeps the correspondence.
+    /// For a four-corner outline these are simply its own corners, so a
+    /// rectangular hatchery flattens exactly as before. The reason to derive
+    /// them is everything else: a real hatchery is an oval concrete ring or an
+    /// irregular plot behind mesh, traced with as many points as the curve
+    /// needs, and requiring exactly four meant adding a fifth point silently
+    /// switched perspective correction off altogether.
+    ///
+    /// Deriving the roles from position also stops the stored order from
+    /// lying. Dragging the top-left handle past the top-right one used to
+    /// leave the labels in place while the quad crossed itself, which
+    /// `isValid` then refused -- so a corner could be moved into a shape that
+    /// could no longer be flattened.
     private static func plane(from outline: HatcherySandRegion) -> HatcheryBoundary? {
-        guard outline.points.count == 4 else { return nil }
+        let points = outline.points
+        guard let first = points.first else { return nil }
+
+        // Strict comparison, so ties keep the earliest point and the result
+        // does not depend on iteration order. A shape that ties on every axis
+        // -- a square rotated 45 degrees -- collapses to a degenerate quad,
+        // which `isValid` rejects below rather than handing a broken
+        // transform to `CIPerspectiveCorrection`.
+        func corner(
+            by score: (NormalizedPoint) -> Double,
+            preferring isBetter: (Double, Double) -> Bool
+        ) -> NormalizedPoint {
+            points.dropFirst().reduce(first) { best, point in
+                isBetter(score(point), score(best)) ? point : best
+            }
+        }
 
         let candidate = HatcheryBoundary(
-            topLeft: outline.points[0],
-            topRight: outline.points[1],
-            bottomRight: outline.points[2],
-            bottomLeft: outline.points[3]
+            topLeft: corner(by: { $0.x + $0.y }, preferring: <),
+            topRight: corner(by: { $0.x - $0.y }, preferring: >),
+            bottomRight: corner(by: { $0.x + $0.y }, preferring: >),
+            bottomLeft: corner(by: { $0.x - $0.y }, preferring: <)
         )
         return candidate.isValid ? candidate : nil
     }
