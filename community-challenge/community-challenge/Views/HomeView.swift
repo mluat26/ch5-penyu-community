@@ -812,8 +812,6 @@ private struct NestListScope: Identifiable, Hashable {
     let sectionID: String?
     let title: String
     let averageTemperatureC: Double?
-    let nestCount: Int
-    let totalEggs: Int
     let sections: [HatcherySectionDashboard]
     
     /// The style is part of the identity. Without it, reopening the same
@@ -835,8 +833,6 @@ private struct NestListScope: Identifiable, Hashable {
         sectionID = section.id
         title = "Section \(section.id)"
         averageTemperatureC = section.averageTemperatureC
-        nestCount = section.nestCount
-        totalEggs = section.totalEggs
         sections = [section]
     }
     
@@ -844,8 +840,6 @@ private struct NestListScope: Identifiable, Hashable {
         sectionID = nil
         title = dashboard.hatchery.name
         averageTemperatureC = dashboard.overview.averageTemperatureC
-        nestCount = dashboard.overview.nestCount
-        totalEggs = dashboard.overview.totalEggs
         sections = dashboard.sections
     }
 }
@@ -963,10 +957,19 @@ private struct SectionOverviewSheet: View {
             )
             .frame(width: 151, height: 85, alignment: .topLeading)
             
-            sheetSummaryValue(title: "Nests", value: String(scope.nestCount))
+            // Counted off `rows`, the same filtered array the list below
+            // renders, so the header cannot describe a population that is not
+            // on screen. Temperature stays scope-wide: it belongs to the sand,
+            // not to whichever nests are being listed.
+            sheetSummaryValue(title: "Nests", value: String(rows.count))
                 .frame(width: 97.5, height: 85, alignment: .top)
             
-            sheetSummaryValue(title: "Eggs", value: groupedNumber(scope.totalEggs))
+            // Clutch size, the number the nest cards show, so the tile means
+            // one thing on every filter.
+            sheetSummaryValue(
+                title: "Eggs",
+                value: groupedNumber(rows.reduce(0) { $0 + $1.item.nest.numberOfEggs })
+            )
                 .frame(width: 97.5, height: 85, alignment: .top)
         }
         .frame(width: 370, height: 85, alignment: .top)

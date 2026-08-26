@@ -171,9 +171,12 @@ struct NestSectionPickerView: View {
                     width: 177
                 )
 
+                // The nests still in the sand, matching the grid badge this
+                // screen is picking from -- a hatched nest has been dug out,
+                // so it is not occupying the section a new nest would go in.
                 selectionMetric(
-                    title: "Registered nests",
-                    value: selectedSectionDashboard.map { String($0.nestCount) } ?? "—",
+                    title: "Nests in section",
+                    value: selectedSectionDashboard.map { String($0.activeNestCount) } ?? "—",
                     unit: nil,
                     color: .black,
                     valueWeight: .semibold,
