@@ -39,26 +39,7 @@ struct HomeView: View {
     
     
     private var hatchery: HatcherySessionState { controller.sessionState }
-    
-    /// The photo's drawn size inside the fixed container: its own aspect
-    /// ratio, fitted, never cropped and never stretched. Centred by the
-    /// enclosing `ZStack`, so leftover space is even on both sides.
-    ///
-    /// `rectification` crops the corrected photo to the sand region's bounding
-    /// box, so its shape is whatever was dragged. `scaledToFill` used to crop
-    /// the sand back off to cover the container while the cell grid still
-    /// spanned the whole thing, and the sections stopped landing on the sand
-    /// they came from. The grid is sized to this rect too, so the two cannot
-    /// disagree. Space left over shows the container's own sage fill, which was
-    /// always painted behind the photo.
-    private func photoFit(in box: CGSize) -> CGSize {
-        let size = hatchery.rectifiedPhoto.size
-        guard size.width > 0, size.height > 0, box.width > 0, box.height > 0 else {
-            return box
-        }
-        let scale = min(box.width / size.width, box.height / size.height)
-        return CGSize(width: size.width * scale, height: size.height * scale)
-    }
+
     private var columns: [String] { hatchery.grid.columnLabels }
     private var rows: [String] { hatchery.grid.rowLabels }
     
@@ -192,13 +173,13 @@ struct HomeView: View {
     }
     
     private func hatcheryGrid(width: CGFloat, height: CGFloat) -> some View {
-        let photo = photoFit(in: CGSize(width: width, height: height))
         // Drawn on every active cell now, so it has to fit the smallest one.
         // A nine-column grid gives roughly 19pt cells; the design's fixed 35pt
         // circle overflowed them and each row fused into one white bar.
+        // Measured against the container, which the photo now fills exactly.
         let badgeDiameter = min(35, min(
-            (photo.width - 16 - 2 * CGFloat(columns.count - 1)) / CGFloat(max(columns.count, 1)),
-            (photo.height - 16 - 2 * CGFloat(rows.count - 1)) / CGFloat(max(rows.count, 1))
+            (width - 16 - 2 * CGFloat(columns.count - 1)) / CGFloat(max(columns.count, 1)),
+            (height - 16 - 2 * CGFloat(rows.count - 1)) / CGFloat(max(rows.count, 1))
         ) - 6)
         
         return VStack(spacing: 10) {
@@ -221,9 +202,9 @@ struct HomeView: View {
                 // and I past the ends of the grid. The 8pt inset is the
                 // lattice's own, so the cells divide identically.
                 .padding(.horizontal, 8)
-                .frame(width: photo.width)
+                .frame(width: width)
             }
-            .frame(width: photo.width + 21, height: 16, alignment: .leading)
+            .frame(width: width + 21, height: 16, alignment: .leading)
 
             HStack(spacing: 12) {
                 VStack(spacing: 0) {
@@ -236,8 +217,8 @@ struct HomeView: View {
                     }
                 }
                 .padding(.vertical, 8)
-                .frame(width: 9, height: photo.height, alignment: .top)
-                
+                .frame(width: 9, height: height, alignment: .top)
+
                 ZStack {
                     // Transparent, not sage. The container is fixed so the
                     // layout below never moves, which means a photo that does
@@ -247,11 +228,17 @@ struct HomeView: View {
                     // as content.
                     RoundedRectangle(cornerRadius: 24)
                         .fill(Color.clear)
-                    
+
+                    // Stretched to the container, not fitted or cropped.
+                    // After `rectification` the photo *is* the hatchery plane
+                    // seen square-on, so mapping it onto the card is a valid
+                    // presentation whatever the card's shape -- and the cell
+                    // grid fills the identical rect, so the two stay in step.
+                    // Real proportions live in the typed dimensions, not in
+                    // the photo's pixels.
                     Image(uiImage: hatchery.rectifiedPhoto)
                         .resizable()
-                        .scaledToFit()
-                        .frame(width: photo.width, height: photo.height)
+                        .frame(width: width, height: height)
                         .accessibilityLabel("Photo of \(hatchery.hatchery.name)")
                     
                     VStack(spacing: 2) {
@@ -305,25 +292,22 @@ struct HomeView: View {
                             }
                         }
                     }
-                    .frame(
-                        width: max(0, photo.width - 16),
-                        height: max(0, photo.height - 16)
-                    )
+                    .padding(8)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     if showCoachMask {
-                        coachMask(size: photo)
+                        coachMask(size: CGSize(width: width, height: height))
                     }
                 }
-                // Width follows the photo so the row labels sit beside it
-                // rather than beside the container's empty edge. Height stays
+                // The photo fills the container, so this is simply the
+                // container plus the label gutter. Height stays
                 // the container's: that is what keeps the overview cards and
                 // the Add-nest button from moving when a scan's shape differs.
-                .frame(width: photo.width, height: height)
+                .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
             }
-            .frame(width: photo.width + 21, height: height, alignment: .leading)
+            .frame(width: width + 21, height: height, alignment: .leading)
         }
-        .frame(width: photo.width + 21, alignment: .leading)
+        .frame(width: width + 21, alignment: .leading)
         // Centres the photo rather than the block. The 21 pt row-label gutter
         // is inside this frame, so centring the frame alone would leave the
         // photo half a gutter right of centre -- which is what it looked like.

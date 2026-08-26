@@ -250,16 +250,6 @@ struct NestSectionPickerView: View {
 
 private struct NestSectionMapView: View {
 
-    /// The photo's drawn size when fitted inside `box`: its own aspect ratio,
-    /// never cropped, never stretched.
-    static func fittedPhotoSize(for imageSize: CGSize, in box: CGSize) -> CGSize {
-        guard imageSize.width > 0, imageSize.height > 0,
-              box.width > 0, box.height > 0
-        else { return box }
-
-        let scale = min(box.width / imageSize.width, box.height / imageSize.height)
-        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-    }
 
     let image: UIImage
     let usesMockCrop: Bool
@@ -308,20 +298,14 @@ private struct NestSectionMapView: View {
                 .frame(width: 9, height: 279)
 
                 GeometryReader { geometry in
-                    // The cell grid is sized to the photo's fitted rect, not to
-                    // the box. Filling the box cropped the photo while the grid
-                    // still spanned the whole thing, so the cells you tapped
-                    // were not the sand you were looking at.
-                    let photo = Self.fittedPhotoSize(
-                        for: image.size,
-                        in: geometry.size
-                    )
-
                     ZStack {
+                        // Stretched to the box, so the cell grid below fills
+                        // the identical rect and a tapped cell is always the
+                        // sand under it.
                         HatcherySetupImage(
                             image: image,
                             usesMockCrop: usesMockCrop,
-                            contentMode: .fit
+                            contentMode: .stretch
                         )
 
                         VStack(spacing: 2) {
@@ -335,7 +319,7 @@ private struct NestSectionMapView: View {
                             }
                         }
                         .padding(8)
-                        .frame(width: photo.width, height: photo.height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))

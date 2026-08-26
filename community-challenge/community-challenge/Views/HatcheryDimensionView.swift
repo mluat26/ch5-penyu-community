@@ -76,13 +76,7 @@ struct HatcheryDimensionView: View {
                         // and crop rules intact; only its visible canvas gets
                         // shorter. No additional scale effect or altered
                         // aspect mode is applied to the image.
-                        .frame(
-                            width: photoBoxWidth(
-                                forHeight: photoHeight,
-                                maximum: contentWidth
-                            ),
-                            height: photoHeight
-                        )
+                        .frame(width: contentWidth, height: photoHeight)
 
                     Spacer().frame(height: photoToFormSpacing)
 
@@ -119,49 +113,29 @@ struct HatcheryDimensionView: View {
         }
     }
 
-    /// The photo card's width: the image's own aspect ratio at the fixed card
-    /// height, never wider than the content width.
-    ///
-    /// The height stays fixed so the dimension form below never moves. The card
-    /// narrows instead, which is what removes the white plate either side of a
-    /// tall scan. `rectification` crops the corrected photo to the sand
-    /// region's bounding box, so a tall narrow sand area genuinely produces a
-    /// tall narrow photo -- `scaledToFill` used to hide that by cropping it
-    /// back to a wide box, which is what read as a zoom.
-    ///
-    /// The skipped-scan grid keeps the full width: it draws section geometry
-    /// rather than a photo, so it has no aspect ratio to respect.
-    private func photoBoxWidth(forHeight height: CGFloat, maximum: CGFloat) -> CGFloat {
-        guard showsCapturedImage else { return maximum }
-
-        let size = image.size
-        guard size.width > 0, size.height > 0 else { return maximum }
-        return min(maximum, height * size.width / size.height)
-    }
-
     private var photo: some View {
         ZStack {
             Color.white
 
             if showsCapturedImage {
-                // Fitted, not filled. `scaledToFill` cropped the photo to
-                // cover this box, which reads as an unexplained zoom whenever
-                // the photo's shape does not match it -- and there is nothing
-                // to gain by hiding part of the scan on the screen that asks
-                // you to describe it.
+                // Stretched to the card. The rectified photo is the hatchery
+                // plane seen square-on, so its pixel aspect is an artefact of
+                // the outline rather than a proportion worth preserving --
+                // and filling the card keeps the layout fixed with no plate
+                // around the photo.
                 HatcherySetupImage(
                     image: image,
                     usesMockCrop: usesMockImage,
-                    contentMode: .fit
+                    contentMode: .stretch
                 )
 
-                // Same mode as the photo. A fitted photo under a fill-mode
-                // mapper would draw the sand outline somewhere the sand is not.
+                // Same mode as the photo, or the sand outline lands somewhere
+                // the sand is not.
                 HatcherySandRegionOverlay(
                     region: .constant(sandRegion),
                     imageSize: image.size,
                     isEditable: false,
-                    contentMode: .fit
+                    contentMode: .stretch
                 )
                 .clipShape(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)

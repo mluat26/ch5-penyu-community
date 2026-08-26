@@ -55,6 +55,14 @@ struct HatcherySetupImage: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: geometry.size.width, height: geometry.size.height)
+                case .stretch:
+                    // No aspect modifier: `resizable` alone fills the frame
+                    // exactly, distorting if the shapes differ. Correct for a
+                    // rectified scan, whose pixel aspect is an artefact of the
+                    // outline rather than a real proportion.
+                    Image(uiImage: image)
+                        .resizable()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
                 }
             }
         }
