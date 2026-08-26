@@ -22,7 +22,10 @@ struct HatcherySetupDraft {
     /// The same sand outline after it has been mapped into the perspective-
     /// corrected photo shown by the later setup screens.
     var rectifiedSandRegion: HatcherySandRegion?
-    var dimension = HatcheryDimension(widthM: 15, heightM: 7)
+    /// What a new hatchery starts at, before anyone types over it. Only the
+    /// create flow sees this -- editing an existing hatchery overwrites it from
+    /// the saved row in `init`.
+    var dimension = HatcheryDimension(widthM: 8, heightM: 6)
     var grid: HatcheryGrid?
 }
 

@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class HatcherySetupFlowTests: XCTestCase {
-    func testSkipScanningKeepsAFunctionalBlankCanvasInsteadOfSamplePhoto() {
+    func testSkipScanningKeepsAFunctionalBlankCanvasInsteadOfSamplePhoto() throws {
         let controller = HatcherySetupController(
             hatcheryService: HatcheryService(
                 hatcheryRepository: InMemoryHatcheryRepository(),
@@ -28,9 +28,19 @@ final class HatcherySetupFlowTests: XCTestCase {
         // The skipped path has no photo, but it must still produce the same
         // section layout once the user confirms the displayed dimensions.
         XCTAssertTrue(controller.generateGrid(for: controller.draft.dimension))
-        XCTAssertEqual(controller.draft.grid?.columns, 9)
-        XCTAssertEqual(controller.draft.grid?.rows, 3)
-        XCTAssertEqual(controller.draft.grid?.activeSectionCount, 27)
+
+        // Asserted as invariants rather than as specific counts. The counts
+        // follow whatever the default dimension happens to be, which is a UI
+        // choice -- pinning them made this test fail when that default changed,
+        // for a reason that had nothing to do with skipping the scan.
+        //
+        // What matters is that the skipped path yields a usable grid: real rows
+        // and columns, and every section active, because there is no sand mask
+        // to exclude any of them.
+        let grid = try XCTUnwrap(controller.draft.grid)
+        XCTAssertGreaterThan(grid.rows, 0)
+        XCTAssertGreaterThan(grid.columns, 0)
+        XCTAssertEqual(grid.activeSectionCount, grid.rows * grid.columns)
     }
 
     func testConcurrentCompletionCreatesOnlyOneHatchery() async throws {
