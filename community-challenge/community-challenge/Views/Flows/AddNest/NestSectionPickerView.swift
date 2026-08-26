@@ -163,7 +163,7 @@ struct NestSectionPickerView: View {
 
             HStack(spacing: 10) {
                 selectionMetric(
-                    title: "Average temperature",
+                    title: String(localized: "Average temperature"),
                     value: temperatureText,
                     unit: temperatureText == "—" ? nil : "°C",
                     color: Color(hex: "#0C7C4D"),
@@ -175,7 +175,7 @@ struct NestSectionPickerView: View {
                 // screen is picking from -- a hatched nest has been dug out,
                 // so it is not occupying the section a new nest would go in.
                 selectionMetric(
-                    title: "Nests in section",
+                    title: String(localized: "Nests in section"),
                     value: selectedSectionDashboard.map { String($0.activeNestCount) } ?? "—",
                     unit: nil,
                     color: .black,
@@ -191,6 +191,7 @@ struct NestSectionPickerView: View {
     }
 
     private func selectionMetric(
+        /// Localized by the caller -- see `sheetSummaryValue`.
         title: String,
         value: String,
         unit: String?,

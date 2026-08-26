@@ -949,7 +949,7 @@ private struct SectionOverviewSheet: View {
     private var summary: some View {
         HStack(alignment: .top, spacing: 12) {
             sheetSummaryValue(
-                title: "Average temperature",
+                title: String(localized: "Average temperature"),
                 value: temperatureText(scope.averageTemperatureC),
                 unit: "°C",
                 valueColor: Color(hex: "#0C7C4D"),
@@ -961,13 +961,13 @@ private struct SectionOverviewSheet: View {
             // renders, so the header cannot describe a population that is not
             // on screen. Temperature stays scope-wide: it belongs to the sand,
             // not to whichever nests are being listed.
-            sheetSummaryValue(title: "Nests", value: String(rows.count))
+            sheetSummaryValue(title: String(localized: "Nests"), value: String(rows.count))
                 .frame(width: 97.5, height: 85, alignment: .top)
             
             // Clutch size, the number the nest cards show, so the tile means
             // one thing on every filter.
             sheetSummaryValue(
-                title: "Eggs",
+                title: String(localized: "Eggs"),
                 value: groupedNumber(rows.reduce(0) { $0 + $1.item.nest.numberOfEggs })
             )
                 .frame(width: 97.5, height: 85, alignment: .top)
