@@ -805,6 +805,37 @@ final class NestFlowTests: XCTestCase {
         )
     }
 
+    /// The grid overlay is read to decide where a nest can go, so its badge
+    /// counts what still occupies the sand. `nestCount` keeps reporting
+    /// everything the section has held.
+    func testOverlayCountsOnlyTheNestsStillInTheSand() {
+        var hatched = makeNestDashboardItem().nest
+        hatched.eggsUnhatched = 10
+
+        // Hatchlings out but no final tally yet -- still incubating, so it
+        // still occupies its section.
+        var partial = makeNestDashboardItem().nest
+        partial.successEggsHatch = 5
+
+        let section = HatcherySectionDashboard(
+            id: "A1",
+            row: 0,
+            column: 0,
+            averageTemperatureC: nil,
+            nestCount: 3,
+            totalEggs: 300,
+            nextHatchDate: nil,
+            nests: [
+                makeNestDashboardItem(),
+                NestDashboardItem(nest: partial, latestTemperatureC: nil, latestBatteryVoltage: nil),
+                NestDashboardItem(nest: hatched, latestTemperatureC: nil, latestBatteryVoltage: nil),
+            ]
+        )
+
+        XCTAssertEqual(section.activeNestCount, 2)
+        XCTAssertEqual(section.nestCount, 3)
+    }
+
     private func makeNestDashboardItem() -> NestDashboardItem {
         NestDashboardItem(
             nest: NestEntity(

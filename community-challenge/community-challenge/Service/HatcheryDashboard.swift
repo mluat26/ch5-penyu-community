@@ -69,6 +69,16 @@ struct HatcherySectionDashboard: Identifiable, Hashable, Sendable {
     var totalEggs: Int
     var nextHatchDate: Date?
     var nests: [NestDashboardItem]
+
+    /// What is still in the sand. A hatched nest has been dug out and tallied,
+    /// so counting it on the grid overlay reports occupancy that is not there
+    /// -- the overlay is read to decide where a nest can go.
+    ///
+    /// Kept beside `nestCount` rather than replacing it: the section sheet and
+    /// the picker still report everything the section has held.
+    var activeNestCount: Int {
+        nests.filter { !$0.nest.hasHatched }.count
+    }
 }
 
 struct HatcheryDashboard: Identifiable, Hashable, Sendable {

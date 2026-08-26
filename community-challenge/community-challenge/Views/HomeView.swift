@@ -261,7 +261,7 @@ struct HomeView: View {
                                     let sectionID = "\(columns[column])\(rows[row])"
                                     let section = gridSection(row: row, column: column)
                                     let isSelected = controller.selectedSectionID == sectionID
-                                    let nestCount = controller.dashboard?.section(row: row, column: column)?.nestCount ?? 0
+                                    let nestCount = controller.dashboard?.section(row: row, column: column)?.activeNestCount ?? 0
                                     
                                     if section?.isActive == true {
                                         Button {
@@ -284,7 +284,7 @@ struct HomeView: View {
                                         }
                                         .buttonStyle(.plain)
                                         .contentShape(Rectangle())
-                                        .accessibilityLabel("Section \(sectionID), \(nestCount) nests")
+                                        .accessibilityLabel("Section \(sectionID), \(nestCount) unhatched nests")
                                     } else {
                                         // Off-sand cells show the photo rather
                                         // than a grey tile: there is no section
@@ -336,7 +336,10 @@ struct HomeView: View {
         VStack(spacing: 0) {
             // The whole row opens the list, not just the chevron -- scoped to
             // the selected section, or the whole hatchery when there is none.
-            Button { openNestList(filter: .all) } label: {
+            // It opens on Unhatched, matching the count on the grid: the list
+            // is reached from the overlay, and the two disagreeing about how
+            // many nests a section holds is the confusing part.
+            Button { openNestList(filter: .unhatched) } label: {
                 overviewHeaderRow
             }
             .buttonStyle(.plain)
@@ -809,8 +812,6 @@ private struct NestListScope: Identifiable, Hashable {
     let sectionID: String?
     let title: String
     let averageTemperatureC: Double?
-    let nestCount: Int
-    let totalEggs: Int
     let sections: [HatcherySectionDashboard]
     
     /// The style is part of the identity. Without it, reopening the same
@@ -832,8 +833,6 @@ private struct NestListScope: Identifiable, Hashable {
         sectionID = section.id
         title = "Section \(section.id)"
         averageTemperatureC = section.averageTemperatureC
-        nestCount = section.nestCount
-        totalEggs = section.totalEggs
         sections = [section]
     }
     
@@ -841,8 +840,6 @@ private struct NestListScope: Identifiable, Hashable {
         sectionID = nil
         title = dashboard.hatchery.name
         averageTemperatureC = dashboard.overview.averageTemperatureC
-        nestCount = dashboard.overview.nestCount
-        totalEggs = dashboard.overview.totalEggs
         sections = dashboard.sections
     }
 }
@@ -952,7 +949,7 @@ private struct SectionOverviewSheet: View {
     private var summary: some View {
         HStack(alignment: .top, spacing: 12) {
             sheetSummaryValue(
-                title: "Average temperature",
+                title: String(localized: "Average temperature"),
                 value: temperatureText(scope.averageTemperatureC),
                 unit: "°C",
                 valueColor: Color(hex: "#0C7C4D"),
@@ -960,10 +957,19 @@ private struct SectionOverviewSheet: View {
             )
             .frame(width: 151, height: 85, alignment: .topLeading)
             
-            sheetSummaryValue(title: "Nests", value: String(scope.nestCount))
+            // Counted off `rows`, the same filtered array the list below
+            // renders, so the header cannot describe a population that is not
+            // on screen. Temperature stays scope-wide: it belongs to the sand,
+            // not to whichever nests are being listed.
+            sheetSummaryValue(title: String(localized: "Nests"), value: String(rows.count))
                 .frame(width: 97.5, height: 85, alignment: .top)
             
-            sheetSummaryValue(title: "Eggs", value: groupedNumber(scope.totalEggs))
+            // Clutch size, the number the nest cards show, so the tile means
+            // one thing on every filter.
+            sheetSummaryValue(
+                title: String(localized: "Eggs"),
+                value: groupedNumber(rows.reduce(0) { $0 + $1.item.nest.numberOfEggs })
+            )
                 .frame(width: 97.5, height: 85, alignment: .top)
         }
         .frame(width: 370, height: 85, alignment: .top)
@@ -1071,7 +1077,13 @@ private struct SectionOverviewSheet: View {
             
             HStack(spacing: 12) {
                 NestStatusPill.temperature(item.latestTemperatureC)
-                NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+                // A countdown to an event that has happened. The predicted
+                // date outlives the hatching -- it is what the nest was
+                // created with -- so the pill has to close with the nest
+                // rather than wait for the date to stop being computable.
+                if !item.nest.hasHatched {
+                    NestStatusPill.hatchCountdown(days: item.nest.daysUntilHatch)
+                }
                 
                 Spacer(minLength: 0)
                 

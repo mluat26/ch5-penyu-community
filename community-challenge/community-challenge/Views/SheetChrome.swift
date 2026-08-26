@@ -87,6 +87,10 @@ struct SheetChrome<Content: View>: View {
 }
 
 func sheetSummaryValue(
+    /// Localize at the call site with `String(localized:)`. A literal handed to
+    /// a custom parameter is invisible to the extractor whatever the parameter
+    /// is typed as -- it reads SwiftUI's own initializers and `String(localized:)`,
+    /// not this one.
     title: String,
     value: String,
     unit: String = "",

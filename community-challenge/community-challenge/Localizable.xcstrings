@@ -217,6 +217,16 @@
         }
       }
     },
+    "Average temperature" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suhu rata-rata"
+          }
+        }
+      }
+    },
     "Avg. temperature" : {
       "localizations" : {
         "id" : {
@@ -717,6 +727,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "telur"
+          }
+        }
+      }
+    },
+    "Eggs" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telur"
           }
         }
       }
@@ -1390,6 +1410,26 @@
         }
       }
     },
+    "Nests" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sarang"
+          }
+        }
+      }
+    },
+    "Nests in section" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sarang di bagian ini"
+          }
+        }
+      }
+    },
     "Next" : {
       "localizations" : {
         "id" : {
@@ -1924,6 +1964,7 @@
       }
     },
     "Section %@, %lld nests" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1935,6 +1976,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bagian %1$@, %2$lld sarang"
+          }
+        }
+      }
+    },
+    "Section %@, %lld unhatched nests" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Section %1$@, %2$lld unhatched nests"
           }
         }
       }
