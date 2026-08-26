@@ -31,6 +31,12 @@ final class BucketTagScanner: NSObject {
     enum Failure: LocalizedError {
         case unsupported
         case notABucketTag
+        /// Carries what actually went wrong, rather than collapsing every
+        /// failure into one sentence. Three different faults -- a tag Core NFC
+        /// cannot read, a read that errored, a payload with no UUID -- all
+        /// looked identical on screen, which is why diagnosing this took
+        /// guesswork instead of evidence.
+        case unreadable(String)
 
         var errorDescription: String? {
             switch self {
@@ -38,6 +44,8 @@ final class BucketTagScanner: NSObject {
                 "This iPhone cannot scan NFC tags."
             case .notABucketTag:
                 "That tag does not carry a bucket's sensor ID."
+            case .unreadable(let detail):
+                detail
             }
         }
     }
@@ -47,14 +55,14 @@ final class BucketTagScanner: NSObject {
     /// scanning simply does not exist.
     static var isSupported: Bool {
         #if canImport(CoreNFC)
-        return NFCTagReaderSession.readingAvailable
+        return NFCNDEFReaderSession.readingAvailable
         #else
         return false
         #endif
     }
 
     #if canImport(CoreNFC)
-    private var session: NFCTagReaderSession?
+    private var session: NFCNDEFReaderSession?
     private var continuation: CheckedContinuation<UUID, any Error>?
     #endif
 
@@ -73,20 +81,27 @@ final class BucketTagScanner: NSObject {
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
 
-            // `NFCTagReaderSession`, not `NFCNDEFReaderSession`. App Store
-            // Connect rejects an NDEF-format entitlement built against this
-            // SDK -- "NDEF is disallowed ... TAG is missing" -- so the
-            // entitlement is `TAG`, and that format only authorises the tag
-            // reader. The payload is still read as NDEF off the tag below;
-            // only the session type changed.
-            let session = NFCTagReaderSession(
-                pollingOption: [.iso14443, .iso15693, .iso18092],
+            // `NFCNDEFReaderSession`, not `NFCTagReaderSession`.
+            //
+            // The tag reader is what the `TAG` entitlement authorises, and
+            // `TAG` is what App Store Connect requires on this SDK -- but it
+            // silently filters out MIFARE Classic, which is what the tags in
+            // hand are. The scan sheet opened and then ignored the tag
+            // entirely: no callback, no error, nothing to diagnose.
+            //
+            // This session reads NDEF from Classic because iOS handles that
+            // case itself. It works on the hardware that exists today, at the
+            // cost of an entitlement App Store Connect rejects. NTAG213/215/216
+            // tags would satisfy both; until there are some, working beats
+            // uploadable.
+            let session = NFCNDEFReaderSession(
                 delegate: self,
-                queue: .main
+                queue: .main,
+                invalidateAfterFirstRead: true
             )
-            session?.alertMessage = "Hold your iPhone near the tag on the bucket."
+            session.alertMessage = "Hold your iPhone near the tag on the bucket."
             self.session = session
-            session?.begin()
+            session.begin()
         }
         #else
         throw Failure.unsupported
@@ -114,52 +129,40 @@ final class BucketTagScanner: NSObject {
 }
 
 #if canImport(CoreNFC)
-extension BucketTagScanner: NFCTagReaderSessionDelegate {
-    nonisolated func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
-
-    nonisolated func tagReaderSession(
-        _ session: NFCTagReaderSession,
-        didDetect tags: [NFCTag]
+extension BucketTagScanner: NFCNDEFReaderSessionDelegate {
+    nonisolated func readerSession(
+        _ session: NFCNDEFReaderSession,
+        didDetectNDEFs messages: [NFCNDEFMessage]
     ) {
-        guard let tag = tags.first, let ndefTag = Self.ndefTag(from: tag) else {
-            session.invalidate(errorMessage: Failure.notABucketTag.localizedDescription)
-            MainActor.assumeIsolated { finish(.failure(Failure.notABucketTag)) }
-            return
-        }
+        // Parsed before hopping actors so only a `UUID` crosses.
+        let sensorID = Self.sensorID(in: messages)
 
-        // Connect, then read. Every step reports through the same two paths --
-        // a sensor ID, or an invalidation carrying the reason -- so a tag that
-        // is present but unreadable cannot leave the sheet hanging.
-        session.connect(to: tag) { error in
-            if let error {
-                session.invalidate(errorMessage: error.localizedDescription)
-                MainActor.assumeIsolated { self.finish(.failure(error)) }
+        MainActor.assumeIsolated {
+            guard let sensorID else {
+                // Names what was actually on the tag. Three different faults
+                // used to read as one sentence, which is what made this take
+                // guesswork instead of evidence.
+                let found = messages
+                    .flatMap(\.records)
+                    .map { "tnf \($0.typeNameFormat.rawValue)" }
+                    .joined(separator: ", ")
+                let failure = Failure.unreadable(
+                    found.isEmpty
+                        ? "That tag is empty."
+                        : "That tag holds no sensor ID (\(found))."
+                )
+                session.invalidate(errorMessage: failure.localizedDescription)
+                finish(.failure(failure))
                 return
             }
 
-            ndefTag.readNDEF { message, error in
-                guard
-                    let message,
-                    let sensorID = Self.sensorID(in: [message])
-                else {
-                    session.invalidate(
-                        errorMessage: Failure.notABucketTag.localizedDescription
-                    )
-                    MainActor.assumeIsolated {
-                        self.finish(.failure(error ?? Failure.notABucketTag))
-                    }
-                    return
-                }
-
-                session.alertMessage = "Bucket detected."
-                session.invalidate()
-                MainActor.assumeIsolated { self.finish(.success(sensorID)) }
-            }
+            session.alertMessage = "Bucket detected."
+            finish(.success(sensorID))
         }
     }
 
-    nonisolated func tagReaderSession(
-        _ session: NFCTagReaderSession,
+    nonisolated func readerSession(
+        _ session: NFCNDEFReaderSession,
         didInvalidateWithError error: any Error
     ) {
         MainActor.assumeIsolated {
@@ -176,53 +179,67 @@ extension BucketTagScanner: NFCTagReaderSessionDelegate {
         }
     }
 
-    /// The NDEF face of whichever tag technology was polled. Every case here
-    /// conforms to `NFCNDEFTag`; a technology that does not is not a bucket tag.
-    private nonisolated static func ndefTag(from tag: NFCTag) -> (any NFCNDEFTag)? {
-        switch tag {
-        case .miFare(let tag): return tag
-        case .iso7816(let tag): return tag
-        case .iso15693(let tag): return tag
-        case .feliCa(let tag): return tag
-        @unknown default: return nil
-        }
-    }
-
     private nonisolated static func sensorID(in messages: [NFCNDEFMessage]) -> UUID? {
         for message in messages {
             for record in message.records {
-                guard
-                    let value = uuidString(in: record),
-                    let sensorID = UUID(uuidString: value)
-                else { continue }
-                return sensorID
+                if let sensorID = payloadText(of: record).flatMap(sensorID(inText:)) {
+                    return sensorID
+                }
             }
         }
         return nil
     }
 
-    private nonisolated static func uuidString(in record: NFCNDEFPayload) -> String? {
-        let trimmed: String?
+    /// The first UUID anywhere in the payload.
+    ///
+    /// Not `UUID(uuidString:)` on the whole string. A tag written by hand or by
+    /// an off-the-shelf writer carries something like
+    /// `penyu:sensor:<uuid>` -- readable, and useful to whoever writes it -- and
+    /// parsing the whole payload rejected that outright. What identifies the
+    /// logger is the UUID; anything wrapped around it is a label.
+    nonisolated static func sensorID(inText text: String) -> UUID? {
+        let pattern = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        guard
+            let range = text.range(of: pattern, options: .regularExpression)
+        else { return nil }
+
+        return UUID(uuidString: String(text[range]))
+    }
+
+    /// The text a record carries, for the formats a writer might reasonably use.
+    ///
+    /// `.nfcExternal` is what this app writes: namespaced, so a foreign tag is
+    /// refused before the database is asked about it. The other two are what an
+    /// off-the-shelf writer produces -- a Well-Known Text record, or a
+    /// `text/plain` MIME record -- and both are accepted so the first tags can
+    /// be written before a provisioning screen exists. Narrower than it looks:
+    /// the payload still has to contain a UUID that names a device this account
+    /// can see.
+    private nonisolated static func payloadText(of record: NFCNDEFPayload) -> String? {
+        let raw: String?
 
         switch record.typeNameFormat {
         case .nfcExternal:
             guard
                 String(data: record.type, encoding: .utf8) == BucketTagFormat.recordType
             else { return nil }
-            trimmed = String(data: record.payload, encoding: .utf8)
+            raw = String(data: record.payload, encoding: .utf8)
 
         case .nfcWellKnown:
-            // Text records are read as well so the first tags can be written
-            // with an off-the-shelf NFC writer before a provisioning screen
-            // exists. Narrower than it looks: the payload still has to parse
-            // as a UUID and still has to name a device this account can see.
-            trimmed = record.wellKnownTypeTextPayload().0
+            raw = record.wellKnownTypeTextPayload().0
+
+        case .media:
+            guard
+                let mime = String(data: record.type, encoding: .utf8),
+                mime.hasPrefix("text/")
+            else { return nil }
+            raw = String(data: record.payload, encoding: .utf8)
 
         default:
             return nil
         }
 
-        return trimmed?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 #endif
