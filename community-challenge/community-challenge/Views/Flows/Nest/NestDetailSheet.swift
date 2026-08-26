@@ -186,7 +186,7 @@ struct NestDetailSheet: View {
         }
     }
 
-    // MARK: - Toolbar (166:3251 — 44pt buttons at x16 / x330, title x177/y13)
+    // MARK: - Toolbar (166:3251 — 48pt buttons (44 in Figma) at x16 / x330, title x177/y13)
 
     private func toolbar(scale: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
@@ -194,12 +194,13 @@ struct NestDetailSheet: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(.black)
-                    // Not scaled. `scale` is capped at 1, so scaling a 44pt
-                    // control could only ever take it under Apple's 44pt
-                    // minimum -- 42.3pt on a 375pt phone. Everything around it
-                    // still scales; a touch target is not a drawing.
-                    .frame(width: 44, height: 44)
-                    .background(Color(hex: "#E9E9EB"), in: Circle())
+                    // Not scaled. `scale` is capped at 1, so scaling could only
+                    // ever take this under Apple's 44pt minimum. Everything
+                    // around it still scales; a touch target is not a drawing.
+                    .frame(width: 48, height: 48)
+                    // The material, not a fill over it: an opaque background
+                    // here covers the glass and the button reads flat grey.
+                    .glassEffect(.regular, in: .circle)
             }
             .buttonStyle(.plain)
             .offset(x: 16 * scale)
@@ -231,14 +232,13 @@ struct NestDetailSheet: View {
                 Image(systemName: isEditing ? "checkmark" : "pencil")
                     .font(.system(size: 17 * scale, weight: .semibold))
                     .foregroundStyle(isEditing ? .white : .black)
-                    // Not scaled. `scale` is capped at 1, so scaling a 44pt
-                    // control could only ever take it under Apple's 44pt
-                    // minimum -- 42.3pt on a 375pt phone. Everything around it
-                    // still scales; a touch target is not a drawing.
-                    .frame(width: 44, height: 44)
-                    .background(
-                        isEditing ? Color.accentColor : Color(hex: "#E9E9EB"),
-                        in: Circle()
+                    // Not scaled -- see the close button.
+                    .frame(width: 48, height: 48)
+                    // Confirm stays the prominent variant, but as a tint the
+                    // glass carries rather than a fill laid over it.
+                    .glassEffect(
+                        isEditing ? .regular.tint(.accentColor) : .regular,
+                        in: .circle
                     )
             }
             .buttonStyle(.plain)
@@ -1093,3 +1093,14 @@ struct NestTemperatureDegreeAxis: View {
 }
 
 
+
+/// The whole sheet, presented the way the app presents it.
+///
+/// Reuses the measurement harness's `nest-detail` case rather than rebuilding
+/// the fixtures: it already wires the controllers, and a preview that built its
+/// own copy would drift from the screen being measured.
+#if DEBUG
+#Preview("Nest detail") {
+    FigmaMeasurementHarness.view(for: "nest-detail")
+}
+#endif

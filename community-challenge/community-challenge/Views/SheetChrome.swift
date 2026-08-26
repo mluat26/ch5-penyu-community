@@ -45,14 +45,14 @@ struct SheetChrome<Content: View>: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(.black)
+                    .frame(width: 48, height: 48)
+                    // Sized and surfaced the same way as the nest sheet's
+                    // toolbar, which sits directly on top of this one: the
+                    // glass is the material, so nothing opaque goes over it.
+                    .glassEffect(.regular, in: .circle)
                     .accessibilityHidden(true)
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
-            .tint(.white)
-            .frame(width: 44, height: 44)
-            .glassEffect(.regular, in: .circle)
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, horizontalInset)
             .accessibilityLabel("Close \(title)")
@@ -67,18 +67,17 @@ struct SheetChrome<Content: View>: View {
                     Image(systemName: "pencil")
                         .font(.body)
                         .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.blue, in: Circle())
+                        .frame(width: 48, height: 48)
+                        .glassEffect(.regular.tint(.blue), in: .circle)
                         .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular, in: .circle)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, horizontalInset)
                 .accessibilityLabel("Edit \(title)")
             }
         }
-        .frame(width: width, height: 44, alignment: .top)
+        .frame(width: width, height: 48, alignment: .top)
     }
 }
 
