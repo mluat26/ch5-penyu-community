@@ -3,6 +3,10 @@ import SwiftUI
 /// Shared sheet framing for hatchery dashboard details.
 struct SheetChrome<Content: View>: View {
     let title: String
+    /// The trailing pencil. Decorative everywhere it appears -- a bare `Image`
+    /// with nothing behind it -- so a sheet that has nothing to edit turns it
+    /// off rather than offering a control that does nothing when tapped.
+    var showsEditButton = true
     @ViewBuilder var content: (CGFloat) -> Content
 
     @Environment(\.dismiss) private var dismiss
@@ -55,15 +59,17 @@ struct SheetChrome<Content: View>: View {
                 .font(.system(size: 17, weight: .semibold))
                 .offset(y: 2)
 
-            Image(systemName: "pencil")
-                .font(.body)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.blue, in: Circle())
-                .glassEffect(.regular, in: .circle)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, horizontalInset)
-                .accessibilityLabel("Edit \(title)")
+            if showsEditButton {
+                Image(systemName: "pencil")
+                    .font(.body)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.blue, in: Circle())
+                    .glassEffect(.regular, in: .circle)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, horizontalInset)
+                    .accessibilityLabel("Edit \(title)")
+            }
                 
         }
         .frame(width: width, height: 44, alignment: .top)
