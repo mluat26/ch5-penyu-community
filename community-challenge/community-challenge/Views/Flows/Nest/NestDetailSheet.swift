@@ -202,7 +202,7 @@ struct NestDetailSheet: View {
                     .frame(width: 48, height: 48)
                     // The material, not a fill over it: an opaque background
                     // here covers the glass and the button reads flat grey.
-                    .glassEffect(.regular, in: .circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
             .offset(x: 16 * scale)
@@ -239,7 +239,9 @@ struct NestDetailSheet: View {
                     // Confirm stays the prominent variant, but as a tint the
                     // glass carries rather than a fill laid over it.
                     .glassEffect(
-                        isEditing ? .regular.tint(.accentColor) : .regular,
+                        isEditing
+                            ? .regular.tint(.accentColor).interactive()
+                            : .regular.interactive(),
                         in: .circle
                     )
             }
