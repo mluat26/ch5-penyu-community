@@ -85,14 +85,21 @@ struct HomeView: View {
                     
                     // Placing a nest needs a mapped grid to place it on, so
                     // the design dims this to 30% until the scan exists.
+                    // Figma puts this at y=786 on an 874pt canvas -- anchored
+                    // near the bottom with the slack above it, not pinned a
+                    // fixed gap under the cards. `minLength` keeps a sensible
+                    // separation on a short screen, where the slack runs out.
+                    Spacer(minLength: 24)
+
                     HatcheryPrimaryButton(title: "Add new nest", action: onAddNest)
                         .disabled(!hatchery.hasBeenScanned)
                         .opacity(hatchery.hasBeenScanned ? 1 : 0.3)
                         .frame(width: contentWidth, height: 55)
-                        .padding(.top, 36)
+                        .padding(.bottom, 33)
                         .padding(.leading, 16)
                 }
                 .frame(width: screenWidth, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .top)
                 
                 hatcherySelectorTapTarget(screenWidth: screenWidth)
             }
@@ -103,6 +110,7 @@ struct HomeView: View {
         .preferredColorScheme(.light)
         .sheet(item: $presentedScope) { scope in
             SectionOverviewSheet(
+                style: scope.style,
                 scope: scope,
                 filter: $presentedFilter,
                 container: container,
@@ -229,16 +237,21 @@ struct HomeView: View {
                     RoundedRectangle(cornerRadius: 24)
                         .fill(Color.clear)
 
-                    // Stretched to the container, not fitted or cropped.
-                    // After `rectification` the photo *is* the hatchery plane
-                    // seen square-on, so mapping it onto the card is a valid
-                    // presentation whatever the card's shape -- and the cell
-                    // grid fills the identical rect, so the two stay in step.
-                    // Real proportions live in the typed dimensions, not in
-                    // the photo's pixels.
+                    // Figma 286:4832 covers the 349 x 279 card edge to edge and
+                    // clips it to the card's radius, so the photo fills rather
+                    // than stretches: no bars, and no squashing when the scan
+                    // is a different shape to the card.
+                    //
+                    // The cost is the crop. A scan far from 349:279 loses its
+                    // outer edge, and the cell grid still spans the whole card,
+                    // so the outermost cells cover sand that was cropped away.
+                    // Everything inside stays aligned, which is where the nests
+                    // are -- but a very wide hatchery is the case to watch.
                     Image(uiImage: hatchery.rectifiedPhoto)
                         .resizable()
+                        .scaledToFill()
                         .frame(width: width, height: height)
+                        .clipped()
                         .accessibilityLabel("Photo of \(hatchery.hatchery.name)")
                     
                     VStack(spacing: 2) {
@@ -327,7 +340,7 @@ struct HomeView: View {
                 overviewHeaderRow
             }
             .buttonStyle(.plain)
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 overviewCard(
                     title: "Avg. temperature",
                     value: temperatureText(
@@ -349,9 +362,12 @@ struct HomeView: View {
                 )
             }
             .frame(height: 104)
-            .padding(.top, 24)
+            .padding(.top, 15)
+
+            alertSection
+                .padding(.top, 15)
         }
-        .frame(width: width, height: 172, alignment: .top)
+        .frame(width: width, alignment: .top)
         .padding(.horizontal, 16)
     }
     
@@ -436,10 +452,19 @@ struct HomeView: View {
         return controller.dashboard.map(NestListScope.init(dashboard:))
     }
     
-    private func openNestList(filter: NestHatchFilter) {
+    /// The style travels inside `presentedScope`, never beside it.
+    ///
+    /// A sibling `@State` read from inside the `.sheet` closure returns the
+    /// value captured in that closure's copy of the view -- the one from before
+    /// this tap -- so an alert opened a sheet still carrying the previous
+    /// style. `AppRootView` documents the same trap on its rescan cover.
+    private func openNestList(
+        filter: NestHatchFilter,
+        style: SectionOverviewSheet.Style = .full
+    ) {
         guard let currentScope else { return }
         presentedFilter = filter
-        presentedScope = currentScope
+        presentedScope = currentScope.presented(as: style)
     }
     
     /// The same scope rebuilt from the freshly loaded dashboard.
@@ -466,6 +491,153 @@ struct HomeView: View {
     }
     
     
+    /// Every nest in scope that is warning about its temperature, with the
+    /// section and position needed to name it.
+    ///
+    /// Ordinals count within the nest's own section and before any filtering,
+    /// which is the same rule `NestEntity.displayNumber` and the list sheet
+    /// follow -- a nest must not answer to a different number depending on
+    /// which screen is asking.
+    private var alertingNests: [(
+        sectionID: String,
+        ordinal: Int,
+        item: NestDashboardItem,
+        alert: NestDashboardItem.TemperatureAlert
+    )] {
+        let sections = selectedSection.map { [$0] } ?? controller.dashboard?.sections ?? []
+
+        return sections.flatMap { section in
+            section.nests.enumerated().compactMap { offset, item in
+                item.temperatureAlert.map {
+                    (section.id, offset + 1, item, $0)
+                }
+            }
+        }
+    }
+
+    /// Figma 288:5352 stacks both bars when both apply, and 288:4983 shows the
+    /// calm bar when neither does -- so there is always exactly one answer on
+    /// screen rather than an empty space that could mean either.
+    @ViewBuilder
+    private var alertSection: some View {
+        let alerting = alertingNests
+        let outOfRange = alerting.filter { $0.alert == .outOfRange }
+        let noData = alerting.filter { $0.alert == .noData }
+
+        VStack(spacing: 10) {
+            if outOfRange.isEmpty, noData.isEmpty {
+                calmBar
+            } else {
+                if !outOfRange.isEmpty {
+                    alertBar(
+                        tint: Color(hex: "#FF3B30"),
+                        title: "Temperature out of range",
+                        caption: countCaption(
+                            outOfRange.count,
+                            ending: "with a temperature warning"
+                        )
+                    )
+                }
+
+                if !noData.isEmpty {
+                    alertBar(
+                        tint: Color(hex: "#FF9500"),
+                        title: "No temperature data",
+                        caption: countCaption(
+                            noData.count,
+                            ending: "with no temperature"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var calmBar: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color(hex: "#2E7D5B"))
+                .accessibilityHidden(true)
+
+            Text("No temperature alerts")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .opacity(0.8)
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(height: 55)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color(hex: "#2E7D5B").opacity(0.1),
+            in: RoundedRectangle(cornerRadius: 24)
+        )
+    }
+
+    /// Names one nest rather than a count alone: "3 nests" tells a ranger there
+    /// is a problem, "B1 - Nest #04 - 34.0" tells them where to walk.
+    /// "There is 1 nest ..." / "There are 3 nests ...", so the whole sentence
+    /// agrees rather than only the noun.
+    private func countCaption(_ count: Int, ending: String) -> String {
+        let subject = count == 1 ? "is 1 nest" : "are \(count) nests"
+        return "There \(subject) \(ending)"
+    }
+
+    private func alertBar(
+        tint: Color,
+        title: String,
+        caption: String
+    ) -> some View {
+        Button {
+            openNestList(filter: .all, style: .listOnly)
+        } label: {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tint)
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        Image(systemName: "exclamationmark")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.black.opacity(0.8))
+
+                    Text(caption)
+                        .font(.footnote)
+                        .foregroundStyle(Color(hex: "#757575"))
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 4) {
+                    Text("View list")
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+
+                    Image(systemName: "chevron.right")
+                        .font(.footnote)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Color(hex: "#0C7C4D"))
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 24))
+            .contentShape(RoundedRectangle(cornerRadius: 24))
+        }
+        .buttonStyle(.plain)
+    }
+
+
     /// `.plain` hit-tests rendered content, and most of this row is the gap
     /// between the text and the chevron -- `.contentShape` makes that gap part
     /// of the target rather than a dead strip down the middle.
@@ -615,6 +787,9 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
 /// flat nest array so ordinals stay section-relative -- a nest keeps the number
 /// it has in its own section however the list was opened.
 private struct NestListScope: Identifiable, Hashable {
+    /// How the sheet should draw this scope. Carried here rather than in a
+    /// sibling `@State` so the `.sheet` closure cannot read a stale one.
+    var style: SectionOverviewSheet.Style = .full
     /// Nil for the whole hatchery.
     let sectionID: String?
     let title: String
@@ -623,7 +798,20 @@ private struct NestListScope: Identifiable, Hashable {
     let totalEggs: Int
     let sections: [HatcherySectionDashboard]
     
-    var id: String { sectionID ?? "hatchery" }
+    /// The style is part of the identity. Without it, reopening the same
+    /// scope in the other style hands `.sheet(item:)` an unchanged id and it
+    /// keeps the sheet it already has.
+    var id: String {
+        let scope = sectionID ?? "hatchery"
+        return style == .full ? scope : "\(scope)-list"
+    }
+
+    /// The same scope, drawn the given way.
+    func presented(as style: SectionOverviewSheet.Style) -> NestListScope {
+        var copy = self
+        copy.style = style
+        return copy
+    }
     
     init(section: HatcherySectionDashboard) {
         sectionID = section.id
@@ -645,6 +833,23 @@ private struct NestListScope: Identifiable, Hashable {
 }
 
 private struct SectionOverviewSheet: View {
+    /// How much of the sheet is drawn, and what a row shows on its right.
+    ///
+    /// `.listOnly` is what the two temperature alerts open. Arriving from a
+    /// warning, the summary restates numbers the warning already made the
+    /// point of, and the filter is not the axis you came to browse -- so the
+    /// list gets that space, and rows carry the nest's section, because an
+    /// alert spans every section and the section is where to walk.
+    ///
+    /// Everything else opens `.full`: you chose a scope deliberately, so the
+    /// summary describes it and the filter narrows it.
+    var style: SectionOverviewSheet.Style = .full
+
+    enum Style {
+        case full
+        case listOnly
+    }
+
     let scope: NestListScope
     /// Owned by the host so a card can open this sheet already filtered. Held
     /// as `@State` here, the initial value would have to be assigned after the
@@ -655,7 +860,6 @@ private struct SectionOverviewSheet: View {
     let onNestDeleted: () async -> Void
     let onNestChanged: () async -> Void
     let onReturnToHatchery: () -> Void
-    
     @State private var selectedNest: NestDetailSelection?
     
     /// Ordinals are assigned before filtering, never after, and always within
@@ -676,17 +880,24 @@ private struct SectionOverviewSheet: View {
     }
     
     var body: some View {
-        SheetChrome(title: scope.title) { sheetWidth in
-            summary
-                .frame(width: 370, height: 85, alignment: .top)
-                .offset(x: (sheetWidth - 370) / 2, y: 71)
-            
-            filterPicker
-                .frame(width: 371)
-                .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
-            
+        // Nothing on this sheet is editable -- the nests are opened, not
+        // changed here -- so the chrome's pencil is turned off.
+        SheetChrome(title: scope.title, showsEditButton: false) { sheetWidth in
+            if style == .full {
+                summary
+                    .frame(width: 370, height: 85, alignment: .top)
+                    .offset(x: (sheetWidth - 370) / 2, y: 71)
+
+                filterPicker
+                    .frame(width: 371)
+                    .offset(x: ceil((sheetWidth - 371) / 2), y: 167)
+            }
+
             nestList
-                .offset(x: ceil((sheetWidth - 371) / 2), y: 207)
+                .offset(
+                    x: ceil((sheetWidth - 371) / 2),
+                    y: style == .full ? 207 : 71
+                )
         }
         .sheet(item: $selectedNest) { selection in
             NestDetailSheet(
@@ -720,6 +931,9 @@ private struct SectionOverviewSheet: View {
         }
     }
     
+    
+
+
     private var summary: some View {
         HStack(alignment: .top, spacing: 12) {
             sheetSummaryValue(
@@ -739,7 +953,16 @@ private struct SectionOverviewSheet: View {
         }
         .frame(width: 370, height: 85, alignment: .top)
     }
-    
+
+    private var filterPicker: some View {
+        Picker("Show", selection: $filter) {
+            ForEach(NestHatchFilter.allCases) { option in
+                Text(option.rawValue).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
     private var nestList: some View {
         // Figma 199:3473 makes the list 371x508 at y=167 in the 713pt sheet:
         // four 118pt cards with 12pt gutters, so four fit without scrolling.
@@ -770,7 +993,7 @@ private struct SectionOverviewSheet: View {
                                 sectionID: row.sectionID
                             )
                         } label: {
-                            nestRow(row.item, ordinal: row.ordinal)
+                            nestRow(row.item, ordinal: row.ordinal, sectionID: row.sectionID)
                         }
                         .buttonStyle(.plain)
                     }
@@ -780,22 +1003,16 @@ private struct SectionOverviewSheet: View {
         // Four or fewer nests fill the list exactly, so leave those sections
         // feeling fixed rather than springy.
         .scrollBounceBehavior(.basedOnSize)
-        // 40pt shorter than before: the picker above took that space.
-        .frame(width: 371, height: 468)
+        // `.listOnly` starts where the summary would have, so it reclaims the
+        // 136pt the summary and the filter picker occupy in `.full`.
+        .frame(width: 371, height: style == .full ? 468 : 604)
     }
     
-    private var filterPicker: some View {
-        Picker("Show", selection: $filter) {
-            ForEach(NestHatchFilter.allCases) { option in
-                Text(option.rawValue).tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-    }
     
     private func nestRow(
         _ item: NestDashboardItem,
-        ordinal: Int
+        ordinal: Int,
+        sectionID: String
     ) -> some View {
         VStack(spacing: 20) {
             HStack {
@@ -805,13 +1022,35 @@ private struct SectionOverviewSheet: View {
                 
                 Spacer(minLength: 0)
                 
-                // A logger with no battery reading needs servicing rather than
-                // opening, so Figma swaps the chevron for a wrench. The
-                // battery pill itself is not on the card.
-                Image(systemName: item.batteryLevel == nil ? "wrench.and.screwdriver" : "chevron.right")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Color(hex: "#8E8E93"))
-                    .accessibilityHidden(true)
+                if style == .listOnly {
+                    // What the battery pill occupies in the full sheet. An
+                    // alert list spans every section, so the section is what
+                    // tells a ranger where to walk -- a charge percentage does
+                    // not.
+                    Text(sectionID)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#0C7C4D"))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            Color(hex: "#0C7C4D").opacity(0.1),
+                            in: Capsule()
+                        )
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                        .accessibilityHidden(true)
+                } else {
+                    // A logger with no battery reading needs servicing rather
+                    // than opening, so Figma swaps the chevron for a wrench.
+                    Image(systemName: item.batteryLevel == nil
+                          ? "wrench.and.screwdriver"
+                          : "chevron.right")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(Color(hex: "#8E8E93"))
+                        .accessibilityHidden(true)
+                }
             }
             .frame(height: 36)
             
