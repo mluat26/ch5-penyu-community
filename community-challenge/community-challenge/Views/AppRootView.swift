@@ -40,6 +40,12 @@ struct AppRootView: View {
     /// Owned here rather than derived from `hasLoaded`, because the launch
     /// screen has to outlive the signal that ends it -- the exit animation
     /// plays after the data has already arrived.
+    ///
+    /// Re-armed by `beginLoadingScreen()` on every account boundary. Left as a
+    /// launch-only flag it dismissed after the first load and never returned,
+    /// so signing into an existing account dropped straight to the bare
+    /// `Color.appOffWhite` placeholder below -- a blank beige screen for the
+    /// whole of that account's first query.
     @State private var isShowingLaunchScreen = true
     /// Held here so the loading animation's progress survives the branch
     /// switches below. Inside the view it was reset by every one of them.
@@ -234,6 +240,7 @@ struct AppRootView: View {
             nonce: nonce,
             fullName: fullName
         )
+        beginLoadingScreen()
         await hatcheryListController.load()
 
         guard hatcheryListController.hasSuccessfulLoad else {
@@ -246,6 +253,7 @@ struct AppRootView: View {
     /// leaves the empty-account route and opens what the person just joined.
     private func joinWithCode(_ code: String) async throws {
         try await container.redeemInvite(code: code)
+        beginLoadingScreen()
         await hatcheryListController.load()
         isShowingOnboarding = false
 
@@ -257,7 +265,22 @@ struct AppRootView: View {
     /// The session the dashboard was built on is gone — signed out or deleted.
     /// Clear the active hatchery and reload, which drops the app back to the
     /// welcome route under whatever identity comes next.
+    /// Puts the launch screen back for a wait that is about to start.
+    ///
+    /// Only on account boundaries, never derived from `hasScreenBehindLaunch`
+    /// going false: that dips briefly while switching hatcheries, and covering
+    /// the screen for it would read as the app restarting mid-session.
+    private func beginLoadingScreen() {
+        loadingPhase = AppLoadingPhase()
+        isShowingLaunchScreen = true
+        // An account boundary invalidates whatever the previous one was in the
+        // middle of opening, so the next hatchery starts from a clean slate
+        // rather than inheriting `.opening` or `.failed`.
+        initialHatcheryOpeningState = .idle
+    }
+
     private func endActiveAccount() {
+        beginLoadingScreen()
         session.activeHatchery = nil
         initialHatcheryOpeningState = .idle
         activeSessionRevision = UUID()
@@ -359,12 +382,28 @@ struct AppRootView: View {
         }
 
         initialHatcheryOpeningState = .opening
+
         guard let firstSession = await hatcheryListController.firstSession() else {
-            guard !Task.isCancelled else { return }
+            // Cancelled is not failed. Returning while still `.opening` left
+            // the state permanently mid-flight: this function only runs from
+            // `.idle`, so it could never try again, and `hasScreenBehindLaunch`
+            // reads `.failed` -- so the loading screen never exited either.
+            //
+            // `.task(id: firstHatchery.id)` cancels whenever that id changes,
+            // which is what deleting an account and joining a new organization
+            // does, so the stall only showed up in that flow.
+            guard !Task.isCancelled else {
+                initialHatcheryOpeningState = .idle
+                return
+            }
             initialHatcheryOpeningState = .failed
             return
         }
-        guard !Task.isCancelled else { return }
+
+        guard !Task.isCancelled else {
+            initialHatcheryOpeningState = .idle
+            return
+        }
         activateHatchery(firstSession)
     }
 
