@@ -16,6 +16,28 @@ final class NestFlowTests: XCTestCase {
         )
     }
 
+    func testUnknownNFCDeviceUsesRegistrationMessage() {
+        let message = NestController.bucketScanErrorMessage(
+            for: RepositoryError.notFound(resource: "Device", id: UUID())
+        )
+
+        XCTAssertEqual(
+            message,
+            "This NFC device is not registered."
+        )
+        XCTAssertFalse(message.contains("UUID"))
+        XCTAssertFalse(message.contains("was not found"))
+    }
+
+    func testAssignedNFCDeviceUsesAlreadyBeingUsedMessage() {
+        let message = NestController.deviceAlreadyInUseMessage(name: "DEMO-2")
+
+        XCTAssertEqual(
+            message,
+            "DEMO-2 is already being used by another nest. Finish or delete that nest before using this device again."
+        )
+    }
+
     /// Reproduces the reported bug directly: a brand-new nest, mode already
     /// defaulted to "after X days", untouched by the user. `inspectionDate`
     /// used to sit at whatever the sample struct happened to hardcode --

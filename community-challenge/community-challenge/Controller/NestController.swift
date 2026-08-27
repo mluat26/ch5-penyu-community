@@ -114,9 +114,9 @@ final class NestController {
     /// record that matters -- the logger is an attachment to it. So every
     /// failure lands in `bucketScanMessage` and the draft stays saveable.
     ///
-    /// A tag that names a logger this account cannot see reads as unregistered,
-    /// because `device_current_assignment` is owner-scoped: the same message
-    /// covers "no such device" and "not yours", and neither can be fixed here.
+    /// Devices are shared through `organization_id`, so any member of the same
+    /// organization can resolve and use the tag. A UUID that the shared view
+    /// cannot resolve reads simply as unregistered.
     func scanBucketTag() async {
         guard !isScanningTag else { return }
         bucketScanMessage = nil
@@ -136,9 +136,7 @@ final class NestController {
             let device = try await deviceService.device(id: sensorID)
 
             guard device.nestID == nil else {
-                bucketScanMessage =
-                    "That logger is already installed in another nest. "
-                    + "Record the hatch there first, or use a different bucket."
+                bucketScanMessage = Self.deviceAlreadyInUseMessage(name: device.name)
                 return
             }
 
@@ -150,8 +148,29 @@ final class NestController {
             // The scan sheet was dismissed. A deliberate action needs no
             // error message.
         } catch {
-            bucketScanMessage = error.localizedDescription
+            bucketScanMessage = Self.bucketScanErrorMessage(for: error)
         }
+    }
+
+    /// NFC errors should describe the action the ranger can take, not expose a
+    /// repository type and a UUID. An inaccessible device is intentionally the
+    /// same as an absent one under RLS, so both read as "not registered" here.
+    nonisolated static func bucketScanErrorMessage(for error: any Error) -> String {
+        if let repositoryError = error as? RepositoryError,
+           case let .notFound(resource, _) = repositoryError,
+           resource == "Device" {
+            return String(
+                localized: "This NFC device is not registered."
+            )
+        }
+
+        return error.localizedDescription
+    }
+
+    nonisolated static func deviceAlreadyInUseMessage(name: String) -> String {
+        String(
+            localized: "\(name) is already being used by another nest. Finish or delete that nest before using this device again."
+        )
     }
 
     /// Assigns the scanned logger to this nest.
