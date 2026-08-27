@@ -35,28 +35,21 @@ struct NestDashboardItem: Identifiable, Hashable, Sendable {
         case outOfRange
     }
 
-    /// The range a clutch is expected to sit in.
-    ///
-    /// Decided here rather than in the firmware. A logger is sealed in a bucket
-    /// under sand, so a threshold baked into it could only be changed by
-    /// digging every one of them up and reflashing; here it is one constant,
-    /// and past readings re-classify against it the moment it changes.
-    ///
-    /// ponytail: 26-33 degrees, which brackets the pivotal temperature near 29
-    /// where the sex ratio turns, with losses climbing past about 34. Narrow it
-    /// once there is field data from this beach to fit it against.
-    static let incubationRange: ClosedRange<Double> = 26...33
-
     /// Nil when the nest is fine. `noData` outranks nothing -- a silent logger
     /// and a bad reading are different problems with different fixes, so they
-    /// are reported separately rather than collapsed into one warning.
+    /// are reported separately rather than collapsed into one warning. The
+    /// critical judgement comes from `NestTemperature`, the same source used
+    /// by every temperature pill and chart; a second range here previously
+    /// disagreed at 32–33 °C.
     var temperatureAlert: TemperatureAlert? {
         // A final hatching tally closes the incubation period. The logger may
         // keep reporting (or its last reading may remain attached), but neither
         // missing nor out-of-range data needs action once the nest has hatched.
         guard !nest.hasHatched else { return nil }
         guard let latestTemperatureC else { return .noData }
-        return Self.incubationRange.contains(latestTemperatureC) ? nil : .outOfRange
+        return NestTemperature.isCritical(temperatureC: latestTemperatureC)
+            ? .outOfRange
+            : nil
     }
 }
 

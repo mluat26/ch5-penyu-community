@@ -18,7 +18,6 @@ struct HomeView: View {
     var onScanHatchery: (() -> Void)?
     
     @State private var presentedScope: NestListScope?
-    @State private var presentedFilter: NestHatchFilter = .all
     
     /// Hatcheries whose coach mask was dismissed in this session. `UserDefaults`
     /// is not observable, so this set is what re-renders the grid after the tap;
@@ -48,6 +47,15 @@ struct HomeView: View {
             let screenWidth = min(geometry.size.width, 402)
             let contentWidth = min(max(screenWidth - 32, 0), 370)
             let gridWidth = max(contentWidth - 21, 0)
+            // Two alert rows add 65pt over the ordinary one-row state. The
+            // grid's column labels also sit 26pt above its declared photo
+            // height, so the ordinary top offsets force the primary button
+            // below an 874pt phone. Reclaim only flexible space when both
+            // alert kinds are present; every card and button keeps its size.
+            let hasStackedAlerts = hatcheryTemperatureAlertKindCount > 1
+            let headerTopPadding: CGFloat = hasStackedAlerts ? 80 : 87
+            let dashboardGap: CGFloat = hasStackedAlerts ? 10 : 25
+            let minimumButtonGap: CGFloat = hasStackedAlerts ? 0 : 24
             // A fixed container, deliberately. The photo is fitted and
             // centred inside it, so a small or oddly shaped sand area changes
             // nothing below: the overview cards and the Add-nest button stay
@@ -60,7 +68,7 @@ struct HomeView: View {
                 
                 VStack(alignment: .leading, spacing: 0) {
                     header(screenWidth: screenWidth)
-                        .padding(.top, 87)
+                        .padding(.top, headerTopPadding)
                     // The scanned grid below draws outside its own bounds
                     // (`scaledToFill` on the photo), and a sibling drawn
                     // later still takes the touches there. Without this the
@@ -70,18 +78,18 @@ struct HomeView: View {
                     
                     if hatchery.hasBeenScanned {
                         hatcheryGrid(width: gridWidth, height: gridHeight)
-                            .padding(.top, 25)
+                            .padding(.top, dashboardGap)
                     } else {
                         // Figma 175:3792. A skipped scan still has a valid
                         // grid, so without this the dashboard draws a blank
                         // rectangle that reads as a loading failure.
                         HatcheryScanPrompt(onScan: { onScanHatchery?() })
-                            .padding(.top, 25)
+                            .padding(.top, dashboardGap)
                             .padding(.leading, 16)
                     }
                     
                     overview(width: contentWidth)
-                        .padding(.top, 25)
+                        .padding(.top, dashboardGap)
                     
                     // Placing a nest needs a mapped grid to place it on, so
                     // the design dims this to 30% until the scan exists.
@@ -89,7 +97,7 @@ struct HomeView: View {
                     // near the bottom with the slack above it, not pinned a
                     // fixed gap under the cards. `minLength` keeps a sensible
                     // separation on a short screen, where the slack runs out.
-                    Spacer(minLength: 24)
+                    Spacer(minLength: minimumButtonGap)
 
                     HatcheryPrimaryButton(title: "Add new nest", action: onAddNest)
                         .disabled(!hatchery.hasBeenScanned)
@@ -112,7 +120,7 @@ struct HomeView: View {
             SectionOverviewSheet(
                 style: scope.style,
                 scope: scope,
-                filter: $presentedFilter,
+                filter: scope.filter,
                 container: container,
                 hatcheryName: hatchery.hatchery.name,
                 onNestDeleted: {
@@ -126,7 +134,10 @@ struct HomeView: View {
                     // the nest exactly as it was. Rebuild the same scope from
                     // the refreshed dashboard instead of dismissing.
                     if let refreshed = rescope(scope) {
-                        presentedScope = refreshed
+                        presentedScope = refreshed.presented(
+                            as: scope.style,
+                            filter: scope.filter
+                        )
                     }
                 },
                 onReturnToHatchery: { presentedScope = nil }
@@ -462,12 +473,11 @@ struct HomeView: View {
     /// this tap -- so an alert opened a sheet still carrying the previous
     /// style. `AppRootView` documents the same trap on its rescan cover.
     private func openNestList(
-        filter: NestHatchFilter,
+        filter: NestListFilter,
         style: SectionOverviewSheet.Style = .full
     ) {
         guard let currentScope else { return }
-        presentedFilter = filter
-        presentedScope = currentScope.presented(as: style)
+        presentedScope = currentScope.presented(as: style, filter: filter)
     }
     
     /// The same scope rebuilt from the freshly loaded dashboard.
@@ -518,6 +528,15 @@ struct HomeView: View {
         }
     }
 
+    /// Layout follows the whole hatchery rather than the selected section.
+    /// Selecting A1 can reduce two hatchery alerts to one section alert, but
+    /// that data change must not switch spacing modes and make the entire
+    /// dashboard jump underneath the user's finger.
+    private var hatcheryTemperatureAlertKindCount: Int {
+        let nests = controller.dashboard?.allNests ?? []
+        return Set(nests.compactMap(\.temperatureAlert)).count
+    }
+
     /// Figma 288:5352 stacks both bars when both apply, and 288:4983 shows the
     /// calm bar when neither does -- so there is always exactly one answer on
     /// screen rather than an empty space that could mean either.
@@ -538,7 +557,8 @@ struct HomeView: View {
                         caption: countCaption(
                             outOfRange.count,
                             ending: "with a temperature warning"
-                        )
+                        ),
+                        filter: .temperatureOutOfRange
                     )
                 }
 
@@ -549,7 +569,8 @@ struct HomeView: View {
                         caption: countCaption(
                             noData.count,
                             ending: "with no temperature"
-                        )
+                        ),
+                        filter: .temperatureNoData
                     )
                 }
             }
@@ -590,10 +611,11 @@ struct HomeView: View {
     private func alertBar(
         tint: Color,
         title: String,
-        caption: String
+        caption: String,
+        filter: NestListFilter
     ) -> some View {
         Button {
-            openNestList(filter: .all, style: .listOnly)
+            openNestList(filter: filter, style: .listOnly)
         } label: {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -752,7 +774,7 @@ struct HomeView: View {
 /// rather than `isComplete`, which is also true for a nest an inspection closed
 /// without one. No extra query either way; this is data the dashboard already
 /// holds.
-private enum NestHatchFilter: String, CaseIterable, Identifiable {
+enum NestListFilter: String, Identifiable {
     case all = "All"
     case unhatched = "Unhatched"
     case hatched = "Hatched"
@@ -760,16 +782,26 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
     // words truncate to ellipses at that width.
     case hatchingSoon = "Soon"
     case inspection = "Inspect"
+    /// Alert-only filters are routes from the warning bars, not extra segments
+    /// squeezed into the normal hatch-status picker.
+    case temperatureOutOfRange = "Temperature out of range"
+    case temperatureNoData = "No temperature data"
+
+    static let pickerOptions: [Self] = [
+        .all, .unhatched, .hatched, .hatchingSoon, .inspection,
+    ]
     
     var id: String { rawValue }
     
-    func matches(_ nest: NestEntity) -> Bool {
+    func matches(_ item: NestDashboardItem) -> Bool {
         switch self {
         case .all: true
-        case .hatched: nest.hasHatched
-        case .unhatched: !nest.hasHatched
-        case .hatchingSoon: nest.isHatchingSoon
-        case .inspection: nest.isDueForInspection()
+        case .hatched: item.nest.hasHatched
+        case .unhatched: !item.nest.hasHatched
+        case .hatchingSoon: item.nest.isHatchingSoon
+        case .inspection: item.nest.isDueForInspection()
+        case .temperatureOutOfRange: item.temperatureAlert == .outOfRange
+        case .temperatureNoData: item.temperatureAlert == .noData
         }
     }
     
@@ -785,6 +817,8 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
         case .hatched: "Hatched"
         case .hatchingSoon: "Soon"
         case .inspection: "Inspect"
+        case .temperatureOutOfRange: "Temperature out of range"
+        case .temperatureNoData: "No temperature data"
         }
     }
 
@@ -795,6 +829,8 @@ private enum NestHatchFilter: String, CaseIterable, Identifiable {
         case .unhatched: "No nests still incubating here"
         case .hatchingSoon: "No nests hatching in the next 3 days"
         case .inspection: "No nests due for inspection"
+        case .temperatureOutOfRange: "No nests with a temperature warning"
+        case .temperatureNoData: "No nests without temperature data"
         }
     }
 }
@@ -808,6 +844,10 @@ private struct NestListScope: Identifiable, Hashable {
     /// How the sheet should draw this scope. Carried here rather than in a
     /// sibling `@State` so the `.sheet` closure cannot read a stale one.
     var style: SectionOverviewSheet.Style = .full
+    /// The route that opened the sheet. It travels with the sheet item rather
+    /// than in sibling state, so a red alert can never reuse a stale `.all`
+    /// filter captured by an earlier presentation.
+    var filter: NestListFilter = .all
     /// Nil for the whole hatchery.
     let sectionID: String?
     let title: String
@@ -819,13 +859,17 @@ private struct NestListScope: Identifiable, Hashable {
     /// keeps the sheet it already has.
     var id: String {
         let scope = sectionID ?? "hatchery"
-        return style == .full ? scope : "\(scope)-list"
+        return "\(scope)-\(style == .full ? "full" : "list")-\(filter.rawValue)"
     }
 
-    /// The same scope, drawn the given way.
-    func presented(as style: SectionOverviewSheet.Style) -> NestListScope {
+    /// The same scope, drawn the given way and on the requested route.
+    func presented(
+        as style: SectionOverviewSheet.Style,
+        filter: NestListFilter
+    ) -> NestListScope {
         var copy = self
         copy.style = style
+        copy.filter = filter
         return copy
     }
     
@@ -863,10 +907,9 @@ private struct SectionOverviewSheet: View {
     }
 
     let scope: NestListScope
-    /// Owned by the host so a card can open this sheet already filtered. Held
-    /// as `@State` here, the initial value would have to be assigned after the
-    /// first render, and the list would flash unfiltered on the way in.
-    @Binding var filter: NestHatchFilter
+    /// Seeded from the route stored in `scope`, then owned here so the normal
+    /// full-sheet segmented picker can still change it interactively.
+    @State var filter: NestListFilter
     let container: AppContainer
     let hatcheryName: String
     let onNestDeleted: () async -> Void
@@ -888,7 +931,7 @@ private struct SectionOverviewSheet: View {
                 (sectionID: section.id, ordinal: $0.offset + 1, item: $0.element)
             }
         }
-        .filter { filter.matches($0.item.nest) }
+        .filter { filter.matches($0.item) }
     }
     
     var body: some View {
@@ -923,11 +966,9 @@ private struct SectionOverviewSheet: View {
                 hatcheryName: hatcheryName,
                 onClose: { selectedNest = nil },
                 onDelete: {
-                    Task {
-                        try? await container.makeNestService().deleteNest(id: selection.item.id)
-                        selectedNest = nil
-                        await onNestDeleted()
-                    }
+                    try await container.makeNestService().deleteNest(id: selection.item.id)
+                    selectedNest = nil
+                    await onNestDeleted()
                 },
                 onNestChanged: onNestChanged,
                 // Dismissing this sheet alone would only fall back to the
@@ -977,8 +1018,8 @@ private struct SectionOverviewSheet: View {
 
     private var filterPicker: some View {
         Picker("Show", selection: $filter) {
-            ForEach(NestHatchFilter.allCases) { option in
-                Text(option.rawValue).tag(option)
+            ForEach(NestListFilter.pickerOptions) { option in
+                Text(option.label).tag(option)
             }
         }
         .pickerStyle(.segmented)

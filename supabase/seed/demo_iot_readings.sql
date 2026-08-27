@@ -32,6 +32,11 @@ begin
     from public.nest n
     join public.hatchery h on h.id = n.hatchery_id
     where not exists (select 1 from public.iotdata d where d.nest_id = n.id)
+      -- Completed nests have already released their logger. Seeding an active
+      -- assignment afterwards would put a finished nest back into service.
+      and not exists (
+        select 1 from public.hatching hatching where hatching.nest_id = n.id
+      )
       -- Registering a logger runs as its owner, so hatcheries predating
       -- owner_id have nobody to attribute one to. They are left alone rather
       -- than attributed to an arbitrary account.
@@ -55,6 +60,21 @@ begin
       nest_record.owner_id
     )
     returning id into sensor;
+
+    -- The resolver ignores a payload nest ID and trusts this assignment. Start
+    -- it before the oldest generated reading so the synthetic history is also
+    -- temporally valid rather than merely foreign-key valid.
+    insert into public.device_assignment (
+      device_id,
+      nest_id,
+      assigned_at,
+      assigned_by
+    ) values (
+      sensor,
+      nest_record.id,
+      date_trunc('day', now()) - interval '6 days',
+      nest_record.owner_id
+    );
 
     -- Spread nests across the incubation band so the UI shows its cold,
     -- healthy, and hot states rather than one flat colour. 29-31°C is the
@@ -86,12 +106,11 @@ begin
           + (random() - 0.5) * 0.02;
 
         insert into public.iotdata (
-          id, nest_id, sensor_id, temperature, timestamp, battery_voltage,
+          id, sensor_id, temperature, timestamp, battery_voltage,
           sensor_status, depth_cm, signal_rssi_dbm
         )
         values (
           gen_random_uuid(),
-          nest_record.id,
           sensor,
           round(temperature::numeric, 2),
           reading_time,

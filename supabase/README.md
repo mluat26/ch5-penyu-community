@@ -43,14 +43,40 @@ iotdata.nest_id   = server-resolved assignment snapshot
 - A reading must enter through the service-role-only
   `ingest_iot_reading(...)` RPC. It resolves the active assignment and writes
   both the device source and the historical nest snapshot.
-- Direct anonymous writes to `iotdata` are removed. The device itself must
-  never hold a Supabase service/secret key. Put that key only in a trusted
-  gateway or an Edge Function that authenticates the hardware first.
+- The device itself must never hold a Supabase service/secret key. Put that
+  key only in a trusted gateway or Edge Function that authenticates the
+  hardware first.
 
 For a gateway, send the device UUID and sensor values to its server-side
 Supabase client, then call `ingest_iot_reading`. For direct hardware-to-cloud
-traffic, put a per-device credential/signature check in an Edge Function
-before that RPC; do not use one shared service key in firmware.
+traffic, use the `ingest-iot` Edge Function and a unique per-device secret;
+do not put one shared service key in firmware.
+
+### Authenticated ESP32 rollout
+
+`20260827090000_add_authenticated_device_ingestion.sql` stages the secure path
+without breaking deployed loggers. It deliberately leaves the temporary
+`ESP32 can insert IoT data` anonymous policy in place during the transition.
+
+1. Apply the credential migration and deploy the function with
+   `supabase functions deploy ingest-iot --no-verify-jwt`.
+2. For each device, call the service-role-only
+   `rotate_device_ingest_secret(device_id)` RPC. It returns a 64-character
+   secret once; store it in that logger, never in the app or repository.
+3. Change firmware to `POST /functions/v1/ingest-iot` with JSON containing
+   `sensor_id`, `temperature`, and optional reading fields. Send the secret in
+   the `x-device-secret` header. Do not send `nest_id`; the active assignment
+   determines it.
+4. Confirm new readings for every migrated logger. Rotation immediately
+   invalidates the previous secret; `disable_device_ingest_secret(device_id)`
+   stops one device without affecting the others.
+5. Only after all production loggers use the Edge Function, add a final
+   migration that drops the anonymous insert policy and revokes `anon` insert
+   on `iotdata`.
+
+Until step 5 is complete, assignment routing is correct but the legacy direct
+endpoint can still be impersonated by anyone who has the anon key. This is a
+temporary compatibility window, not the final security state.
 
 ## Hatchery scan persistence
 

@@ -20,15 +20,28 @@ begin
   values (v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated',
           'authenticated', 'reading-resolution@example.test');
 
-  insert into public.hatchery (name, owner_id)
-  values ('Resolution test', v_owner)
+  insert into public.hatchery (
+    name, shape, number_of_row, number_of_collumn,
+    length_m, width_m, layout_status, owner_id
+  ) values (
+    'Resolution test', 'rectangle', 1, 2,
+    1, 2, 'ready', v_owner
+  )
   returning id into v_hatchery;
 
-  insert into public.nest (hatchery_id, number_of_eggs)
-  values (v_hatchery, 100) returning id into v_nest_a;
+  insert into public.nest (
+    hatchery_id, placement_row, placement_col,
+    number_of_eggs, date_eggs_laid
+  ) values (
+    v_hatchery, 0, 0, 100, current_date
+  ) returning id into v_nest_a;
 
-  insert into public.nest (hatchery_id, number_of_eggs)
-  values (v_hatchery, 80) returning id into v_nest_b;
+  insert into public.nest (
+    hatchery_id, placement_row, placement_col,
+    number_of_eggs, date_eggs_laid
+  ) values (
+    v_hatchery, 0, 1, 80, current_date
+  ) returning id into v_nest_b;
 
   insert into public.device (name, owner_id)
   values ('Resolution logger', v_owner) returning id into v_device;
@@ -61,8 +74,11 @@ begin
     format('assignment should override the payload, landed on %s', v_landed_on);
 
   -- 4. Recording a hatching releases the logger.
-  insert into public.hatching (nest_id, hatched_on, eggs_hatched)
-  values (v_nest_a, current_date, 100);
+  insert into public.hatching (
+    nest_id, hatched_on, eggs_hatched, eggs_rotten, eggs_unhatched
+  ) values (
+    v_nest_a, current_date, 100, 0, 0
+  );
 
   select count(*) into v_count
   from public.device_assignment

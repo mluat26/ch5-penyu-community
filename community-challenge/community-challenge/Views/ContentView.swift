@@ -145,11 +145,9 @@ struct ContentView: View {
                             hatcheryName: hatchery.hatchery.name,
                             onClose: { presentedSheet = nil },
                             onDelete: {
-                                Task {
-                                    try? await container.makeNestService().deleteNest(id: selection.item.id)
-                                    presentedSheet = nil
-                                    await hatcheryController.load()
-                                }
+                                try await container.makeNestService().deleteNest(id: selection.item.id)
+                                presentedSheet = nil
+                                await hatcheryController.load()
                             },
                             onNestChanged: { await hatcheryController.load() },
                             onReturnToHatchery: { presentedSheet = nil }

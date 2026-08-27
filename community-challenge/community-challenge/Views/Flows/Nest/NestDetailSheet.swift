@@ -18,7 +18,7 @@ struct NestDetailSheet: View {
     let makeHatchingController: (NestEntity) -> HatchingController
     let hatcheryName: String
     let onClose: () -> Void
-    let onDelete: () -> Void
+    let onDelete: () async throws -> Void
     /// Called once a hatch is recorded. The nest's own row changes server-side,
     /// so every list holding a copy of it needs to hear about it.
     let onNestChanged: () async -> Void
@@ -46,6 +46,8 @@ struct NestDetailSheet: View {
 
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var isConfirmingDelete = false
+    @State private var isDeleting = false
+    @State private var deleteErrorMessage: String?
     /// Figma 199:3729 (read) vs 199:3595 (edit). The frames differ in more
     /// than styling: editing turns every detail value into a date-picker pill,
     /// grows the inspection rows to the tall variant, and is the only place
@@ -179,10 +181,42 @@ struct NestDetailSheet: View {
             isPresented: $isConfirmingDelete,
             titleVisibility: .visible
         ) {
-            Button("Delete nest", role: .destructive, action: onDelete)
+            Button("Delete nest", role: .destructive, action: deleteNest)
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the nest and its inspection history. It cannot be undone.")
+        }
+        .alert(
+            "Unable to delete nest",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("Try again", role: .cancel) {
+                deleteErrorMessage = nil
+                isConfirmingDelete = true
+            }
+            Button("Cancel", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
+    }
+
+    private func deleteNest() {
+        guard !isDeleting else { return }
+        isDeleting = true
+        deleteErrorMessage = nil
+
+        Task {
+            do {
+                try await onDelete()
+            } catch {
+                deleteErrorMessage = error.localizedDescription
+            }
+            isDeleting = false
         }
     }
 
@@ -651,13 +685,21 @@ struct NestDetailSheet: View {
         Button(role: .destructive) {
             isConfirmingDelete = true
         } label: {
-            Text("Delete nest")
-                .font(.system(size: 17 * scale, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
-                .background(Color(hex: "#FF383C"), in: RoundedRectangle(cornerRadius: 26 * scale))
+            Group {
+                if isDeleting {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text("Delete nest")
+                        .font(.system(size: 17 * scale, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: Layout.sectionWidth * scale, height: 55 * scale)
+            .background(Color(hex: "#FF383C"), in: RoundedRectangle(cornerRadius: 26 * scale))
         }
         .buttonStyle(.plain)
+        .disabled(isDeleting)
     }
 
     /// The floating action, full width like the other section cards.

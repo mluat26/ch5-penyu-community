@@ -751,6 +751,55 @@ final class NestFlowTests: XCTestCase {
         XCTAssertNil(hatchedWithNoReading.temperatureAlert)
     }
 
+    /// The red warning opens a purpose-built list. It must not fall back to
+    /// the ordinary `.all` filter, which is how healthy nests appeared beside
+    /// the one the warning was pointing at.
+    func testTemperatureWarningFiltersExcludeHealthyAndMissingDataNests() {
+        let nest = makeNestDashboardItem().nest
+        let healthy = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: 30,
+            latestBatteryVoltage: nil
+        )
+        let tooHot = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: 34,
+            latestBatteryVoltage: nil
+        )
+        let noData = NestDashboardItem(
+            nest: nest,
+            latestTemperatureC: nil,
+            latestBatteryVoltage: nil
+        )
+
+        XCTAssertFalse(NestListFilter.temperatureOutOfRange.matches(healthy))
+        XCTAssertTrue(NestListFilter.temperatureOutOfRange.matches(tooHot))
+        XCTAssertFalse(NestListFilter.temperatureOutOfRange.matches(noData))
+        XCTAssertFalse(NestListFilter.temperatureNoData.matches(healthy))
+        XCTAssertFalse(NestListFilter.temperatureNoData.matches(tooHot))
+        XCTAssertTrue(NestListFilter.temperatureNoData.matches(noData))
+    }
+
+    /// Alert classification and the temperature UI must share one boundary.
+    /// The dashboard previously accepted up to 33°C while the rest of the app
+    /// marks anything above 32°C as critical.
+    func testTemperatureAlertsUseTheSharedCriticalThresholds() {
+        let nest = makeNestDashboardItem().nest
+
+        func alert(at temperature: Double) -> NestDashboardItem.TemperatureAlert? {
+            NestDashboardItem(
+                nest: nest,
+                latestTemperatureC: temperature,
+                latestBatteryVoltage: nil
+            ).temperatureAlert
+        }
+
+        XCTAssertEqual(alert(at: 25.9), .outOfRange)
+        XCTAssertNil(alert(at: 26))
+        XCTAssertNil(alert(at: 32))
+        XCTAssertEqual(alert(at: 32.1), .outOfRange)
+    }
+
     /// The hatching-soon queue counts a nest that is already late. Bounding it
     /// at zero would drop exactly the nests that most need a ranger, which is
     /// the failure this asserts against rather than the happy path.

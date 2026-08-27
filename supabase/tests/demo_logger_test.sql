@@ -65,8 +65,8 @@ begin
     'every reading carries a battery voltage'
   );
 
-  -- 2. Case and padding are forgiving, and a second demo nest reuses the
-  --    same logger rather than registering another.
+  -- 2. Case and padding are forgiving. A second demo nest gets a second
+  --    logger because one physical logger cannot hold two active assignments.
   insert into public.nest (id, hatchery_id, placement_row, placement_col, number_of_eggs, date_eggs_laid, bucket_id)
   values (lower_nest, hatchery_id, 0, 1, 100, current_date, '  pn-demo ');
 
@@ -75,8 +75,33 @@ begin
     'the bucket ID is matched case- and space-insensitively'
   );
   perform pg_temp.check(
-    (select count(*) from public.device where owner_id = v_owner_id and name = 'PN-DEMO') = 1,
-    'a second demo nest reuses the same logger'
+    (select count(*) from public.device
+      where owner_id = v_owner_id and name like 'PN-DEMO-%') = 2,
+    'each demo nest gets its own logger'
+  );
+  perform pg_temp.check(
+    (select count(distinct device_id) from public.device_assignment
+      where nest_id in (demo_nest, lower_nest) and unassigned_at is null) = 2,
+    'each demo nest has a distinct active assignment'
+  );
+  perform pg_temp.check(
+    not exists (
+      select 1
+      from public.iotdata reading
+      where reading.nest_id in (demo_nest, lower_nest)
+        and not exists (
+          select 1
+          from public.device_assignment assignment
+          where assignment.device_id = reading.sensor_id
+            and assignment.nest_id = reading.nest_id
+            and assignment.assigned_at <= reading.timestamp
+            and (
+              assignment.unassigned_at is null
+              or reading.timestamp <= assignment.unassigned_at
+            )
+        )
+    ),
+    'every demo reading falls inside its logger assignment'
   );
 
   -- 3. A real bucket ID is left completely alone.
